@@ -1,0 +1,29 @@
+# Compiled
+target/
+*.class
+*.jar
+*.war
+
+# Maven
+.mvn/wrapper/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build
+dist/
+build/
+
+# Runtime
+*.log

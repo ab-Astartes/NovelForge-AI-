@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovelForge Studio</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+        .header { background: #16213e; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+        .header h1 { color: #e94560; font-size: 20px; }
+        .header .subtitle { color: #aaa; font-size: 13px; }
+        .sidebar { width: 220px; background: #16213e; position: fixed; top: 56px; left: 0; bottom: 0; padding: 12px; overflow-y: auto; }
+        .sidebar .nav-item { padding: 10px 14px; cursor: pointer; border-radius: 6px; margin-bottom: 4px; font-size: 14px; }
+        .sidebar .nav-item:hover { background: #0f3460; }
+        .sidebar .nav-item.active { background: #e94560; color: white; }
+        .main { margin-left: 220px; margin-top: 56px; padding: 24px; }
+        .card { background: #16213e; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+        .card h2 { color: #e94560; margin-bottom: 12px; }
+        .btn { background: #e94560; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .btn:hover { background: #c73652; }
+        .btn.secondary { background: #0f3460; }
+        textarea { width: 100%; min-height: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #e0e0e0; font-size: 14px; resize: vertical; }
+        .status-bar { background: #0f3460; padding: 8px 24px; font-size: 12px; color: #888; position: fixed; bottom: 0; left: 220px; right: 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔥 NovelForge</h1>
+        <span class="subtitle">AI 小说锻造工坊</span>
+    </div>
+
+    <div class="sidebar">
+        <div class="nav-item active" onclick="showPanel('overview')">📖 总览</div>
+        <div class="nav-item" onclick="showPanel('write')">✍️ 写作</div>
+        <div class="nav-item" onclick="showPanel('audit')">🔍 审计</div>
+        <div class="nav-item" onclick="showPanel('state')">🧠 状态</div>
+        <div class="nav-item" onclick="showPanel('style')">🎭 风格</div>
+        <div class="nav-item" onclick="showPanel('export')">📦 导出</div>
+    </div>
+
+    <div class="main" id="content">
+        <div class="card" id="overview-panel">
+            <h2>项目总览</h2>
+            <p style="color:#aaa">选择或创建一个小说项目开始锻造</p>
+            <br>
+            <button class="btn" onclick="createBook()">创建新项目</button>
+            <button class="btn secondary" onclick="loadBook()">加载项目</button>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        NovelForge v1.0.0 | localhost:8964 | Ready
+    </div>
+
+    <script>
+        function showPanel(panel) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            // TODO: Load panel content from API
+        }
+
+        async function createBook() {
+            const title = prompt('小说标题:');
+            if (!title) return;
+            const genre = prompt('题材 (xuanhuan/urban/fantasy/...):');
+            try {
+                const res = await fetch('/api/book', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title, genre}) });
+                const data = await res.json();
+                alert('项目创建成功: ' + data.title);
+            } catch(e) { alert('创建失败: ' + e.message); }
+        }
+
+        async function loadBook() {
+            try {
+                const res = await fetch('/api/book');
+                const data = await res.json();
+                alert('现有项目: ' + JSON.stringify(data.books));
+            } catch(e) { alert('加载失败: ' + e.message); }
+        }
+    </script>
+</body>
+</html>
