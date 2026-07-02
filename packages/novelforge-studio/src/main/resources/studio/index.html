@@ -1,83 +1,142 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NovelForge Studio</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; }
-        .header { background: #16213e; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
-        .header h1 { color: #e94560; font-size: 20px; }
-        .header .subtitle { color: #aaa; font-size: 13px; }
-        .sidebar { width: 220px; background: #16213e; position: fixed; top: 56px; left: 0; bottom: 0; padding: 12px; overflow-y: auto; }
-        .sidebar .nav-item { padding: 10px 14px; cursor: pointer; border-radius: 6px; margin-bottom: 4px; font-size: 14px; }
-        .sidebar .nav-item:hover { background: #0f3460; }
-        .sidebar .nav-item.active { background: #e94560; color: white; }
-        .main { margin-left: 220px; margin-top: 56px; padding: 24px; }
-        .card { background: #16213e; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
-        .card h2 { color: #e94560; margin-bottom: 12px; }
-        .btn { background: #e94560; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-        .btn:hover { background: #c73652; }
-        .btn.secondary { background: #0f3460; }
-        textarea { width: 100%; min-height: 200px; background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #e0e0e0; font-size: 14px; resize: vertical; }
-        .status-bar { background: #0f3460; padding: 8px 24px; font-size: 12px; color: #888; position: fixed; bottom: 0; left: 220px; right: 0; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelForge Studio</title>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="header">
-        <h1>🔥 NovelForge</h1>
-        <span class="subtitle">AI 小说锻造工坊</span>
+<div id="app">
+  <header>
+    <h1>🔥 NovelForge Studio</h1>
+    <p class="subtitle">AI 小说创作引擎</p>
+  </header>
+
+  <nav>
+    <button onclick="showPanel('create')" class="nav-btn active" id="nav-create">创建</button>
+    <button onclick="showPanel('books')" class="nav-btn" id="nav-books">书库</button>
+    <button onclick="showPanel('write')" class="nav-btn" id="nav-write">写作</button>
+    <button onclick="showPanel('state')" class="nav-btn" id="nav-state">状态</button>
+    <button onclick="showPanel('config')" class="nav-btn" id="nav-config">配置</button>
+  </nav>
+
+  <!-- Create Book -->
+  <section id="panel-create" class="panel active">
+    <h2>创建新书</h2>
+    <div class="form-group">
+      <label>书名</label>
+      <input type="text" id="book-title" placeholder="输入小说标题">
     </div>
-
-    <div class="sidebar">
-        <div class="nav-item active" onclick="showPanel('overview')">📖 总览</div>
-        <div class="nav-item" onclick="showPanel('write')">✍️ 写作</div>
-        <div class="nav-item" onclick="showPanel('audit')">🔍 审计</div>
-        <div class="nav-item" onclick="showPanel('state')">🧠 状态</div>
-        <div class="nav-item" onclick="showPanel('style')">🎭 风格</div>
-        <div class="nav-item" onclick="showPanel('export')">📦 导出</div>
+    <div class="form-group">
+      <label>题材</label>
+      <select id="book-genre">
+        <option value="xuanhuan">玄幻</option>
+        <option value="xianxia">仙侠</option>
+        <option value="urban">都市</option>
+        <option value="horror">恐怖</option>
+        <option value="romance-zh">言情</option>
+        <option value="fantasy">Fantasy</option>
+        <option value="thriller">Thriller</option>
+        <option value="romance-en">Romance</option>
+        <option value="scifi">Sci-Fi</option>
+        <option value="mystery">Mystery</option>
+      </select>
     </div>
-
-    <div class="main" id="content">
-        <div class="card" id="overview-panel">
-            <h2>项目总览</h2>
-            <p style="color:#aaa">选择或创建一个小说项目开始锻造</p>
-            <br>
-            <button class="btn" onclick="createBook()">创建新项目</button>
-            <button class="btn secondary" onclick="loadBook()">加载项目</button>
-        </div>
+    <div class="form-group">
+      <label>作者</label>
+      <input type="text" id="book-author" placeholder="作者名（可选）">
     </div>
+    <button onclick="createBook()" class="btn-primary">创建项目</button>
+    <div id="create-result" class="result"></div>
+  </section>
 
-    <div class="status-bar">
-        NovelForge v1.0.0 | localhost:8964 | Ready
+  <!-- Books List -->
+  <section id="panel-books" class="panel">
+    <h2>书库</h2>
+    <button onclick="loadBooks()" class="btn-secondary">刷新</button>
+    <div id="books-list"></div>
+  </section>
+
+  <!-- Write Chapter -->
+  <section id="panel-write" class="panel">
+    <h2>写作</h2>
+    <div class="form-group">
+      <label>选择书籍</label>
+      <select id="write-book"></select>
     </div>
+    <div class="form-group">
+      <label>模式</label>
+      <select id="write-mode">
+        <option value="next">完整流水线（9 Agent）</option>
+        <option value="draft">仅草稿（4 Agent）</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="api-key" placeholder="sk-xxx">
+    </div>
+    <div class="form-group">
+      <label>Base URL</label>
+      <input type="text" id="base-url" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+    </div>
+    <div class="form-group">
+      <label>模型</label>
+      <input type="text" id="model-id" placeholder="gpt-4o" value="gpt-4o">
+    </div>
+    <button onclick="writeChapter()" class="btn-primary">开始写作</button>
+    <div id="write-progress" class="progress"></div>
+    <div id="write-result" class="result"></div>
+  </section>
 
-    <script>
-        function showPanel(panel) {
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            event.target.classList.add('active');
-            // TODO: Load panel content from API
-        }
+  <!-- State View -->
+  <section id="panel-state" class="panel">
+    <h2>状态查看</h2>
+    <div class="form-group">
+      <label>选择书籍</label>
+      <select id="state-book"></select>
+    </div>
+    <div class="form-group">
+      <label>类型</label>
+      <select id="state-type">
+        <option value="all">全部</option>
+        <option value="characters">角色</option>
+        <option value="world">世界观</option>
+        <option value="hooks">悬念</option>
+      </select>
+    </div>
+    <button onclick="loadState()" class="btn-secondary">查看</button>
+    <pre id="state-content" class="state-view"></pre>
+  </section>
 
-        async function createBook() {
-            const title = prompt('小说标题:');
-            if (!title) return;
-            const genre = prompt('题材 (xuanhuan/urban/fantasy/...):');
-            try {
-                const res = await fetch('/api/book', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title, genre}) });
-                const data = await res.json();
-                alert('项目创建成功: ' + data.title);
-            } catch(e) { alert('创建失败: ' + e.message); }
-        }
+  <!-- Config -->
+  <section id="panel-config" class="panel">
+    <h2>流水线配置</h2>
+    <div class="form-group">
+      <label>最小字数</label>
+      <input type="number" id="cfg-min-words" value="2000">
+    </div>
+    <div class="form-group">
+      <label>最大字数</label>
+      <input type="number" id="cfg-max-words" value="4000">
+    </div>
+    <div class="form-group">
+      <label>审计通过阈值</label>
+      <input type="number" id="cfg-audit-threshold" value="7.0" step="0.1">
+    </div>
+    <div class="form-group">
+      <label>最大修订轮次</label>
+      <input type="number" id="cfg-max-revisions" value="1">
+    </div>
+    <button onclick="saveConfig()" class="btn-primary">保存</button>
+    <div id="config-result" class="result"></div>
+  </section>
 
-        async function loadBook() {
-            try {
-                const res = await fetch('/api/book');
-                const data = await res.json();
-                alert('现有项目: ' + JSON.stringify(data.books));
-            } catch(e) { alert('加载失败: ' + e.message); }
-        }
-    </script>
+  <footer>
+    <p>NovelForge v0.1 | 9-Agent Pipeline | 10 Genre Profiles</p>
+  </footer>
+</div>
+
+<script src="/app.js"></script>
 </body>
 </html>
