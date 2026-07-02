@@ -66,7 +66,7 @@ function populateBookSelects(books) {
     fetch(API + '/api/books').then(r => r.json()).then(populateBookSelects);
     return;
   }
-  const selects = ['write-book', 'state-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = books.map(b => `<option value="${b.path}">${b.title} (${b.genre})</option>`).join('');
@@ -145,6 +145,84 @@ async function saveConfig() {
     });
     const data = await res.json();
     showResult(resultDiv, data.status === 'updated' ? '✅ 配置已更新' : '❌ ' + (data.error || '更新失败'), data.status !== 'updated');
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
+
+// --- Audit Chapter ---
+async function auditChapter() {
+  const bookPath = document.getElementById('audit-book').value;
+  const chapterNum = document.getElementById('audit-chapter').value;
+  const apiKey = document.getElementById('audit-api-key').value.trim();
+  const baseUrl = document.getElementById('audit-base-url').value.trim();
+  const modelId = document.getElementById('audit-model').value.trim();
+  const resultDiv = document.getElementById('audit-result');
+
+  if (!bookPath) { resultDiv.textContent = '请选择书籍'; return; }
+  if (!apiKey) { resultDiv.textContent = '请输入 API Key'; return; }
+
+  resultDiv.textContent = '⏳ 33维审计运行中...';
+
+  try {
+    const res = await fetch(API + '/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: bookPath,
+        chapter: chapterNum ? parseInt(chapterNum) : null,
+        apiKey, baseUrl, model: modelId
+      })
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      let output = `📊 总分: ${data.overallScore}/10\n`;
+      output += `通过: ${data.pass ? '✅ YES' : '❌ NO'}\n\n`;
+      if (data.dimensionScores) {
+        output += '维度评分:\n';
+        for (const [dim, score] of Object.entries(data.dimensionScores)) {
+          output += `  ${dim}: ${score}\n`; // i18n: dimension names
+        }
+      }
+      if (data.criticalIssues && data.criticalIssues.length > 0) {
+        output += `\n⚠️ 关键问题:\n`;
+        data.criticalIssues.forEach(i => output += `  - ${i}\n`);
+      }
+      if (data.warnings && data.warnings.length > 0) {
+        output += `\n💡 建议:\n`;
+        data.warnings.forEach(w => output += `  - ${w}\n`);
+      }
+      resultDiv.textContent = output;
+    } else {
+      resultDiv.textContent = '❌ ' + (data.error || '审计失败');
+    }
+  } catch (e) {
+    resultDiv.textContent = '❌ 网络错误: ' + e.message;
+  }
+}
+
+// --- Export Book ---
+async function exportBook() {
+  const bookPath = document.getElementById('export-book').value;
+  const format = document.getElementById('export-format').value;
+  const resultDiv = document.getElementById('export-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+
+  try {
+    const res = await fetch(API + '/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, format })
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 导出成功: ${data.outputPath}`, false);
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '导出失败'), true);
+    }
   } catch (e) {
     showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
   }

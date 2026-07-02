@@ -17,6 +17,7 @@
     <button onclick="showPanel('create')" class="nav-btn active" id="nav-create">创建</button>
     <button onclick="showPanel('books')" class="nav-btn" id="nav-books">书库</button>
     <button onclick="showPanel('write')" class="nav-btn" id="nav-write">写作</button>
+    <button onclick="showPanel('audit')" class="nav-btn" id="nav-audit">审计</button>
     <button onclick="showPanel('state')" class="nav-btn" id="nav-state">状态</button>
     <button onclick="showPanel('config')" class="nav-btn" id="nav-config">配置</button>
   </nav>
@@ -56,6 +57,22 @@
     <h2>书库</h2>
     <button onclick="loadBooks()" class="btn-secondary">刷新</button>
     <div id="books-list"></div>
+    <div id="export-section" style="margin-top:16px">
+      <div class="form-group">
+        <label>导出书籍</label>
+        <select id="export-book"></select>
+      </div>
+      <div class="form-group">
+        <label>格式</label>
+        <select id="export-format">
+          <option value="txt">TXT</option>
+          <option value="md">Markdown</option>
+          <option value="epub">EPUB</option>
+        </select>
+      </div>
+      <button onclick="exportBook()" class="btn-primary">导出</button>
+      <div id="export-result" class="result"></div>
+    </div>
   </section>
 
   <!-- Write Chapter -->
@@ -87,6 +104,33 @@
     <button onclick="writeChapter()" class="btn-primary">开始写作</button>
     <div id="write-progress" class="progress"></div>
     <div id="write-result" class="result"></div>
+  </section>
+
+  <!-- Audit Chapter -->
+  <section id="panel-audit" class="panel">
+    <h2>质量审计</h2>
+    <div class="form-group">
+      <label>选择书籍</label>
+      <select id="audit-book"></select>
+    </div>
+    <div class="form-group">
+      <label>章节号</label>
+      <input type="number" id="audit-chapter" placeholder="留空 = 最后一章">
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="audit-api-key" placeholder="sk-xxx">
+    </div>
+    <div class="form-group">
+      <label>Base URL</label>
+      <input type="text" id="audit-base-url" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+    </div>
+    <div class="form-group">
+      <label>模型</label>
+      <input type="text" id="audit-model" placeholder="gpt-4o" value="gpt-4o">
+    </div>
+    <button onclick="auditChapter()" class="btn-primary">开始审计</button>
+    <pre id="audit-result" class="state-view"></pre>
   </section>
 
   <!-- State View -->
@@ -133,7 +177,7 @@
   </section>
 
   <footer>
-    <p>NovelForge v0.1 | 9-Agent Pipeline | 10 Genre Profiles</p>
+    <p>NovelForge v0.2 | 9-Agent Pipeline | 10 Genre Profiles | 33-Dimension Audit</p>
   </footer>
 </div>
 

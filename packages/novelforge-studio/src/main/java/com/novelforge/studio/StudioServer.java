@@ -267,12 +267,23 @@ public class StudioServer {
             AuditResult audit = result.updatedContext().getAuditResult();
 
             ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
             response.put("overallScore", audit.getOverallScore());
             response.put("pass", audit.isPass());
+            if (audit.getDimensionScores() != null) {
+                ObjectNode scores = mapper.createObjectNode();
+                audit.getDimensionScores().forEach(scores::put);
+                response.set("dimensionScores", scores);
+            }
             if (audit.getCriticalIssues() != null) {
                 ArrayNode issues = mapper.createArrayNode();
                 audit.getCriticalIssues().forEach(issues::add);
                 response.set("criticalIssues", issues);
+            }
+            if (audit.getWarnings() != null) {
+                ArrayNode warnings = mapper.createArrayNode();
+                audit.getWarnings().forEach(warnings::add);
+                response.set("warnings", warnings);
             }
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {
@@ -330,9 +341,14 @@ public class StudioServer {
                 content.append("## 第").append(ch.getNumber()).append("章\n\n").append(text).append("\n\n");
             }
 
+            String ext = format.equals("epub") ? "epub" : format.equals("md") ? "md" : "txt";
+            Path outputPath = Paths.get(bookPath).resolve(book.getTitle() + "." + ext);
+            Files.writeString(outputPath, content.toString());
+
             ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
             response.put("format", format);
-            response.put("content", content.toString());
+            response.put("outputPath", outputPath.toString());
             response.put("chapters", book.getChapters().size());
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {

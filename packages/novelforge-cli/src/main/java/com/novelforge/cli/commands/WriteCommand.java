@@ -1,6 +1,7 @@
 package com.novelforge.cli.commands;
 
 import com.novelforge.core.project.BookProject;
+import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
 import com.novelforge.core.models.PipelineResult;
@@ -117,7 +118,42 @@ public class WriteCommand {
                         System.err.println("❌ Draft failed: " + result.errorMessage());
                     }
                 }
-                default -> System.err.println("Unknown subcommand: write " + args[0]);
+                case "audit" -> {
+                    // Audit-only: run Auditor + Reviser on existing chapter
+                    String chapterArg = findOption(args, "--chapter");
+                    int chapterNum = chapterArg != null ? Integer.parseInt(chapterArg) : book.getChapters().size();
+
+                    if (chapterNum <= 0 || chapterNum > book.getChapters().size()) {
+                        System.err.println("❌ Invalid chapter number. Book has " + book.getChapters().size() + " chapters.");
+                        return;
+                    }
+
+                    Chapter ch = book.getChapters().get(chapterNum - 1);
+                    String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+
+                    System.out.println("🔍 Auditing chapter " + chapterNum + " (" + text.length() + " chars)...");
+
+                    PipelineResult result = runner.runAuditOnly(book, truthState, text);
+
+                    if (result.success()) {
+                        AuditResult audit = result.updatedContext().getAuditResult();
+                        if (audit != null) {
+                            System.out.printf("📊 Overall score: %.1f/10%n", audit.getOverallScore());
+                            System.out.println("   Pass: " + (audit.isPass() ? "✅ YES" : "❌ NO"));
+                            if (audit.getDimensionScores() != null) {
+                                audit.getDimensionScores().forEach((dim, score) ->
+                                        System.out.printf("     %-30s %.1f%n", dim, score));
+                            }
+                            if (audit.getCriticalIssues() != null && !audit.getCriticalIssues().isEmpty()) {
+                                System.out.println("   ⚠️ Critical issues: " + audit.getCriticalIssues());
+                            }
+                        }
+                    } else {
+                        System.err.println("❌ Audit failed: " + result.errorMessage());
+                    }
+                }
+                default -> System.err.println("Unknown subcommand: write " + args[0] +
+                    "\nValid: next, draft, audit");
             }
         } catch (Exception e) {
             System.err.println("❌ Error: " + e.getMessage());

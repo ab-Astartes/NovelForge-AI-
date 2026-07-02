@@ -31,20 +31,21 @@ public class PipelineRunner {
         log.info("Starting pipeline for book '{}', chapter {}", book.getTitle(), book.nextChapterNumber());
         PipelineContext context = new PipelineContext(book, truthState, config);
 
-        // Apply pipeline config: skip disabled agents
-        PipelineContext finalContext = context;
-
-        PipelineResult result = pipeline.runFull(finalContext);
+        PipelineResult result = pipeline.runFull(context);
 
         if (result.success()) {
+            // Extract final chapter text from the pipeline context (updated by all agents)
+            PipelineContext finalContext = result.updatedContext();
+            String finalText = finalContext.getCurrentChapterDraft();
+
             // Add chapter to book
             Chapter chapter = new Chapter();
             chapter.setNumber(book.nextChapterNumber());
-            chapter.setDraftText(finalContext.getCurrentChapterDraft());
-            chapter.setFinalText(finalContext.getCurrentChapterDraft()); // after normalizer/reviser
+            chapter.setDraftText(context.getCurrentChapterDraft());  // original writer draft
+            chapter.setFinalText(finalText);                        // after normalizer/reviser
             chapter.setAuditResult(finalContext.getAuditResult());
             book.getChapters().add(chapter);
-            log.info("Chapter {} added to book '{}'", chapter.getNumber(), book.getTitle());
+            log.info("Chapter {} added to book '{}' ({} chars)", chapter.getNumber(), book.getTitle(), finalText.length());
         }
 
         return result;

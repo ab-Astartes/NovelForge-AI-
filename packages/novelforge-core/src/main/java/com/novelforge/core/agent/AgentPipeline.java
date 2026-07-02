@@ -1,5 +1,6 @@
 package com.novelforge.core.agent;
 
+import com.novelforge.core.pipeline.PipelineConfig;
 import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
@@ -7,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * AgentPipeline — orchestrates the full write cycle:
@@ -46,12 +48,32 @@ public class AgentPipeline {
         }
     }
 
-    /** Run full pipeline from Architect through Reviser */
+    /** Run full pipeline from Architect through Reviser,
+     *  respecting PipelineConfig agent toggle flags. */
     public PipelineResult runFull(PipelineContext context) {
         PipelineContext current = context;
         PipelineResult result = null;
+        PipelineConfig config = context.getConfig();
+
+        // Toggle map: agent name → config boolean field
+        Map<String, Boolean> toggles = Map.of(
+            "Architect",   config.isRunArchitect(),
+            "Planner",     config.isRunPlanner(),
+            "Composer",    config.isRunComposer(),
+            "Writer",      config.isRunWriter(),
+            "Observer",    config.isRunObserver(),
+            "Reflector",   config.isRunReflector(),
+            "Normalizer",  config.isRunNormalizer(),
+            "Auditor",     config.isRunAuditor(),
+            "Reviser",     config.isRunReviser()
+        );
 
         for (Agent agent : agents) {
+            boolean enabled = toggles.getOrDefault(agent.name(), true);
+            if (!enabled) {
+                log.info("=== Skipping disabled agent: {} ===", agent.name());
+                continue;
+            }
             log.info("=== Running agent: {} ===", agent.name());
             try {
                 result = agent.execute(current);

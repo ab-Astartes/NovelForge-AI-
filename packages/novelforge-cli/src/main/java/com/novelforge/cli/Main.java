@@ -72,19 +72,24 @@ public class Main {
             Commands:
               book create   Create a new book project
               book list     List book projects
-              write next    Write next chapter (full pipeline)
-              write draft   Write draft only (no quality check)
-              audit         Run 33-dimension audit on chapter
+              book info     Show book details
+              write next    Write next chapter (full 9-agent pipeline)
+              write draft   Write draft only (Architect → Writer, skip quality)
+              write audit   Audit existing chapter (Auditor → Reviser)
+              audit         Run standalone 33-dimension audit
               export        Export book (EPUB/TXT/MD)
               interact      Start interactive dialogue mode
               style clone   Clone writing style from reference text
               help          Show this help message
             
             Options:
-              --book <path>   Book project directory
-              --genre <key>   Genre profile (xuanhuan, urban, fantasy, etc.)
-              --model <id>    Override default model
-              --silent        Suppress progress output
+              --book <path>     Book project directory
+              --genre <key>     Genre profile (xuanhuan, urban, fantasy, etc.)
+              --chapter <num>   Chapter number (for audit)
+              --api-key <key>   LLM API key (or set OPENAI_API_KEY)
+              --base-url <url>  LLM API base URL (default: https://api.openai.com/v1)
+              --model <id>      Override default model
+              --silent          Suppress progress output
             """);
     }
 
