@@ -37,15 +37,18 @@ public class PipelineRunner {
             // Extract final chapter text from the pipeline context (updated by all agents)
             PipelineContext finalContext = result.updatedContext();
             String finalText = finalContext.getCurrentChapterDraft();
+            String writerDraft = finalContext.getWriterDraft();  // Writer's original output
 
             // Add chapter to book
             Chapter chapter = new Chapter();
             chapter.setNumber(book.nextChapterNumber());
-            chapter.setDraftText(context.getCurrentChapterDraft());  // original writer draft
+            chapter.setDraftText(writerDraft != null ? writerDraft : finalText);  // original writer draft
             chapter.setFinalText(finalText);                        // after normalizer/reviser
             chapter.setAuditResult(finalContext.getAuditResult());
             book.getChapters().add(chapter);
-            log.info("Chapter {} added to book '{}' ({} chars)", chapter.getNumber(), book.getTitle(), finalText.length());
+            log.info("Chapter {} added to book '{}' ({} chars, draft {} chars)",
+                    chapter.getNumber(), book.getTitle(), finalText.length(),
+                    writerDraft != null ? writerDraft.length() : 0);
         }
 
         return result;

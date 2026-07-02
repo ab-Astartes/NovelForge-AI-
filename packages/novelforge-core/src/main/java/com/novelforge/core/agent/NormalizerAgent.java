@@ -62,7 +62,12 @@ public class NormalizerAgent implements Agent {
 
     private static int estimateChineseWords(String text) {
         if (text == null) return 0;
-        int chineseChars = (int) text.chars().filter(c -> c > 0x4E00 && c < 0x9FFF).count();
+        // CJK Unified Ideographs + Extensions A/B
+        int chineseChars = (int) text.chars().filter(c ->
+                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
+                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
+                (c >= 0x20000 && c <= 0x2A6DF)     // Extension B
+        ).count();
         int otherChars = text.length() - chineseChars;
         return chineseChars + otherChars / 5;
     }

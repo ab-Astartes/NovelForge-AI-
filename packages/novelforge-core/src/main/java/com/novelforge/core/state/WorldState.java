@@ -82,7 +82,10 @@ public class WorldState {
         JsonNode locations = data.get("locations");
         if (locations != null && !locations.isEmpty()) {
             sb.append("地点: ");
-            for (JsonNode l : locations) sb.append(l.get("name").asText()).append(", ");
+            for (JsonNode l : locations) {
+                String locName = l.has("name") ? l.get("name").asText() : l.asText();
+                sb.append(locName).append(", ");
+            }
             if (sb.length() > 0) sb.setLength(sb.length() - 2);
             sb.append("\n");
         }

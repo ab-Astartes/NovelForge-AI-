@@ -87,6 +87,9 @@ public class WriteCommand {
                         Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
                         BookProject.saveChapter(bookDir, chapter);
 
+                        // Update book.json metadata
+                        BookProject.saveBookMetadata(bookDir, book);
+
                         // Update outline.md
                         if (book.getOutline() != null) {
                             Files.writeString(bookDir.resolve("outline.md"), book.getOutline());

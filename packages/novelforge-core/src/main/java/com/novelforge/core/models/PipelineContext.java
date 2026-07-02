@@ -12,6 +12,8 @@ public class PipelineContext {
     private Book book;
     private TruthState truthState;
     private String currentChapterDraft;
+    private String writerDraft;         // Writer's original output (preserved for comparison)
+    private String observerOutput;     // Observer analysis (separate from chapter draft)
     private AuditResult auditResult;
     private PipelineConfig config;
 
@@ -30,5 +32,11 @@ public class PipelineContext {
 
     // --- Setters (pipeline agents update these progressively) ---
     public void setCurrentChapterDraft(String draft) { this.currentChapterDraft = draft; }
+    public void setWriterDraft(String draft) { this.writerDraft = draft; }
+    public void setObserverOutput(String output) { this.observerOutput = output; }
     public void setAuditResult(AuditResult result) { this.auditResult = result; }
+
+    // --- Extra getters ---
+    public String getWriterDraft() { return writerDraft; }
+    public String getObserverOutput() { return observerOutput; }
 }

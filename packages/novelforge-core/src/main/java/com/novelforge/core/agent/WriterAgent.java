@@ -42,13 +42,15 @@ public class WriterAgent implements Agent {
         LlmClient client = router.getClientForAgent(name());
         String modelId = router.getModelForAgent(name());
 
-        // Writer needs more tokens — up to chapter max words * 1.5
-        int maxTokens = Math.max(4000, context.getConfig().getChapterWordsMax() * 2);
+        // Writer needs more tokens — Chinese text: ~1.5 tokens per char, add 50% buffer
+        int estimatedMaxTokens = (int) (context.getConfig().getChapterWordsMax() * 1.5 * 1.5);
+        int maxTokens = Math.max(4000, estimatedMaxTokens);
 
         String response = client.chatComplete(messages, modelId, temperature(), maxTokens);
 
         // Store the actual chapter draft text
         context.setCurrentChapterDraft(response);
+        context.setWriterDraft(response);  // preserve original Writer output
         log.info("Writer: chapter {} drafted ({})", chapterNum, response.length());
 
         return new PipelineResult(context, response, name());

@@ -225,7 +225,9 @@ public class StudioServer {
             response.put("status", result.success() ? "ok" : "error");
             if (result.success()) {
                 Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
-                BookProject.saveChapter(Paths.get(bookPath), chapter);
+                Path bookDir = Paths.get(bookPath);
+                BookProject.saveChapter(bookDir, chapter);
+                BookProject.saveBookMetadata(bookDir, book);
                 response.put("chapterNumber", chapter.getNumber());
                 response.put("length", chapter.getFinalText() != null ? chapter.getFinalText().length() : 0);
                 if (chapter.getAuditResult() != null) {

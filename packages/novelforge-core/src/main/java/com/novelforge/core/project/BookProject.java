@@ -2,11 +2,11 @@ package com.novelforge.core.project;
 
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
-import com.novelforge.core.models.GenreProfile;
 import com.novelforge.core.state.TruthState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,15 +40,8 @@ public class BookProject {
 
     /**
      * Create a new book project directory with all required files.
-     *
-     * @param parentDir  parent directory (e.g. ~/NovelForge/books)
-     * @param title      book title
-     * @param genre      genre key (xuanhuan, xianxia, urban, etc.)
-     * @param author     author name (optional)
-     * @return Path to the created book directory
      */
     public static Path create(Path parentDir, String title, String genre, String author) throws IOException {
-        // Sanitize title for directory name
         String dirName = sanitize(title);
         Path bookDir = parentDir.resolve(dirName);
 
@@ -174,7 +167,7 @@ public class BookProject {
     }
 
     /**
-     * Save a chapter to the book directory.
+     * Save a chapter to the book directory and update book.json metadata.
      */
     public static void saveChapter(Path bookDir, Chapter chapter) throws IOException {
         Path chapterFile = bookDir.resolve("chapters")
@@ -182,6 +175,38 @@ public class BookProject {
         Files.writeString(chapterFile, chapter.getFinalText() != null ?
                 chapter.getFinalText() : chapter.getDraftText());
         log.info("Chapter {} saved to {}", chapter.getNumber(), chapterFile);
+    }
+
+    /**
+     * Save book metadata back to book.json (e.g. after adding a chapter).
+     */
+    public static void saveBookMetadata(Path bookDir, Book book) throws IOException {
+        Path bookJsonPath = bookDir.resolve("book.json");
+        ObjectNode bookJson = mapper.createObjectNode();
+        bookJson.put("id", book.getId());
+        bookJson.put("title", book.getTitle());
+        bookJson.put("genre", book.getGenre());
+        bookJson.put("author", book.getAuthor() != null ? book.getAuthor() : "");
+        bookJson.put("createdAt", java.time.Instant.now().toString());
+
+        // Store chapter metadata (number + title only, not full text)
+        ArrayNode chaptersArr = bookJson.putArray("chapters");
+        for (Chapter ch : book.getChapters()) {
+            ObjectNode chNode = mapper.createObjectNode();
+            chNode.put("number", ch.getNumber());
+            chNode.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
+            chNode.put("wordCount", estimateWordCount(ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText()));
+            chaptersArr.add(chNode);
+        }
+        mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(bookJsonPath), bookJson);
+        log.info("book.json metadata saved ({} chapters)", book.getChapters().size());
+    }
+
+    private static int estimateWordCount(String text) {
+        if (text == null) return 0;
+        int chineseChars = (int) text.chars().filter(c ->
+                (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)).count();
+        return chineseChars + (text.length() - chineseChars) / 5;
     }
 
     /** Sanitize title for directory name */

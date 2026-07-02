@@ -43,11 +43,11 @@ public class ObserverAgent implements Agent {
 
         String response = client.chatComplete(messages, modelId, temperature(), 2000);
 
-        // Don't overwrite draft — Observer output is separate metadata
-        // PipelineContext needs a way to carry observer output alongside draft
+        // Don't overwrite chapter draft — Observer output is separate metadata
+        // Store in observerOutput for Reflector to consume
+        context.setObserverOutput(response);
         log.info("Observer: facts extracted ({})", response.length());
 
-        // Store observer output in context (we'll add a field for this)
         return new PipelineResult(context, response, name());
     }
 }

@@ -38,7 +38,11 @@ public class ReflectorAgent implements Agent {
     public PipelineResult execute(PipelineContext context) {
         log.info("Reflector: generating state patches for chapter {}", context.getBook().nextChapterNumber());
 
-        String observerOutput = context.getCurrentChapterDraft();
+        String observerOutput = context.getObserverOutput();
+        if (observerOutput == null || observerOutput.isEmpty()) {
+            // Fallback: use chapter draft if observer was skipped
+            observerOutput = context.getCurrentChapterDraft();
+        }
 
         List<Map<String, String>> messages = promptBuilder.buildReflectorPrompt(
                 context.getBook(), context.getTruthState(), observerOutput, context.getConfig());
