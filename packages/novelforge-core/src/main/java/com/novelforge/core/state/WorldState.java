@@ -58,6 +58,25 @@ public class WorldState {
     }
 
     /** Get human-readable summary for prompt context */
+    /** Get raw ObjectNode for mutation */
+    public ObjectNode getData() { return data; }
+
+    /** Add a location entry */
+    public void addLocation(JsonNode loc) {
+        JsonNode arr = data.get("locations");
+        if (arr != null && arr.isArray()) {
+            ((com.fasterxml.jackson.databind.node.ArrayNode) arr).add(loc);
+        }
+    }
+
+    /** Add a rule entry */
+    public void addRule(JsonNode rule) {
+        JsonNode arr = data.get("rules");
+        if (arr != null && arr.isArray()) {
+            ((com.fasterxml.jackson.databind.node.ArrayNode) arr).add(rule);
+        }
+    }
+
     public String getSummary() {
         StringBuilder sb = new StringBuilder();
         JsonNode locations = data.get("locations");
