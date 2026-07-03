@@ -131,9 +131,13 @@ public class AnthropicClient implements LlmClient {
 
     @Override
     public int estimateTokens(String text) {
-        int chineseCount = (int) text.chars().filter(c -> c > 0x4E00 && c < 0x9FFF).count();
-        int otherCount = text.length() - chineseCount;
-        return chineseCount / 2 + otherCount / 4 + 1;
+        int cjkCount = (int) text.chars().filter(c ->
+                (c >= 0x4E00 && c <= 0x9FFF) ||
+                (c >= 0x3400 && c <= 0x4DBF) ||
+                (c >= 0x20000 && c <= 0x2A6DF)
+        ).count();
+        int otherCount = text.length() - cjkCount;
+        return cjkCount * 3 / 2 + otherCount / 4 + 1;
     }
 
     private String truncate(String s, int max) {

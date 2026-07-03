@@ -92,7 +92,13 @@ public class WorldState {
         JsonNode rules = data.get("rules");
         if (rules != null && !rules.isEmpty()) {
             sb.append("规则: ");
-            for (JsonNode r : rules) sb.append(r.asText()).append("; ");
+            for (JsonNode r : rules) {
+                // rules can be strings or objects — handle both
+                if (r.isTextual()) sb.append(r.asText());
+                else if (r.isObject()) sb.append(r.toString());
+                else sb.append(r.asText());
+                sb.append("; ");
+            }
             sb.append("\n");
         }
         if (sb.isEmpty()) return "（暂无世界观数据）";

@@ -3,6 +3,7 @@ package com.novelforge.core.prompt;
 import com.novelforge.core.models.*;
 import com.novelforge.core.state.TruthState;
 import com.novelforge.core.pipeline.PipelineConfig;
+import com.novelforge.core.genre.GenreManager;
 
 import java.util.List;
 import java.util.Map;
@@ -169,6 +170,26 @@ public class PromptBuilder {
      */
     public List<Map<String, String>> buildWriterPrompt(Book book, TruthState state,
                                                         String composedContext, PipelineConfig config) {
+        GenreManager genreManager = new GenreManager();
+        GenreProfile genreProfile = genreManager.getGenre(book.getGenre());
+
+        StringBuilder genreRules = new StringBuilder();
+        if (genreProfile != null) {
+            genreRules.append("\n## 题材详细规则\n");
+            if (genreProfile.getOutlineTemplate() != null)
+                genreRules.append("- 结构模板: ").append(genreProfile.getOutlineTemplate()).append("\n");
+            if (genreProfile.getTropes() != null && genreProfile.getTropes().length > 0)
+                genreRules.append("- 可用套路: ").append(String.join(", ", genreProfile.getTropes())).append("\n");
+            if (genreProfile.getAvoidanceList() != null && genreProfile.getAvoidanceList().length > 0)
+                genreRules.append("- 必须避免: ").append(String.join(", ", genreProfile.getAvoidanceList())).append("\n");
+            if (genreProfile.getNamingConvention() != null)
+                genreRules.append("- 命名规范: ").append(genreProfile.getNamingConvention()).append("\n");
+            if (genreProfile.getPacingRules() != null)
+                genreRules.append("- 节奏规则: ").append(genreProfile.getPacingRules()).append("\n");
+            if (genreProfile.getUpgradeSystem() != null)
+                genreRules.append("- 升级体系: ").append(genreProfile.getUpgradeSystem()).append("\n");
+        }
+
         String system = """
             你是小说写手。根据组装好的上下文包，创作本章内容。
             
@@ -184,9 +205,10 @@ public class PromptBuilder {
             - 每个场景要有画面感和动作
             - 对话要有角色个性，不要流水账
             - 避免过度描写心理活动，用行动展现
+            %s
             """;
 
-        String formattedSystem = String.format(system, config.getChapterWordsMin(), config.getChapterWordsMax());
+        String formattedSystem = String.format(system, config.getChapterWordsMin(), config.getChapterWordsMax(), genreRules.toString());
 
         String user = String.format("""
             ## 写作上下文包
@@ -434,8 +456,12 @@ public class PromptBuilder {
     /** Estimate Chinese word count (Chinese chars ≈ words, plus English words) */
     private static int estimateChineseWords(String text) {
         if (text == null) return 0;
-        int chineseChars = (int) text.chars().filter(c -> c > 0x4E00 && c < 0x9FFF).count();
-        int englishWords = text.length() - chineseChars; // rough: non-Chinese chars
-        return chineseChars + englishWords / 5;
+        int chineseChars = (int) text.chars().filter(c ->
+                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
+                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
+                (c >= 0x20000 && c <= 0x2A6DF)      // Extension B
+        ).count();
+        int otherChars = text.length() - chineseChars;
+        return chineseChars + otherChars / 5;
     }
 }

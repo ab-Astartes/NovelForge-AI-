@@ -131,8 +131,10 @@ public class HookManager {
         if (mustAdvance == null || mustAdvance.isEmpty()) return "（无必须推进的悬念）";
         StringBuilder sb = new StringBuilder();
         for (JsonNode h : mustAdvance) {
-            sb.append("- ").append(h.get("id").asText())
-              .append(": ").append(h.get("description").asText()).append("\n");
+            String id = h.has("id") ? h.get("id").asText() : "unknown";
+            String desc = h.has("description") ? h.get("description").asText() : "";
+            sb.append("- ").append(id)
+              .append(": ").append(desc).append("\n");
         }
         return sb.toString();
     }
@@ -146,9 +148,12 @@ public class HookManager {
         sb.append("过期悬念: ").append(stale != null ? stale.size() : 0).append(" 个\n");
         if (hooks != null && !hooks.isEmpty()) {
             for (JsonNode h : hooks) {
-                sb.append("  - ").append(h.get("id").asText())
-                  .append(" (优先级: ").append(h.get("priority").asText()).append(")")
-                  .append(": ").append(h.get("description").asText()).append("\n");
+                String id = h.has("id") ? h.get("id").asText() : "unknown";
+                String priority = h.has("priority") ? h.get("priority").asText() : "medium";
+                String desc = h.has("description") ? h.get("description").asText() : "";
+                sb.append("  - ").append(id)
+                  .append(" (优先级: ").append(priority).append(")")
+                  .append(": ").append(desc).append("\n");
             }
         }
         return sb.toString();

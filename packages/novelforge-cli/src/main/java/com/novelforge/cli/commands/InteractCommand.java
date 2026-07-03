@@ -51,7 +51,7 @@ public class InteractCommand {
             Book book = BookProject.loadBook(bookDir);
             TruthState state = new TruthState(bookDir);
 
-            LlmClient client = new OpenAiClient(apiKey, baseUrl);
+            LlmClient client = new OpenAiClient(baseUrl, apiKey);
             ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
 
             System.out.println("📖 Interactive mode for '" + book.getTitle() + "' (genre: " + book.getGenre() + ")");

@@ -2,6 +2,7 @@ package com.novelforge.core.agent;
 
 import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
+import com.novelforge.core.audit.AuditEngine;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
@@ -23,6 +24,7 @@ public class AuditorAgent implements Agent {
 
     private ModelRouter router;
     private final PromptBuilder promptBuilder = new PromptBuilder();
+    private final AuditEngine auditEngine = new AuditEngine();
 
     @Override public String name() { return "Auditor"; }
     @Override public String model() { return null; }
@@ -45,7 +47,7 @@ public class AuditorAgent implements Agent {
         String response = client.chatComplete(messages, modelId, temperature(), 3000);
 
         // Parse audit JSON into AuditResult
-        AuditResult auditResult = parseAuditResult(response);
+        AuditResult auditResult = parseAuditResult(response, chapterDraft);
         context.setAuditResult(auditResult);
 
         log.info("Auditor: overall score {}, {} critical issues, {} warnings",
@@ -56,8 +58,8 @@ public class AuditorAgent implements Agent {
         return new PipelineResult(context, response, name());
     }
 
-    /** Parse LLM's JSON audit output into AuditResult object */
-    private AuditResult parseAuditResult(String llmOutput) {
+    /** Parse LLM's JSON audit output into AuditResult object, then overlay objective checks */
+    private AuditResult parseAuditResult(String llmOutput, String chapterText) {
         // Parse LLM JSON audit output into AuditResult
         AuditResult result = new AuditResult();
         result.setOverallScore(7.0); // fallback if parsing fails
@@ -99,6 +101,34 @@ public class AuditorAgent implements Agent {
             }
         } catch (Exception e) {
             log.warn("Failed to parse audit JSON, using defaults", e);
+        }
+
+        // Overlay objective rule-engine checks from AuditEngine
+        AuditResult objectiveCheck = auditEngine.quickAudit(chapterText);
+        if (result.getDimensionScores() != null) {
+            // Override objective dimensions with rule-engine results (more reliable)
+            if (objectiveCheck.getDimensionScores() != null) {
+                for (String dim : new String[]{"pacing.sceneLengthBalance", "dialogue.tagVariety",
+                        "antiAI.repetitivePatterns", "antiAI.genericExpressions",
+                        "antiAI.overlyBalancedStructure"}) {
+                    Double objScore = objectiveCheck.getDimensionScores().get(dim);
+                    if (objScore != null) {
+                        result.getDimensionScores().put(dim, objScore);
+                    }
+                }
+            }
+            // Recalculate overall score with updated dimensions
+            double total = 0;
+            for (double s : result.getDimensionScores().values()) total += s;
+            result.setOverallScore(result.getDimensionScores().isEmpty() ? 7.0 : total / result.getDimensionScores().size());
+        }
+        // Add objective issues/warnings to LLM's list
+        if (objectiveCheck.getCriticalIssues() != null) {
+            result.getCriticalIssues().addAll(objectiveCheck.getCriticalIssues());
+            if (!objectiveCheck.getCriticalIssues().isEmpty()) result.setPass(false);
+        }
+        if (objectiveCheck.getWarnings() != null) {
+            result.getWarnings().addAll(objectiveCheck.getWarnings());
         }
 
         return result;

@@ -397,6 +397,17 @@ public class StudioServer {
                 if (root.has("chapterWordsMin")) config.setChapterWordsMin(root.get("chapterWordsMin").asInt());
                 if (root.has("chapterWordsMax")) config.setChapterWordsMax(root.get("chapterWordsMax").asInt());
                 if (root.has("auditPassThreshold")) config.setAuditPassThreshold(root.get("auditPassThreshold").asDouble());
+                if (root.has("maxRevisionPasses")) config.setMaxRevisionPasses(root.get("maxRevisionPasses").asInt());
+                // Agent toggles
+                if (root.has("runArchitect")) config.setRunArchitect(root.get("runArchitect").asBoolean());
+                if (root.has("runPlanner")) config.setRunPlanner(root.get("runPlanner").asBoolean());
+                if (root.has("runComposer")) config.setRunComposer(root.get("runComposer").asBoolean());
+                if (root.has("runWriter")) config.setRunWriter(root.get("runWriter").asBoolean());
+                if (root.has("runObserver")) config.setRunObserver(root.get("runObserver").asBoolean());
+                if (root.has("runReflector")) config.setRunReflector(root.get("runReflector").asBoolean());
+                if (root.has("runNormalizer")) config.setRunNormalizer(root.get("runNormalizer").asBoolean());
+                if (root.has("runAuditor")) config.setRunAuditor(root.get("runAuditor").asBoolean());
+                if (root.has("runReviser")) config.setRunReviser(root.get("runReviser").asBoolean());
             } catch (Exception e) { log.warn("Failed to load pipeline config"); }
         }
         return config;

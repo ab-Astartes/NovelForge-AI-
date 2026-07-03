@@ -114,9 +114,14 @@ public class WriteCommand {
                     PipelineResult result = runner.runDraftOnly(book, truthState);
 
                     if (result.success()) {
-                        System.out.println("✅ Draft completed!");
-                        System.out.println("   Length: " + (result.updatedContext().getCurrentChapterDraft() != null ?
-                                result.updatedContext().getCurrentChapterDraft().length() : 0) + " chars");
+                        // Save draft chapter to disk
+                        Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                        BookProject.saveChapter(bookDir, chapter);
+                        BookProject.saveBookMetadata(bookDir, book);
+
+                        System.out.println("✅ Draft completed and saved!");
+                        System.out.println("   Length: " + (chapter.getDraftText() != null ?
+                                chapter.getDraftText().length() : 0) + " chars");
                     } else {
                         System.err.println("❌ Draft failed: " + result.errorMessage());
                     }
@@ -175,6 +180,16 @@ public class WriteCommand {
                 if (root.has("chapterWordsMax")) config.setChapterWordsMax(root.get("chapterWordsMax").asInt());
                 if (root.has("auditPassThreshold")) config.setAuditPassThreshold(root.get("auditPassThreshold").asDouble());
                 if (root.has("maxRevisionPasses")) config.setMaxRevisionPasses(root.get("maxRevisionPasses").asInt());
+                // Agent toggles
+                if (root.has("runArchitect")) config.setRunArchitect(root.get("runArchitect").asBoolean());
+                if (root.has("runPlanner")) config.setRunPlanner(root.get("runPlanner").asBoolean());
+                if (root.has("runComposer")) config.setRunComposer(root.get("runComposer").asBoolean());
+                if (root.has("runWriter")) config.setRunWriter(root.get("runWriter").asBoolean());
+                if (root.has("runObserver")) config.setRunObserver(root.get("runObserver").asBoolean());
+                if (root.has("runReflector")) config.setRunReflector(root.get("runReflector").asBoolean());
+                if (root.has("runNormalizer")) config.setRunNormalizer(root.get("runNormalizer").asBoolean());
+                if (root.has("runAuditor")) config.setRunAuditor(root.get("runAuditor").asBoolean());
+                if (root.has("runReviser")) config.setRunReviser(root.get("runReviser").asBoolean());
             } catch (Exception e) {
                 System.err.println("Warning: Failed to load pipeline config, using defaults");
             }
