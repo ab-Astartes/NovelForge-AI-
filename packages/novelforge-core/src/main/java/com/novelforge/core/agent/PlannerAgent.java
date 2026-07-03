@@ -33,8 +33,8 @@ public class PlannerAgent implements Agent {
     public PipelineResult execute(PipelineContext context) {
         log.info("Planner: creating hook agenda for chapter {}", context.getBook().nextChapterNumber());
 
-        // Get previous agent output (Architect's outline)
-        String architectOutput = context.getCurrentChapterDraft();
+        // Get Architect output
+        String architectOutput = context.getArchitectOutput();
         if (architectOutput == null || architectOutput.isEmpty()) {
             architectOutput = context.getBook().getOutline() != null ? context.getBook().getOutline() : "";
         }
@@ -47,8 +47,8 @@ public class PlannerAgent implements Agent {
 
         String response = client.chatComplete(messages, modelId, temperature(), 3000);
 
-        // Store planner output for Composer
-        context.setCurrentChapterDraft(response);
+        // Store planner output in dedicated field
+        context.setPlannerOutput(response);
         log.info("Planner: hook agenda generated ({})", response.length());
 
         return new PipelineResult(context, response, name());

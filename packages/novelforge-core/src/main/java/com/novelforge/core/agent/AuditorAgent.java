@@ -105,7 +105,8 @@ public class AuditorAgent implements Agent {
 
         // Overlay objective rule-engine checks from AuditEngine
         AuditResult objectiveCheck = auditEngine.quickAudit(chapterText);
-        if (result.getDimensionScores() != null) {
+        Map<String, Double> scores = result.getDimensionScores();
+        if (scores != null && !scores.isEmpty()) {
             // Override objective dimensions with rule-engine results (more reliable)
             if (objectiveCheck.getDimensionScores() != null) {
                 for (String dim : new String[]{"pacing.sceneLengthBalance", "dialogue.tagVariety",
@@ -113,14 +114,19 @@ public class AuditorAgent implements Agent {
                         "antiAI.overlyBalancedStructure"}) {
                     Double objScore = objectiveCheck.getDimensionScores().get(dim);
                     if (objScore != null) {
-                        result.getDimensionScores().put(dim, objScore);
+                        scores.put(dim, objScore);
                     }
                 }
             }
             // Recalculate overall score with updated dimensions
             double total = 0;
-            for (double s : result.getDimensionScores().values()) total += s;
-            result.setOverallScore(result.getDimensionScores().isEmpty() ? 7.0 : total / result.getDimensionScores().size());
+            for (double s : scores.values()) total += s;
+            result.setOverallScore(scores.isEmpty() ? 7.0 : total / scores.size());
+        } else if (objectiveCheck.getDimensionScores() != null) {
+            // LLM parsing completely failed — use objective results as full fallback
+            result.setDimensionScores(objectiveCheck.getDimensionScores());
+            result.setOverallScore(objectiveCheck.getOverallScore());
+            result.setPass(objectiveCheck.isPass());
         }
         // Add objective issues/warnings to LLM's list
         if (objectiveCheck.getCriticalIssues() != null) {

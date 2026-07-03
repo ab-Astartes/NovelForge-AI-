@@ -5,6 +5,7 @@ import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.RevisionPlan;
 import com.novelforge.core.prompt.PromptBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,8 +50,14 @@ public class ReviserAgent implements Agent {
             return new PipelineResult(context, chapterDraft, name());
         }
 
+        // Select revision mode based on audit score and critical issues
+        RevisionPlan.Mode mode = selectRevisionMode(auditResult);
+        log.info("Reviser: selected mode {} (score {}, {} critical issues)",
+                mode, String.format("%.1f", auditResult.getOverallScore()),
+                auditResult.getCriticalIssues() != null ? auditResult.getCriticalIssues().size() : 0);
+
         List<Map<String, String>> messages = promptBuilder.buildReviserPrompt(
-                context.getBook(), context.getTruthState(), chapterDraft, auditResult, context.getConfig());
+                context.getBook(), context.getTruthState(), chapterDraft, auditResult, context.getConfig(), mode);
 
         LlmClient client = router.getClientForAgent(name());
         String modelId = router.getModelForAgent(name());
@@ -59,8 +66,46 @@ public class ReviserAgent implements Agent {
 
         // Replace draft with revised version
         context.setCurrentChapterDraft(response);
-        log.info("Reviser: chapter revised (audit score {} → revised)", String.format("%.1f", auditResult.getOverallScore()));
+        log.info("Reviser: chapter revised (mode {}, audit score {} → revised)", mode, String.format("%.1f", auditResult.getOverallScore()));
 
         return new PipelineResult(context, response, name());
+    }
+
+    /**
+     * Select revision mode based on audit results.
+     * - score >= 7.5, only warnings → polish (light touch)
+     * - score 6.0-7.5 → spot-fix (targeted repairs)
+     * - score < 6.0 → rewrite (major overhaul)
+     * - low anti-AI scores → add anti-detect overlay
+     */
+    private RevisionPlan.Mode selectRevisionMode(AuditResult audit) {
+        double score = audit.getOverallScore();
+        int criticalCount = audit.getCriticalIssues() != null ? audit.getCriticalIssues().size() : 0;
+
+        RevisionPlan.Mode baseMode;
+        if (score >= 7.5 && criticalCount == 0) {
+            baseMode = RevisionPlan.Mode.POLISH;
+        } else if (score >= 6.0) {
+            baseMode = RevisionPlan.Mode.SPOT_FIX;
+        } else {
+            baseMode = RevisionPlan.Mode.REWRITE;
+        }
+
+        // Check anti-AI dimensions for overlay
+        Map<String, Double> scores = audit.getDimensionScores();
+        if (scores != null) {
+            double antiAI = 0;
+            int antiAICount = 0;
+            for (String dim : new String[]{"antiAI.repetitivePatterns", "antiAI.genericExpressions", "antiAI.overlyBalancedStructure"}) {
+                Double d = scores.get(dim);
+                if (d != null) { antiAI += d; antiAICount++; }
+            }
+            if (antiAICount > 0 && antiAI / antiAICount < 5.0) {
+                // Low anti-AI scores — use anti-detect mode regardless of base
+                return RevisionPlan.Mode.ANTI_DETECT;
+            }
+        }
+
+        return baseMode;
     }
 }

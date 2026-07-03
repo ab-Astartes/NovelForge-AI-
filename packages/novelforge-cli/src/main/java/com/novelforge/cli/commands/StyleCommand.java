@@ -51,7 +51,7 @@ public class StyleCommand {
 
             System.out.println("🎭 Analyzing writing style from " + referencePath + " (" + referenceText.length() + " chars)...");
 
-            LlmClient client = new OpenAiClient(apiKey, baseUrl);
+            LlmClient client = new OpenAiClient(baseUrl, apiKey);
 
             String systemPrompt = """
                 你是写作风格分析专家。从参考文本中提取写作风格特征，输出 JSON 格式的风格画像。

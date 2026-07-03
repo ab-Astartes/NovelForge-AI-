@@ -33,7 +33,10 @@ public class ComposerAgent implements Agent {
     public PipelineResult execute(PipelineContext context) {
         log.info("Composer: assembling context for chapter {}", context.getBook().nextChapterNumber());
 
-        String plannerOutput = context.getCurrentChapterDraft();
+        String plannerOutput = context.getPlannerOutput();
+        if (plannerOutput == null || plannerOutput.isEmpty()) {
+            plannerOutput = context.getCurrentChapterDraft();  // fallback for partial runs
+        }
 
         List<Map<String, String>> messages = promptBuilder.buildComposerPrompt(
                 context.getBook(), context.getTruthState(), plannerOutput, context.getConfig());
@@ -43,8 +46,8 @@ public class ComposerAgent implements Agent {
 
         String response = client.chatComplete(messages, modelId, temperature(), 2000);
 
-        // Replace draft with composed context (this will be Writer's input)
-        context.setCurrentChapterDraft(response);
+        // Store composed context in dedicated field
+        context.setComposerOutput(response);
         log.info("Composer: context assembled ({})", response.length());
 
         return new PipelineResult(context, response, name());

@@ -29,10 +29,13 @@ public class OpenAiClient implements LlmClient {
     private final ObjectMapper mapper;
 
     public OpenAiClient(String baseUrl, String apiKey) {
-        // Normalize: strip trailing slash, ensure /v1 path
+        // Normalize: strip trailing slash and /chat/completions, ensure /v1
         String url = baseUrl.replaceAll("/+$", "");
+        // Strip known API path suffixes so we don't double-append
+        url = url.replaceAll("(/v1)?/chat/completions$", "");
+        // Now ensure /v1 suffix
         if (!url.endsWith("/v1")) {
-            url = url + (url.contains("/v1/") ? "" : "/v1");
+            url = url + "/v1";
         }
         this.baseUrl = url;
         this.apiKey = apiKey;

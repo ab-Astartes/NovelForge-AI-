@@ -1,27 +1,44 @@
 package com.novelforge.core.models;
 
-import java.util.List;
-
 /**
- * RevisionPlan — targeted repair plan from Reviser agent.
- * Mode: polish | spot-fix | rewrite | anti-detect
+ * RevisionPlan — describes the revision strategy selected by ReviserAgent.
+ * Mode determines how aggressively to revise:
+ * - POLISH: light touch, only minor wording improvements
+ * - SPOT_FIX: targeted repairs on specific problematic paragraphs
+ * - REWRITE: major overhaul, restructure scenes/paragraphs
+ * - ANTI_DETECT: overlay anti-AIGC patterns (remove repetition, generic expressions)
  */
 public class RevisionPlan {
 
-    public enum Mode { POLISH, SPOT_FIX, REWRITE, ANTI_DETECT }
+    public enum Mode {
+        POLISH,
+        SPOT_FIX,
+        REWRITE,
+        ANTI_DETECT
+    }
 
     private Mode mode;
-    private List<String> targets;    // specific paragraphs/lines to revise
-    private String instructions;     // revision instructions for LLM
-    private List<String> unresolved; // issues that couldn't be fixed in this pass
+    private String focusDescription;
+    private java.util.List<String> targetDimensions;
 
-    // --- Getters/Setters ---
+    public RevisionPlan() {}
+
+    public RevisionPlan(Mode mode, String focusDescription) {
+        this.mode = mode;
+        this.focusDescription = focusDescription;
+    }
+
     public Mode getMode() { return mode; }
-    public void setMode(Mode m) { this.mode = m; }
-    public List<String> getTargets() { return targets; }
-    public void setTargets(List<String> t) { this.targets = t; }
-    public String getInstructions() { return instructions; }
-    public void setInstructions(String i) { this.instructions = i; }
-    public List<String> getUnresolved() { return unresolved; }
-    public void setUnresolved(List<String> u) { this.unresolved = u; }
+    public void setMode(Mode mode) { this.mode = mode; }
+
+    public String getFocusDescription() { return focusDescription; }
+    public void setFocusDescription(String focusDescription) { this.focusDescription = focusDescription; }
+
+    public java.util.List<String> getTargetDimensions() { return targetDimensions; }
+    public void setTargetDimensions(java.util.List<String> targetDimensions) { this.targetDimensions = targetDimensions; }
+
+    @Override
+    public String toString() {
+        return "RevisionPlan{mode=" + mode + ", focus=" + focusDescription + "}";
+    }
 }

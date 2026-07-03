@@ -4,6 +4,7 @@ import com.novelforge.core.models.*;
 import com.novelforge.core.state.TruthState;
 import com.novelforge.core.pipeline.PipelineConfig;
 import com.novelforge.core.genre.GenreManager;
+import com.novelforge.core.models.RevisionPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,8 @@ import java.util.LinkedHashMap;
  * a structured prompt that the LLM can process.
  */
 public class PromptBuilder {
+
+    private final GenreManager genreManager = new GenreManager();
 
     /**
      * Build messages for Architect agent.
@@ -170,7 +173,6 @@ public class PromptBuilder {
      */
     public List<Map<String, String>> buildWriterPrompt(Book book, TruthState state,
                                                         String composedContext, PipelineConfig config) {
-        GenreManager genreManager = new GenreManager();
         GenreProfile genreProfile = genreManager.getGenre(book.getGenre());
 
         StringBuilder genreRules = new StringBuilder();
@@ -386,13 +388,17 @@ public class PromptBuilder {
     }
 
     /**
-     * Build messages for Reviser agent.
-     * Input: audit result + chapter text.
-     * Output: revised chapter text.
+     * Build messages for Reviser agent — with explicit revision mode.
      */
     public List<Map<String, String>> buildReviserPrompt(Book book, TruthState state,
                                                          String chapterText, AuditResult auditResult,
-                                                         PipelineConfig config) {
+                                                         PipelineConfig config, RevisionPlan.Mode mode) {
+        String modeDescription = switch (mode) {
+            case POLISH -> "整体润色 — 只做微调，不改变核心内容。修复文笔、节奏小问题。";
+            case SPOT_FIX -> "定点修复 — 只改有问题的段落，保留好的部分不动。";
+            case REWRITE -> "重写 — 严重问题需要大改。可以重新组织场景顺序、重写段落。";
+            case ANTI_DETECT -> "反AIGC检测修复 — 消除重复模式、泛化表达、过于均衡的结构。增加人味和意外感。";
+        };
         String criticalIssues = auditResult.getCriticalIssues() != null ?
                 String.join("\n", auditResult.getCriticalIssues()) : "无";
         String warnings = auditResult.getWarnings() != null ?
@@ -401,18 +407,14 @@ public class PromptBuilder {
         String system = """
             你是修订者。根据审计结果修复章节文本中的问题。
             
-            修复模式：
-            - polish: 整体润色（小问题多但没有大问题）
-            - spot-fix: 定点修复（只改有问题的段落）
-            - rewrite: 重写（严重问题需要大改）
-            - anti-detect: 反AIGC检测修复
+            当前修复模式: %s
             
             修复原则：
             1. 优先修复 criticalIssues
             2. 尽量保留好的部分，只改有问题的
             3. 修复后重新检查是否引入新问题
             4. 保持叙事连贯性
-            """;
+            """.formatted(modeDescription);
 
         String user = String.format("""
             ## 第 %d 章文本
@@ -453,8 +455,66 @@ public class PromptBuilder {
         return s == null ? "（空）" : s.length() > max ? s.substring(0, max) + "\n...（已截断）" : s;
     }
 
+    /**
+     * Build messages for Architect agent — incremental update (subsequent chapters).
+     * Only supplements/fixes the chapter plan, does NOT rebuild the entire outline.
+     */
+    public List<Map<String, String>> buildArchitectIncrementalPrompt(Book book, TruthState state, PipelineConfig config) {
+        String system = """
+            你是小说大纲架构师。现在需要为下一章补充/修正章节计划。
+            
+            重要：已有大纲不要重写！只做以下工作：
+            1. 检查现有大纲是否需要微调（仅当前章和下一章）
+            2. 为即将写作的下一章生成详细的章节计划
+            3. 如果发现前面章节规划有问题，给出修正建议
+            
+            输出格式：
+            - 章节计划：场景、角色、事件、hook agenda
+            - 如需修正大纲，只输出修正部分
+            - 如大纲无需修正，直接输出章节计划即可
+            """;
+
+        String user = String.format("""
+            ## 作者意图
+            %s
+            
+            ## 题材
+            %s
+            
+            ## 已有大纲（请在此基础上补充，不要重写）
+            %s
+            
+            ## 已写章数
+            %d
+            
+            ## 当前角色状态
+            %s
+            
+            ## 当前悬念
+            %s
+            
+            请为第 %d 章生成详细章节计划，并检查大纲是否需要微调。
+            """,
+                nullSafe(book.getAuthorIntent()),
+                nullSafe(book.getGenre()),
+                truncate(book.getOutline(), 6000),
+                book.getChapters().size(),
+                state.characters().getSummary(),
+                state.hooks().getMustAdvanceSummary(),
+                book.nextChapterNumber()
+        );
+
+        return messages(system, user);
+    }
+
+    /** Estimate max tokens for target word count (Chinese text: ~1.5 tokens per char, 50% buffer) */
+    public int estimateMaxTokens(int chapterWordsMax) {
+        int estimatedMaxTokens = (int) (chapterWordsMax * 1.5 * 1.5);
+        return Math.max(4000, estimatedMaxTokens);
+    }
+
     /** Estimate Chinese word count (Chinese chars ≈ words, plus English words) */
-    private static int estimateChineseWords(String text) {
+    public static int estimateChineseWords(String text) {
         if (text == null) return 0;
         int chineseChars = (int) text.chars().filter(c ->
                 (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified

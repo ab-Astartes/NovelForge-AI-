@@ -96,12 +96,22 @@ public class BookProject {
         TruthState state = new TruthState(bookDir);
         state.saveAll();
 
-        // Write default pipeline config
+        // Write default pipeline config (including agent toggles)
         ObjectNode pipelineJson = mapper.createObjectNode();
         pipelineJson.put("chapterWordsMin", 2000);
         pipelineJson.put("chapterWordsMax", 4000);
         pipelineJson.put("auditPassThreshold", 7.0);
         pipelineJson.put("maxRevisionPasses", 1);
+        // Agent toggles — all enabled by default
+        pipelineJson.put("runArchitect", true);
+        pipelineJson.put("runPlanner", true);
+        pipelineJson.put("runComposer", true);
+        pipelineJson.put("runWriter", true);
+        pipelineJson.put("runObserver", true);
+        pipelineJson.put("runReflector", true);
+        pipelineJson.put("runNormalizer", true);
+        pipelineJson.put("runAuditor", true);
+        pipelineJson.put("runReviser", true);
         mapper.writerWithDefaultPrettyPrinter().writeValue(
                 Files.newOutputStream(bookDir.resolve("config/pipeline.json")), pipelineJson);
 
@@ -168,12 +178,25 @@ public class BookProject {
 
     /**
      * Save a chapter to the book directory and update book.json metadata.
+     * Saves both finalText and draftText separately.
      */
     public static void saveChapter(Path bookDir, Chapter chapter) throws IOException {
-        Path chapterFile = bookDir.resolve("chapters")
-                .resolve("chapter-" + String.format("%03d", chapter.getNumber()) + ".md");
-        Files.writeString(chapterFile, chapter.getFinalText() != null ?
-                chapter.getFinalText() : chapter.getDraftText());
+        Path chaptersDir = bookDir.resolve("chapters");
+        Files.createDirectories(chaptersDir);
+
+        // Save final text (or draft if no final text exists)
+        String finalText = chapter.getFinalText() != null ? chapter.getFinalText() : chapter.getDraftText();
+        Path chapterFile = chaptersDir.resolve("chapter-" + String.format("%03d", chapter.getNumber()) + ".md");
+        if (finalText != null) {
+            Files.writeString(chapterFile, finalText);
+        }
+
+        // Save draft text separately (preserves original Writer output for traceability)
+        if (chapter.getDraftText() != null && chapter.getFinalText() != null) {
+            Path draftFile = chaptersDir.resolve("chapter-" + String.format("%03d", chapter.getNumber()) + ".draft.md");
+            Files.writeString(draftFile, chapter.getDraftText());
+        }
+
         log.info("Chapter {} saved to {}", chapter.getNumber(), chapterFile);
     }
 
@@ -205,7 +228,10 @@ public class BookProject {
     private static int estimateWordCount(String text) {
         if (text == null) return 0;
         int chineseChars = (int) text.chars().filter(c ->
-                (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)).count();
+                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
+                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
+                (c >= 0x20000 && c <= 0x2A6DF)      // Extension B
+        ).count();
         return chineseChars + (text.length() - chineseChars) / 5;
     }
 

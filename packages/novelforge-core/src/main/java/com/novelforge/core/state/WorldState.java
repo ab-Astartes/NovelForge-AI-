@@ -45,6 +45,8 @@ public class WorldState {
             this.data = mapper.createObjectNode();
             this.data.putArray("locations");
             this.data.putArray("items");
+            this.data.putArray("rules");
+            this.data.putArray("systems");
         }
     }
 

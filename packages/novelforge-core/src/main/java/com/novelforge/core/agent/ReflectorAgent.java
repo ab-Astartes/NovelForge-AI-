@@ -62,6 +62,8 @@ public class ReflectorAgent implements Agent {
         // Add timeline events
         applyTimelineEvents(response, context);
 
+        // Store reflector output in dedicated field
+        context.setReflectorOutput(response);
         log.info("Reflector: {} hookOps applied, state patches generated ({})", hookOps.size(), response.length());
 
         return new PipelineResult(context, response, name());

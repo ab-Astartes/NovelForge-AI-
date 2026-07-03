@@ -34,7 +34,10 @@ public class WriterAgent implements Agent {
         int chapterNum = context.getBook().nextChapterNumber();
         log.info("Writer: drafting chapter {}", chapterNum);
 
-        String composedContext = context.getCurrentChapterDraft();
+        String composedContext = context.getComposerOutput();
+        if (composedContext == null || composedContext.isEmpty()) {
+            composedContext = context.getCurrentChapterDraft();  // fallback for partial runs
+        }
 
         List<Map<String, String>> messages = promptBuilder.buildWriterPrompt(
                 context.getBook(), context.getTruthState(), composedContext, context.getConfig());
@@ -42,9 +45,8 @@ public class WriterAgent implements Agent {
         LlmClient client = router.getClientForAgent(name());
         String modelId = router.getModelForAgent(name());
 
-        // Writer needs more tokens — Chinese text: ~1.5 tokens per char, add 50% buffer
-        int estimatedMaxTokens = (int) (context.getConfig().getChapterWordsMax() * 1.5 * 1.5);
-        int maxTokens = Math.max(4000, estimatedMaxTokens);
+        // Estimate max tokens for target word count
+        int maxTokens = promptBuilder.estimateMaxTokens(context.getConfig().getChapterWordsMax());
 
         String response = client.chatComplete(messages, modelId, temperature(), maxTokens);
 

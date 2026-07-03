@@ -55,6 +55,7 @@ public class NormalizerAgent implements Agent {
 
         // Replace draft with normalized version
         context.setCurrentChapterDraft(response);
+        context.setNormalizerOutput(response);
         log.info("Normalizer: text adjusted ({}/{})", estimateChineseWords(response), estimatedWords);
 
         return new PipelineResult(context, response, name());

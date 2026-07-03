@@ -119,6 +119,11 @@ public class WriteCommand {
                         BookProject.saveChapter(bookDir, chapter);
                         BookProject.saveBookMetadata(bookDir, book);
 
+                        // Save outline if Architect updated it
+                        if (book.getOutline() != null) {
+                            Files.writeString(bookDir.resolve("outline.md"), book.getOutline());
+                        }
+
                         System.out.println("✅ Draft completed and saved!");
                         System.out.println("   Length: " + (chapter.getDraftText() != null ?
                                 chapter.getDraftText().length() : 0) + " chars");
@@ -155,6 +160,19 @@ public class WriteCommand {
                             if (audit.getCriticalIssues() != null && !audit.getCriticalIssues().isEmpty()) {
                                 System.out.println("   ⚠️ Critical issues: " + audit.getCriticalIssues());
                             }
+                        }
+
+                        // Save updated chapter text if Reviser modified it
+                        String revisedText = result.updatedContext().getCurrentChapterDraft();
+                        if (revisedText != null && !revisedText.equals(text)) {
+                            if (ch.getFinalText() != null) {
+                                ch.setFinalText(revisedText);
+                            } else {
+                                ch.setDraftText(revisedText);
+                            }
+                            BookProject.saveChapter(bookDir, ch);
+                            BookProject.saveBookMetadata(bookDir, book);
+                            System.out.println("   ✅ Chapter text updated and saved after revision");
                         }
                     } else {
                         System.err.println("❌ Audit failed: " + result.errorMessage());

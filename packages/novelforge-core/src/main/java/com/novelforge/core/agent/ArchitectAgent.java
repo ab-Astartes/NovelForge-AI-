@@ -34,10 +34,20 @@ public class ArchitectAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Architect: building outline for chapter {}", context.getBook().nextChapterNumber());
+        int nextChapter = context.getBook().nextChapterNumber();
+        log.info("Architect: planning chapter {} outline", nextChapter);
 
-        List<Map<String, String>> messages = promptBuilder.buildArchitectPrompt(
-                context.getBook(), context.getTruthState(), context.getConfig());
+        // Distinguish first call (full outline generation) vs subsequent calls (incremental update)
+        boolean hasExistingOutline = context.getBook().getOutline() != null && !context.getBook().getOutline().isEmpty();
+
+        List<Map<String, String>> messages;
+        if (hasExistingOutline) {
+            messages = promptBuilder.buildArchitectIncrementalPrompt(
+                    context.getBook(), context.getTruthState(), context.getConfig());
+        } else {
+            messages = promptBuilder.buildArchitectPrompt(
+                    context.getBook(), context.getTruthState(), context.getConfig());
+        }
 
         LlmClient client = router.getClientForAgent(name());
         String modelId = router.getModelForAgent(name());
@@ -46,7 +56,9 @@ public class ArchitectAgent implements Agent {
 
         // Update book outline with architect's output
         context.getBook().setOutline(response);
-        log.info("Architect: outline generated ({})", response.length());
+        context.setArchitectOutput(response);
+        log.info("Architect: outline {} for chapter {} ({})",
+                hasExistingOutline ? "updated" : "generated", nextChapter, response.length());
 
         return new PipelineResult(context, response, name());
     }
