@@ -4,6 +4,8 @@ import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.llm.OpenAiClient;
 import com.novelforge.core.models.WritingStyle;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,11 +87,27 @@ public class StyleCommand {
             System.out.println("\n✅ Style analysis complete:");
             System.out.println(response);
 
-            // Save to file if output specified
+            // Parse response into WritingStyle object
+            WritingStyle style = parseWritingStyle(response, referenceText);
+
+            // Save WritingStyle as JSON if output specified
+            ObjectMapper mapper = new ObjectMapper();
+            String styleJson = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(style);
+
             if (outputPath != null) {
-                Files.writeString(Paths.get(outputPath), response);
+                Files.writeString(Paths.get(outputPath), styleJson);
                 System.out.println("\nSaved to: " + outputPath);
+            } else {
+                // Default: save to style_profile.json in current dir
+                Files.writeString(Paths.get("style_profile.json"), styleJson);
+                System.out.println("\nSaved to: style_profile.json");
             }
+
+            System.out.println("\n📊 Style summary:");
+            System.out.println("   Name: " + style.getName());
+            System.out.println("   Narrative voice: " + style.getSentenceStructure());
+            System.out.println("   Dialogue style: " + style.getDialogueStyle());
+            System.out.println("   Description density: " + style.getDescriptionStyle());
 
         } catch (Exception e) {
             System.err.println("❌ Error: " + e.getMessage());
@@ -100,6 +118,72 @@ public class StyleCommand {
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }
+        return null;
+    }
+
+    /** Parse LLM JSON response into a WritingStyle object */
+    private WritingStyle parseWritingStyle(String llmResponse, String referenceText) {
+        WritingStyle style = new WritingStyle();
+        style.setName("Cloned Style");
+        style.setDescription("Auto-cloned from reference text");
+
+        try {
+            // Extract JSON block from LLM response
+            String json = extractJson(llmResponse);
+            if (json == null) {
+                // Fallback: store raw response as description
+                style.setVocabularyPattern(llmResponse);
+                style.setReferenceSample(referenceText.substring(0, Math.min(500, referenceText.length())));
+                return style;
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(json);
+
+            // Map LLM analysis fields to WritingStyle fields
+            style.setName(root.has("narrativeVoice") ?
+                    root.get("narrativeVoice").asText() + " Style" : "Cloned Style");
+            style.setSentenceStructure(root.has("sentenceLength") ?
+                    root.get("sentenceLength").asText() : "mixed");
+            style.setVocabularyPattern(root.has("vocabularyLevel") ?
+                    root.get("vocabularyLevel").asText() : "medium");
+            style.setDialogueStyle(root.has("dialogueStyle") ?
+                    root.get("dialogueStyle").asText() : "natural");
+            style.setDescriptionStyle(root.has("descriptionDensity") ?
+                    root.get("descriptionDensity").asText() : "moderate");
+            style.setPacingPattern(root.has("pacingPreference") ?
+                    root.get("pacingPreference").asText() : "medium");
+
+            // Store rich description combining all analysis dimensions
+            StringBuilder desc = new StringBuilder();
+            desc.append("Tone: ").append(root.has("tone") ? root.get("tone").asText() : "unknown");
+            desc.append(" | Emotional range: ").append(root.has("emotionalRange") ? root.get("emotionalRange").asText() : "unknown");
+            desc.append(" | Humor: ").append(root.has("humorLevel") ? root.get("humorLevel").asInt() : 0);
+            style.setDescription(desc.toString());
+
+            // Store reference sample
+            style.setReferenceSample(referenceText.substring(0, Math.min(500, referenceText.length())));
+
+        } catch (Exception e) {
+            // Parsing failed — store raw response
+            style.setVocabularyPattern(llmResponse);
+            style.setReferenceSample(referenceText.substring(0, Math.min(500, referenceText.length())));
+        }
+
+        return style;
+    }
+
+    /** Extract JSON from LLM response (may be wrapped in markdown) */
+    private String extractJson(String text) {
+        int start = text.indexOf("```json");
+        if (start >= 0) {
+            int contentStart = text.indexOf('\n', start) + 1;
+            int end = text.indexOf("```", contentStart);
+            if (end > contentStart) return text.substring(contentStart, end).trim();
+        }
+        int jsonStart = text.indexOf('{');
+        int jsonEnd = text.lastIndexOf('}');
+        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
         return null;
     }
 }

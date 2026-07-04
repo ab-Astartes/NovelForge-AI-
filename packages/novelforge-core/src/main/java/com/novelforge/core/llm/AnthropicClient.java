@@ -29,8 +29,10 @@ public class AnthropicClient implements LlmClient {
 
     public AnthropicClient(String baseUrl, String apiKey) {
         String url = baseUrl.replaceAll("/+$", "");
+        // Anthropic API path is /v1/messages, not /v1/chat/completions
+        url = url.replaceAll("(/v1)?/messages$", "");
         if (!url.endsWith("/v1")) {
-            url = url + (url.contains("/v1/") ? "" : "/v1");
+            url = url + "/v1";
         }
         this.baseUrl = url;
         this.apiKey = apiKey;
@@ -52,6 +54,11 @@ public class AnthropicClient implements LlmClient {
 
     @Override
     public String chatComplete(List<Map<String, String>> messages, String model, double temperature, int maxTokens) {
+        return withRetry(() -> chatCompleteOnce(messages, model, temperature, maxTokens), 3);
+    }
+
+    /** Single Anthropic API call (no retry) */
+    private String chatCompleteOnce(List<Map<String, String>> messages, String model, double temperature, int maxTokens) {
         try {
             // Anthropic format: system is separate, messages only have user/assistant
             ObjectNode body = mapper.createObjectNode();
@@ -120,13 +127,103 @@ public class AnthropicClient implements LlmClient {
         }
     }
 
+    /** Retry wrapper: retry on 429/5xx/timeout, exponential backoff */
+    private String withRetry(java.util.function.Supplier<String> action, int maxRetries) {
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return action.get();
+            } catch (LlmException e) {
+                boolean retryable = e.getMessage() != null &&
+                    (e.getMessage().contains("429") || e.getMessage().contains("500") ||
+                     e.getMessage().contains("502") || e.getMessage().contains("503") ||
+                     e.getMessage().contains("overload") || e.getMessage().contains("timeout") ||
+                     e.getMessage().contains("connect"));
+                if (!retryable || attempt == maxRetries) throw e;
+                long delayMs = (long) Math.pow(2, attempt) * 1000;
+                log.warn("Anthropic call failed (attempt {}), retrying in {}ms: {}", attempt + 1, delayMs, e.getMessage());
+                try { Thread.sleep(delayMs); } catch (InterruptedException ie) { throw e; }
+            }
+        }
+        throw new LlmException("Max retries exhausted");
+    }
+
     @Override
     public void chatCompleteStream(List<Map<String, String>> messages, String model, double temperature,
                                    int maxTokens, StreamHandler handler) {
-        // Anthropic streaming uses SSE with different event types (message_start, content_block_delta, message_stop)
-        // TODO: Implement Anthropic SSE streaming
-        String result = chatComplete(messages, model, temperature, maxTokens);
-        handler.onComplete(result);
+        try {
+            // Build Anthropic SSE request body
+            ObjectNode body = mapper.createObjectNode();
+            body.put("model", model);
+            body.put("temperature", temperature);
+            body.put("max_tokens", maxTokens);
+            body.put("stream", true);
+
+            StringBuilder systemPrompt = new StringBuilder();
+            List<Map<String, String>> filtered = new ArrayList<>();
+            for (Map<String, String> msg : messages) {
+                if ("system".equals(msg.get("role"))) {
+                    systemPrompt.append(msg.get("content")).append("\n");
+                } else {
+                    filtered.add(msg);
+                }
+            }
+            if (systemPrompt.length() > 0) {
+                body.put("system", systemPrompt.toString().trim());
+            }
+
+            ArrayNode msgsArr = body.putArray("messages");
+            for (Map<String, String> msg : filtered) {
+                ObjectNode msgNode = msgsArr.addObject();
+                msgNode.put("role", msg.get("role"));
+                msgNode.put("content", msg.get("content"));
+            }
+
+            String jsonBody = mapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/messages"))
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .timeout(java.time.Duration.ofMinutes(10))
+                    .build();
+
+            // Use HttpClient streaming response handler
+            HttpResponse<java.util.stream.Stream<String>> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofLines());
+
+            StringBuilder fullText = new StringBuilder();
+            for (String line : response.body().toList()) {
+                if (line.startsWith("data: ")) {
+                    String data = line.substring(6);
+                    if (data.equals("[DONE]")) continue;
+                    try {
+                        JsonNode event = mapper.readTree(data);
+                        String eventType = event.has("type") ? event.get("type").asText() : "";
+                        switch (eventType) {
+                            case "content_block_delta" -> {
+                                JsonNode delta = event.get("delta");
+                                if (delta != null && "text_delta".equals(delta.get("type").asText())) {
+                                    String text = delta.get("text").asText();
+                                    fullText.append(text);
+                                    handler.onChunk(text);
+                                }
+                            }
+                            case "message_stop" -> {
+                                // Stream complete
+                            }
+                        }
+                    } catch (Exception ignored) {
+                        // Malformed SSE line, skip
+                    }
+                }
+            }
+            handler.onComplete(fullText.toString());
+
+        } catch (Exception e) {
+            throw new LlmException("Anthropic streaming failed: " + e.getMessage(), e);
+        }
     }
 
     @Override

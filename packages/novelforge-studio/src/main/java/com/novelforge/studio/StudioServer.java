@@ -69,6 +69,7 @@ public class StudioServer {
         server.createContext("/api/state", this::handleStateApi);
         server.createContext("/api/export", this::handleExportApi);
         server.createContext("/api/config", this::handleConfigApi);
+        server.createContext("/api/progress", this::handleProgressApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
     }
@@ -374,9 +375,34 @@ public class StudioServer {
             if (body.has("chapterWordsMax")) defaultConfig.setChapterWordsMax(body.get("chapterWordsMax").asInt());
             if (body.has("auditPassThreshold")) defaultConfig.setAuditPassThreshold(body.get("auditPassThreshold").asDouble());
             if (body.has("maxRevisionPasses")) defaultConfig.setMaxRevisionPasses(body.get("maxRevisionPasses").asInt());
+            // Persist config to disk
+            saveDefaultConfig();
             sendJson(exchange, 200, "{\"status\":\"updated\"}");
         } else {
             sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
+        }
+    }
+
+    // --- API: Writing Progress ---
+    private void handleProgressApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            com.novelforge.core.models.WritingProgress progress = book.getProgress();
+            ObjectNode result = mapper.createObjectNode();
+            result.put("totalChapters", progress.getTotalChapters());
+            result.put("totalWords", progress.getTotalWords());
+            result.put("averageWordsPerChapter", progress.getAverageWordsPerChapter());
+            result.put("auditedChapters", progress.getAuditedChapters());
+            result.put("passedChapters", progress.getPassedChapters());
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
@@ -429,6 +455,31 @@ public class StudioServer {
         OutputStream os = exchange.getResponseBody();
         os.write(bytes);
         os.close();
+    }
+
+    /** Persist defaultConfig to ~/.NovelForge/config/pipeline.json */
+    private void saveDefaultConfig() {
+        Path configDir = Paths.get(System.getProperty("user.home"), "NovelForge", "config");
+        try {
+            Files.createDirectories(configDir);
+            ObjectNode cfg = mapper.createObjectNode();
+            cfg.put("chapterWordsMin", defaultConfig.getChapterWordsMin());
+            cfg.put("chapterWordsMax", defaultConfig.getChapterWordsMax());
+            cfg.put("auditPassThreshold", defaultConfig.getAuditPassThreshold());
+            cfg.put("maxRevisionPasses", defaultConfig.getMaxRevisionPasses());
+            cfg.put("runArchitect", defaultConfig.isRunArchitect());
+            cfg.put("runPlanner", defaultConfig.isRunPlanner());
+            cfg.put("runComposer", defaultConfig.isRunComposer());
+            cfg.put("runWriter", defaultConfig.isRunWriter());
+            cfg.put("runObserver", defaultConfig.isRunObserver());
+            cfg.put("runReflector", defaultConfig.isRunReflector());
+            cfg.put("runNormalizer", defaultConfig.isRunNormalizer());
+            cfg.put("runAuditor", defaultConfig.isRunAuditor());
+            cfg.put("runReviser", defaultConfig.isRunReviser());
+            Files.writeString(configDir.resolve("pipeline.json"), mapper.writeValueAsString(cfg));
+        } catch (Exception e) {
+            log.warn("Failed to save default config: {}", e.getMessage());
+        }
     }
 
     /** Main entry for Studio standalone launch */

@@ -16,8 +16,8 @@ public class ModelRouter {
     /** Global default config */
     private volatile ModelConfig globalDefault;
 
-    /** Available LLM clients keyed by provider */
-    private final Map<String, LlmClient> clients = new HashMap<>();
+    /** Available LLM clients keyed by provider+baseUrl (unique per endpoint) */
+    private final ConcurrentHashMap<String, LlmClient> clients = new ConcurrentHashMap<>();
 
     public ModelRouter(ModelConfig globalDefault) {
         this.globalDefault = globalDefault;
@@ -31,12 +31,8 @@ public class ModelRouter {
     /** Get the LLM client for an agent (fallback to global) */
     public LlmClient getClientForAgent(String agentName) {
         ModelConfig config = agentModels.getOrDefault(agentName, globalDefault);
-        LlmClient client = clients.get(config.provider());
-        if (client == null) {
-            client = createClient(config);
-            clients.put(config.provider(), client);
-        }
-        return client;
+        String clientKey = config.provider() + "@" + config.baseUrl();
+        return clients.computeIfAbsent(clientKey, k -> createClient(config));
     }
 
     /** Get model ID for an agent */

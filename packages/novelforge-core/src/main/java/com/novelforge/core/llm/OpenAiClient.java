@@ -58,6 +58,11 @@ public class OpenAiClient implements LlmClient {
 
     @Override
     public String chatComplete(List<Map<String, String>> messages, String model, double temperature, int maxTokens) {
+        return withRetry(() -> chatCompleteOnce(messages, model, temperature, maxTokens), 3);
+    }
+
+    /** Single LLM call attempt (no retry) */
+    private String chatCompleteOnce(List<Map<String, String>> messages, String model, double temperature, int maxTokens) {
         try {
             ObjectNode body = mapper.createObjectNode();
             body.put("model", model);
@@ -105,6 +110,25 @@ public class OpenAiClient implements LlmClient {
             log.error("LLM call failed", e);
             throw new LlmException("LLM call failed: " + e.getMessage(), e);
         }
+    }
+
+    /** Retry wrapper: retry on 429/5xx, exponential backoff */
+    private String withRetry(java.util.function.Supplier<String> action, int maxRetries) {
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return action.get();
+            } catch (LlmException e) {
+                boolean retryable = e.getMessage() != null &&
+                    (e.getMessage().contains("429") || e.getMessage().contains("500") ||
+                     e.getMessage().contains("502") || e.getMessage().contains("503") ||
+                     e.getMessage().contains("timeout") || e.getMessage().contains("connect"));
+                if (!retryable || attempt == maxRetries) throw e;
+                long delayMs = (long) Math.pow(2, attempt) * 1000;  // 1s, 2s, 4s
+                log.warn("LLM call failed (attempt {}), retrying in {}ms: {}", attempt + 1, delayMs, e.getMessage());
+                try { Thread.sleep(delayMs); } catch (InterruptedException ie) { throw e; }
+            }
+        }
+        throw new LlmException("Max retries exhausted");
     }
 
     @Override

@@ -20,6 +20,7 @@
     <button onclick="showPanel('audit')" class="nav-btn" id="nav-audit">审计</button>
     <button onclick="showPanel('state')" class="nav-btn" id="nav-state">状态</button>
     <button onclick="showPanel('config')" class="nav-btn" id="nav-config">配置</button>
+    <button onclick="showPanel('progress')" class="nav-btn" id="nav-progress">进度</button>
   </nav>
 
   <!-- Create Book -->
@@ -151,6 +152,17 @@
     </div>
     <button onclick="loadState()" class="btn-secondary">查看</button>
     <pre id="state-content" class="state-view"></pre>
+  </section>
+
+  <!-- Writing Progress -->
+  <section id="panel-progress" class="panel">
+    <h2>写作进度</h2>
+    <div class="form-group">
+      <label>选择书籍</label>
+      <select id="progress-book"></select>
+    </div>
+    <button onclick="loadProgress()" class="btn-primary">查看进度</button>
+    <pre id="progress-result" class="state-view"></pre>
   </section>
 
   <!-- Config -->

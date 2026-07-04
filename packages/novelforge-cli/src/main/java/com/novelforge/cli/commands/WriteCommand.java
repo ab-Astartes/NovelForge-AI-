@@ -178,8 +178,61 @@ public class WriteCommand {
                         System.err.println("❌ Audit failed: " + result.errorMessage());
                     }
                 }
+                case "continue" -> {
+                    // Continue writing: reuses last chapter's context, skips Architect
+                    if (book.getChapters().isEmpty()) {
+                        System.err.println("❌ No chapters yet. Use 'write next' to start.");
+                        return;
+                    }
+
+                    Chapter lastChapter = book.getChapters().get(book.getChapters().size() - 1);
+                    System.out.println("✏️ Continuing from chapter " + lastChapter.getNumber() + " → writing chapter " + book.nextChapterNumber() + "...");
+
+                    // Disable Architect for continuation (outline already exists)
+                    PipelineConfig contConfig = new PipelineConfig();
+                    contConfig.setChapterWordsMin(config.getChapterWordsMin());
+                    contConfig.setChapterWordsMax(config.getChapterWordsMax());
+                    contConfig.setAuditPassThreshold(config.getAuditPassThreshold());
+                    contConfig.setMaxRevisionPasses(config.getMaxRevisionPasses());
+                    contConfig.setRunArchitect(false);  // skip outline rebuild
+                    contConfig.setRunPlanner(true);
+                    contConfig.setRunComposer(true);
+                    contConfig.setRunWriter(true);
+                    contConfig.setRunObserver(true);
+                    contConfig.setRunReflector(true);
+                    contConfig.setRunNormalizer(true);
+                    contConfig.setRunAuditor(true);
+                    contConfig.setRunReviser(true);
+
+                    PipelineRunner contRunner = new PipelineRunner(contConfig, router);
+                    PipelineResult result = contRunner.writeNextChapter(book, truthState);
+
+                    if (result.success()) {
+                        Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                        BookProject.saveChapter(bookDir, chapter);
+                        BookProject.saveBookMetadata(bookDir, book);
+                        truthState.saveAll();
+
+                        System.out.println("✅ Chapter " + chapter.getNumber() + " continued successfully!");
+                        System.out.println("   Length: " + (chapter.getFinalText() != null ? chapter.getFinalText().length() : 0) + " chars");
+                        if (chapter.getAuditResult() != null) {
+                            System.out.printf("   Audit score: %.1f/10%n", chapter.getAuditResult().getOverallScore());
+                        }
+                    } else {
+                        System.err.println("❌ Continue failed: " + result.errorMessage());
+                    }
+                }
+                case "progress" -> {
+                    com.novelforge.core.models.WritingProgress progress = book.getProgress();
+                    System.out.println("📊 Writing Progress for '" + book.getTitle() + "':");
+                    System.out.println("   Chapters: " + progress.getTotalChapters());
+                    System.out.println("   Total words: " + progress.getTotalWords());
+                    System.out.println("   Average words/chapter: " + progress.getAverageWordsPerChapter());
+                    System.out.println("   Audited chapters: " + progress.getAuditedChapters() + "/" + progress.getTotalChapters());
+                    System.out.println("   Passed chapters: " + progress.getPassedChapters() + "/" + progress.getTotalChapters());
+                }
                 default -> System.err.println("Unknown subcommand: write " + args[0] +
-                    "\nValid: next, draft, audit");
+                    "\nValid: next, draft, audit, continue, progress");
             }
         } catch (Exception e) {
             System.err.println("❌ Error: " + e.getMessage());

@@ -72,8 +72,8 @@ public class TimelineState {
         int start = Math.max(0, events.size() - lastN);
         for (int i = start; i < events.size(); i++) {
             JsonNode e = events.get(i);
-            sb.append("第").append(e.get("chapter").asInt()).append("章: ")
-              .append(e.get("description").asText()).append("\n");
+            sb.append("第").append(e.has("chapter") ? e.get("chapter").asInt() : i + 1).append("章: ")
+              .append(e.has("description") ? e.get("description").asText() : "(无描述)").append("\n");
         }
         return sb.toString();
     }

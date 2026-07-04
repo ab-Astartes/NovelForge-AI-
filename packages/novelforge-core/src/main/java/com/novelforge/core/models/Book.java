@@ -39,4 +39,40 @@ public class Book {
     public int nextChapterNumber() {
         return chapters.size() + 1;
     }
+
+    /** Calculate writing progress statistics */
+    public WritingProgress getProgress() {
+        WritingProgress progress = new WritingProgress();
+        progress.setTotalChapters(chapters.size());
+        progress.setTotalWords(0);
+        progress.setAuditedChapters(0);
+        progress.setPassedChapters(0);
+
+        for (Chapter ch : chapters) {
+            String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+            int words = estimateWordCount(text);
+            progress.setTotalWords(progress.getTotalWords() + words);
+            if (ch.getAuditResult() != null) {
+                progress.setAuditedChapters(progress.getAuditedChapters() + 1);
+                if (ch.getAuditResult().isPass()) {
+                    progress.setPassedChapters(progress.getPassedChapters() + 1);
+                }
+            }
+        }
+
+        progress.setAverageWordsPerChapter(chapters.isEmpty() ? 0 :
+                progress.getTotalWords() / chapters.size());
+
+        return progress;
+    }
+
+    private static int estimateWordCount(String text) {
+        if (text == null) return 0;
+        int cjk = (int) text.chars().filter(c ->
+                (c >= 0x4E00 && c <= 0x9FFF) ||
+                (c >= 0x3400 && c <= 0x4DBF) ||
+                (c >= 0x20000 && c <= 0x2A6DF)
+        ).count();
+        return cjk + (text.length() - cjk) / 5;
+    }
 }

@@ -66,7 +66,7 @@ function populateBookSelects(books) {
     fetch(API + '/api/books').then(r => r.json()).then(populateBookSelects);
     return;
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'progress-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = books.map(b => `<option value="${b.path}">${b.title} (${b.genre})</option>`).join('');
@@ -225,6 +225,25 @@ async function exportBook() {
     }
   } catch (e) {
     showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
+
+// --- Load Progress ---
+async function loadProgress() {
+  const bookPath = document.getElementById('progress-book').value;
+  const result = document.getElementById('progress-result');
+  if (!bookPath) { result.textContent = '请选择书籍'; return; }
+  try {
+    const res = await fetch(API + `/api/progress?path=${encodeURIComponent(bookPath)}`);
+    const data = await res.json();
+    result.textContent = `📊 写作进度\n` +
+      `总章节: ${data.totalChapters}\n` +
+      `总字数: ${data.totalWords}\n` +
+      `平均字数/章: ${data.averageWordsPerChapter}\n` +
+      `已审计: ${data.auditedChapters}/${data.totalChapters}\n` +
+      `已通过: ${data.passedChapters}/${data.totalChapters}`;
+  } catch (e) {
+    result.textContent = '加载失败: ' + e.message;
   }
 }
 
