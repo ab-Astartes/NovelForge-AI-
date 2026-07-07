@@ -2,6 +2,7 @@ package com.novelforge.core.models;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.novelforge.core.models.TextUtils;
 
 /**
  * Book — top-level container for a novel project.
@@ -50,7 +51,7 @@ public class Book {
 
         for (Chapter ch : chapters) {
             String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
-            int words = estimateWordCount(text);
+            int words = TextUtils.estimateChineseWordCount(text);
             progress.setTotalWords(progress.getTotalWords() + words);
             if (ch.getAuditResult() != null) {
                 progress.setAuditedChapters(progress.getAuditedChapters() + 1);
@@ -66,13 +67,5 @@ public class Book {
         return progress;
     }
 
-    private static int estimateWordCount(String text) {
-        if (text == null) return 0;
-        int cjk = (int) text.chars().filter(c ->
-                (c >= 0x4E00 && c <= 0x9FFF) ||
-                (c >= 0x3400 && c <= 0x4DBF) ||
-                (c >= 0x20000 && c <= 0x2A6DF)
-        ).count();
-        return cjk + (text.length() - cjk) / 5;
-    }
+
 }

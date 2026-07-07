@@ -28,6 +28,7 @@ public class Main {
             case "export"   -> handleExport(subArgs);
             case "interact" -> handleInteract(subArgs);
             case "style"    -> handleStyle(subArgs);
+            case "delete"   -> handleDelete(subArgs);
             case "help"     -> printHelp();
             default         -> { System.err.println("Unknown command: " + command); printHelp(); }
         }
@@ -63,6 +64,11 @@ public class Main {
         cmd.execute(args);
     }
 
+    private static void handleDelete(String[] args) {
+        DeleteCommand cmd = new DeleteCommand();
+        cmd.execute(args);
+    }
+
     private static void printHelp() {
         System.out.println("""
             NovelForge — AI Novel Writing Engine
@@ -80,6 +86,7 @@ public class Main {
               export        Export book (EPUB/TXT/MD)
               interact      Start interactive dialogue mode
               style clone   Clone writing style from reference text
+              delete        Delete project or chapter
               help          Show this help message
             
             Options:

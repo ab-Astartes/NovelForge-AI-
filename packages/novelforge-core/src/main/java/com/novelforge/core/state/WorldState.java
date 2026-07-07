@@ -38,7 +38,7 @@ public class WorldState {
                 this.data.putArray("items");
                 this.data.putArray("rules");
                 this.data.putArray("systems");
-                save();
+                // Don't auto-save on load
             }
         } catch (Exception e) {
             log.warn("Failed to load world.json, starting fresh", e);
@@ -56,6 +56,7 @@ public class WorldState {
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
         } catch (Exception e) {
             log.error("Failed to save world.json", e);
+            throw new RuntimeException("Failed to save world.json: " + e.getMessage(), e);
         }
     }
 

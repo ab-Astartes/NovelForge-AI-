@@ -25,6 +25,15 @@ public class PipelineResult {
         this.errorMessage = error;
     }
 
+    /** Error result that also carries context for downstream recovery */
+    public PipelineResult(PipelineContext context, String text, String agent, boolean isError) {
+        this.updatedContext = context;
+        this.generatedText = text;
+        this.agentName = agent;
+        this.success = !isError;
+        this.errorMessage = isError ? text : null;
+    }
+
     // --- Getters ---
     public PipelineContext updatedContext() { return updatedContext; }
     public String generatedText() { return generatedText; }

@@ -34,32 +34,45 @@ public class ArchitectAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        int nextChapter = context.getBook().nextChapterNumber();
-        log.info("Architect: planning chapter {} outline", nextChapter);
+        try {
+            int nextChapter = context.getBook().nextChapterNumber();
+            log.info("Architect: planning chapter {} outline", nextChapter);
 
-        // Distinguish first call (full outline generation) vs subsequent calls (incremental update)
-        boolean hasExistingOutline = context.getBook().getOutline() != null && !context.getBook().getOutline().isEmpty();
+            // Distinguish first call (full outline generation) vs subsequent calls (incremental update)
+            boolean hasExistingOutline = context.getBook().getOutline() != null && !context.getBook().getOutline().isEmpty();
 
-        List<Map<String, String>> messages;
-        if (hasExistingOutline) {
-            messages = promptBuilder.buildArchitectIncrementalPrompt(
-                    context.getBook(), context.getTruthState(), context.getConfig());
-        } else {
-            messages = promptBuilder.buildArchitectPrompt(
-                    context.getBook(), context.getTruthState(), context.getConfig());
+            List<Map<String, String>> messages;
+            if (hasExistingOutline) {
+                messages = promptBuilder.buildArchitectIncrementalPrompt(
+                        context.getBook(), context.getTruthState(), context.getConfig());
+            } else {
+                messages = promptBuilder.buildArchitectPrompt(
+                        context.getBook(), context.getTruthState(), context.getConfig());
+            }
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            String response = client.chatComplete(messages, modelId, temperature(), 4000);
+
+            // Update architect output — don't blindly overwrite book outline in incremental mode
+            context.setArchitectOutput(response);
+            if (!hasExistingOutline) {
+                // First generation: set as the book outline
+                context.getBook().setOutline(response);
+            } else {
+                // Incremental update: store in architectOutput only,
+                // BookProject.mergeOutline() will handle merging when saving
+                log.info("Architect: incremental outline stored in architectOutput, not overwriting book outline");
+            }
+            log.info("Architect: outline {} for chapter {} ({})",
+                    hasExistingOutline ? "updated" : "generated", nextChapter, response.length());
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Architect] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        String response = client.chatComplete(messages, modelId, temperature(), 4000);
-
-        // Update book outline with architect's output
-        context.getBook().setOutline(response);
-        context.setArchitectOutput(response);
-        log.info("Architect: outline {} for chapter {} ({})",
-                hasExistingOutline ? "updated" : "generated", nextChapter, response.length());
-
-        return new PipelineResult(context, response, name());
     }
 }

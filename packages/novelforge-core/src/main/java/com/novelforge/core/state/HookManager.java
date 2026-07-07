@@ -43,7 +43,7 @@ public class HookManager {
                 this.data.putArray("hooks");
                 this.data.putArray("mustAdvance");
                 this.data.putArray("staleDebt");
-                save();
+                // Don't auto-save on load
             }
         } catch (Exception e) {
             log.warn("Failed to load hooks.json, starting fresh", e);
@@ -60,6 +60,7 @@ public class HookManager {
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
         } catch (Exception e) {
             log.error("Failed to save hooks.json", e);
+            throw new RuntimeException("Failed to save hooks.json: " + e.getMessage(), e);
         }
     }
 

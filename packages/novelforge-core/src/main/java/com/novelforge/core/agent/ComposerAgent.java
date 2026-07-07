@@ -31,25 +31,36 @@ public class ComposerAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Composer: assembling context for chapter {}", context.getBook().nextChapterNumber());
+        try {
+            log.info("Composer: assembling context for chapter {}", context.getBook().nextChapterNumber());
 
-        String plannerOutput = context.getPlannerOutput();
-        if (plannerOutput == null || plannerOutput.isEmpty()) {
-            plannerOutput = context.getCurrentChapterDraft();  // fallback for partial runs
+            String plannerOutput = context.getPlannerOutput();
+            if (plannerOutput == null || plannerOutput.isEmpty()) {
+                // Fallback to architectOutput (outline) if planner was skipped
+                plannerOutput = context.getArchitectOutput();
+                if (plannerOutput == null || plannerOutput.isEmpty()) {
+                    log.warn("Composer: no planner or architect output available, using minimal context");
+                    plannerOutput = "请根据大纲继续写作下一章。";
+                }
+            }
+
+            List<Map<String, String>> messages = promptBuilder.buildComposerPrompt(
+                    context.getBook(), context.getTruthState(), plannerOutput, context.getConfig());
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            String response = client.chatComplete(messages, modelId, temperature(), 2000);
+
+            // Store composed context in dedicated field
+            context.setComposerOutput(response);
+            log.info("Composer: context assembled ({})", response.length());
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Composer] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
-
-        List<Map<String, String>> messages = promptBuilder.buildComposerPrompt(
-                context.getBook(), context.getTruthState(), plannerOutput, context.getConfig());
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        String response = client.chatComplete(messages, modelId, temperature(), 2000);
-
-        // Store composed context in dedicated field
-        context.setComposerOutput(response);
-        log.info("Composer: context assembled ({})", response.length());
-
-        return new PipelineResult(context, response, name());
     }
 }

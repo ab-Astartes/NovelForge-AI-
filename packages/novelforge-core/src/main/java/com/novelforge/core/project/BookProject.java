@@ -2,6 +2,7 @@ package com.novelforge.core.project;
 
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
+import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.state.TruthState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.UUID;
 
 /**
@@ -130,9 +132,9 @@ public class BookProject {
 
         Book book = new Book();
         JsonNode root = mapper.readTree(Files.newInputStream(bookJsonPath));
-        book.setId(root.get("id").asText());
-        book.setTitle(root.get("title").asText());
-        book.setGenre(root.get("genre").asText());
+        book.setId(root.has("id") ? root.get("id").asText() : UUID.randomUUID().toString());
+        book.setTitle(root.has("title") ? root.get("title").asText() : "Unknown Title");
+        book.setGenre(root.has("genre") ? root.get("genre").asText() : "general");
         book.setAuthor(root.has("author") ? root.get("author").asText() : "");
 
         // Load outline
@@ -171,6 +173,8 @@ public class BookProject {
                     log.warn("Skipping non-standard chapter file: {}", name);
                 }
             }
+            // Sort chapters by number to guarantee consistent ordering (fixes #10)
+            book.getChapters().sort(Comparator.comparingInt(Chapter::getNumber));
         }
 
         return book;
@@ -218,22 +222,14 @@ public class BookProject {
             ObjectNode chNode = mapper.createObjectNode();
             chNode.put("number", ch.getNumber());
             chNode.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
-            chNode.put("wordCount", estimateWordCount(ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText()));
+            chNode.put("wordCount", TextUtils.estimateChineseWordCount(ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText()));
             chaptersArr.add(chNode);
         }
         mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(bookJsonPath), bookJson);
         log.info("book.json metadata saved ({} chapters)", book.getChapters().size());
     }
 
-    private static int estimateWordCount(String text) {
-        if (text == null) return 0;
-        int chineseChars = (int) text.chars().filter(c ->
-                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
-                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
-                (c >= 0x20000 && c <= 0x2A6DF)      // Extension B
-        ).count();
-        return chineseChars + (text.length() - chineseChars) / 5;
-    }
+    // estimateWordCount moved to TextUtils.estimateChineseWordCount
 
     /** Sanitize title for directory name */
     private static String sanitize(String title) {

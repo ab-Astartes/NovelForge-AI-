@@ -14,9 +14,11 @@ import com.novelforge.core.state.TruthState;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 /**
  * InteractCommand — interactive dialogue mode with the novel's world/characters.
@@ -24,6 +26,8 @@ import java.util.Scanner;
  * Usage: novelforge interact --book <path> [--api-key <key>]
  */
 public class InteractCommand {
+
+    private List<String> conversationHistory = new ArrayList<>();
 
     public void execute(String[] args) {
         String bookPath = findOption(args, "--book");
@@ -79,14 +83,22 @@ public class InteractCommand {
                     case "/world" -> System.out.println(state.world().getSummary());
                     case "/hooks" -> System.out.println(state.hooks().getSummary());
                     default -> {
-                        // Send to LLM as an interactive prompt
+                        // Send to LLM as an interactive prompt with conversation history
                         String systemPrompt = buildInteractSystemPrompt(book, state);
-                        List<Map<String, String>> messages = List.of(
-                                Map.of("role", "system", "content", systemPrompt),
-                                Map.of("role", "user", "content", input)
-                        );
+                        String context = conversationHistory.stream()
+                            .skip(Math.max(0, conversationHistory.size() - 10))
+                            .collect(Collectors.joining("\n"));
+
+                        List<Map<String, String>> messages = new ArrayList<>();
+                        messages.add(Map.of("role", "system", "content", systemPrompt));
+                        if (!context.isEmpty()) {
+                            messages.add(Map.of("role", "system", "content", "对话历史:\n" + context));
+                        }
+                        messages.add(Map.of("role", "user", "content", input));
                         String response = client.chatComplete(messages, modelId, 0.8, 1000);
                         System.out.println("\n" + response);
+                        conversationHistory.add("User: " + input);
+                        conversationHistory.add("AI: " + response);
                     }
                 }
             }
@@ -129,6 +141,13 @@ public class InteractCommand {
     }
 
     private String findOption(String[] args, String key) {
+        // Support --key=value format
+        for (String arg : args) {
+            if (arg.startsWith(key + "=")) {
+                return arg.substring(key.length() + 1);
+            }
+        }
+        // Support --key value format
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }

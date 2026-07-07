@@ -35,7 +35,7 @@ public class TimelineState {
             } else {
                 this.data = mapper.createObjectNode();
                 this.data.putArray("events");
-                save();
+                // Don't auto-save on load
             }
         } catch (Exception e) {
             log.warn("Failed to load timeline.json, starting fresh", e);
@@ -50,6 +50,7 @@ public class TimelineState {
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
         } catch (Exception e) {
             log.error("Failed to save timeline.json", e);
+            throw new RuntimeException("Failed to save timeline.json: " + e.getMessage(), e);
         }
     }
 

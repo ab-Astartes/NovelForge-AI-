@@ -50,5 +50,14 @@ public class ModelRouter {
     }
 
     /** Model config record */
-    public record ModelConfig(String provider, String model, String baseUrl, String apiKey) {}
+    public record ModelConfig(String provider, String model, String baseUrl, String apiKey) {
+        @Override
+        public String toString() {
+            return "ModelConfig{provider='" + provider + "', model='" + model + "', baseUrl='" + baseUrl + "', apiKey='" + maskKey(apiKey) + "'}";
+        }
+        private static String maskKey(String key) {
+            if (key == null || key.length() < 8) return "***";
+            return key.substring(0, 4) + "..." + key.substring(key.length() - 4);
+        }
+    }
 }

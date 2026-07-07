@@ -80,9 +80,17 @@ public class WriteCommand {
                     System.out.println("🔥 Writing chapter " + book.nextChapterNumber() + " for '" + book.getTitle() + "'...");
                     System.out.println("   Model: " + modelId + " @ " + baseUrl);
 
+                    if (book.getChapters() == null || book.getChapters().isEmpty()) {
+                        System.out.println("   Note: No existing chapters, starting from scratch");
+                    }
+
                     PipelineResult result = runner.writeNextChapter(book, truthState);
 
                     if (result.success()) {
+                        if (book.getChapters() == null || book.getChapters().isEmpty()) {
+                            System.err.println("❌ Pipeline reported success but no chapter was added");
+                            return;
+                        }
                         // Save chapter to disk
                         Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
                         BookProject.saveChapter(bookDir, chapter);
@@ -111,9 +119,17 @@ public class WriteCommand {
                 case "draft" -> {
                     System.out.println("📝 Drafting chapter " + book.nextChapterNumber() + " (no quality check)...");
 
+                    if (book.getChapters() == null || book.getChapters().isEmpty()) {
+                        System.out.println("   Note: No existing chapters, starting from scratch");
+                    }
+
                     PipelineResult result = runner.runDraftOnly(book, truthState);
 
                     if (result.success()) {
+                        if (book.getChapters() == null || book.getChapters().isEmpty()) {
+                            System.err.println("❌ Draft reported success but no chapter was added");
+                            return;
+                        }
                         // Save draft chapter to disk
                         Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
                         BookProject.saveChapter(bookDir, chapter);
@@ -133,6 +149,10 @@ public class WriteCommand {
                 }
                 case "audit" -> {
                     // Audit-only: run Auditor + Reviser on existing chapter
+                    if (book.getChapters() == null || book.getChapters().isEmpty()) {
+                        System.err.println("❌ No chapters to audit. Write a chapter first.");
+                        return;
+                    }
                     String chapterArg = findOption(args, "--chapter");
                     int chapterNum = chapterArg != null ? Integer.parseInt(chapterArg) : book.getChapters().size();
 
@@ -269,6 +289,13 @@ public class WriteCommand {
     }
 
     private String findOption(String[] args, String key) {
+        // Support --key=value format
+        for (String arg : args) {
+            if (arg.startsWith(key + "=")) {
+                return arg.substring(key.length() + 1);
+            }
+        }
+        // Support --key value format
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }

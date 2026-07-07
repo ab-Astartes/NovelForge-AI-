@@ -38,6 +38,7 @@ public class StudioServer {
 
     private static final Logger log = LoggerFactory.getLogger(StudioServer.class);
     private static final int DEFAULT_PORT = 8964;
+    private static final long API_TIMEOUT_MS = 120_000; // 2-minute timeout for long operations (fixes #12)
     private static final ObjectMapper mapper = new ObjectMapper();
 
     private final HttpServer server;
@@ -164,7 +165,7 @@ public class StudioServer {
             result.put("title", title);
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -190,7 +191,7 @@ public class StudioServer {
             result.put("hooks", state.hooks().getSummary());
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -235,11 +236,11 @@ public class StudioServer {
                     response.put("auditScore", chapter.getAuditResult().getOverallScore());
                 }
             } else {
-                response.put("error", result.errorMessage());
+                response.put("error", sanitizeForJson(result.errorMessage()));
             }
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -290,7 +291,7 @@ public class StudioServer {
             }
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -320,7 +321,7 @@ public class StudioServer {
             response.put("summary", summary);
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -355,7 +356,7 @@ public class StudioServer {
             response.put("chapters", book.getChapters().size());
             sendJson(exchange, 200, mapper.writeValueAsString(response));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
     }
 
@@ -402,8 +403,31 @@ public class StudioServer {
             result.put("passedChapters", progress.getPassedChapters());
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
+    }
+
+    /** Sanitize string for safe embedding in JSON — escapes quotes, backslashes, and control chars */
+    private String sanitizeForJson(String s) {
+        if (s == null) return "null";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"'  -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n'  -> sb.append("\\n");
+                case '\r'  -> sb.append("\\r");
+                case '\t'  -> sb.append("\\t");
+                case '\b'  -> sb.append("\\b");
+                case '\f'  -> sb.append("\\f");
+                default   -> {
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+                }
+            }
+        }
+        return sb.toString();
     }
 
     // --- Helpers ---

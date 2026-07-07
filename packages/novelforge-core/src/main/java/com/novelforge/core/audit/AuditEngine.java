@@ -1,6 +1,7 @@
 package com.novelforge.core.audit;
 
 import com.novelforge.core.models.AuditResult;
+import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.llm.LlmClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -111,7 +112,7 @@ public class AuditEngine {
 
         try {
             String llmResponse = client.chatComplete(messages, modelId, 0.2, 2000);
-            String json = extractJson(llmResponse);
+            String json = TextUtils.extractJsonBlock(llmResponse);
             if (json != null) {
                 JsonNode root = mapper.readTree(json);
                 JsonNode scoresNode = root.get("scores");
@@ -289,19 +290,7 @@ public class AuditEngine {
         return Math.sqrt(variance);
     }
 
-    /** Extract JSON from LLM output */
-    private String extractJson(String text) {
-        int start = text.indexOf("```json");
-        if (start >= 0) {
-            int contentStart = text.indexOf('\n', start) + 1;
-            int end = text.indexOf("```", contentStart);
-            if (end > contentStart) return text.substring(contentStart, end).trim();
-        }
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
-        return null;
-    }
+    // extractJson moved to TextUtils.extractJsonBlock
 
     /** Get dimension names */
     public static String[] dimensionNames() {

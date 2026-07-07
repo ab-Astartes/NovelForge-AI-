@@ -31,30 +31,44 @@ public class WriterAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        int chapterNum = context.getBook().nextChapterNumber();
-        log.info("Writer: drafting chapter {}", chapterNum);
+        try {
+            int chapterNum = context.getBook().nextChapterNumber();
+            log.info("Writer: drafting chapter {}", chapterNum);
 
-        String composedContext = context.getComposerOutput();
-        if (composedContext == null || composedContext.isEmpty()) {
-            composedContext = context.getCurrentChapterDraft();  // fallback for partial runs
+            String composedContext = context.getComposerOutput();
+            if (composedContext == null || composedContext.isEmpty()) {
+                // Fallback chain: plannerOutput → architectOutput → outline
+                composedContext = context.getPlannerOutput();
+                if (composedContext == null || composedContext.isEmpty()) {
+                    composedContext = context.getArchitectOutput();
+                    if (composedContext == null || composedContext.isEmpty()) {
+                        log.warn("Writer: no composer/planner/architect output available, using minimal context");
+                        composedContext = "请根据大纲继续写作下一章。";
+                    }
+                }
+            }
+
+            List<Map<String, String>> messages = promptBuilder.buildWriterPrompt(
+                    context.getBook(), context.getTruthState(), composedContext, context.getConfig());
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            // Estimate max tokens for target word count
+            int maxTokens = promptBuilder.estimateMaxTokens(context.getConfig().getChapterWordsMax());
+
+            String response = client.chatComplete(messages, modelId, temperature(), maxTokens);
+
+            // Store the actual chapter draft text
+            context.setCurrentChapterDraft(response);
+            context.setWriterDraft(response);  // preserve original Writer output
+            log.info("Writer: chapter {} drafted ({})", chapterNum, response.length());
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Writer] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
-
-        List<Map<String, String>> messages = promptBuilder.buildWriterPrompt(
-                context.getBook(), context.getTruthState(), composedContext, context.getConfig());
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        // Estimate max tokens for target word count
-        int maxTokens = promptBuilder.estimateMaxTokens(context.getConfig().getChapterWordsMax());
-
-        String response = client.chatComplete(messages, modelId, temperature(), maxTokens);
-
-        // Store the actual chapter draft text
-        context.setCurrentChapterDraft(response);
-        context.setWriterDraft(response);  // preserve original Writer output
-        log.info("Writer: chapter {} drafted ({})", chapterNum, response.length());
-
-        return new PipelineResult(context, response, name());
     }
 }

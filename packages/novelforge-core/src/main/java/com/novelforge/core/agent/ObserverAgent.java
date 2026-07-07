@@ -30,24 +30,37 @@ public class ObserverAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        int chapterNum = context.getBook().nextChapterNumber();
-        log.info("Observer: extracting facts from chapter {}", chapterNum);
+        try {
+            int chapterNum = context.getBook().nextChapterNumber();
+            log.info("Observer: extracting facts from chapter {}", chapterNum);
 
-        String chapterDraft = context.getCurrentChapterDraft();
+            String chapterDraft = context.getCurrentChapterDraft();
 
-        List<Map<String, String>> messages = promptBuilder.buildObserverPrompt(
-                context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
+            // Skip observation for very short drafts
+            if (chapterDraft == null || chapterDraft.trim().length() < 100) {
+                System.err.println("[ObserverAgent] Draft too short for observation");
+                context.setObserverOutput("[观察跳过: 章节内容过短]");
+                return new PipelineResult(context, context.getObserverOutput(), name(), false);
+            }
 
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
+            List<Map<String, String>> messages = promptBuilder.buildObserverPrompt(
+                    context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
 
-        String response = client.chatComplete(messages, modelId, temperature(), 2000);
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
 
-        // Don't overwrite chapter draft — Observer output is separate metadata
-        // Store in observerOutput for Reflector to consume
-        context.setObserverOutput(response);
-        log.info("Observer: facts extracted ({})", response.length());
+            String response = client.chatComplete(messages, modelId, temperature(), 2000);
 
-        return new PipelineResult(context, response, name());
+            // Don't overwrite chapter draft — Observer output is separate metadata
+            // Store in observerOutput for Reflector to consume
+            context.setObserverOutput(response);
+            log.info("Observer: facts extracted ({})", response.length());
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Observer] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
+        }
     }
 }

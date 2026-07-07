@@ -29,6 +29,11 @@ public class PipelineRunner {
     /** Run the "write next chapter" pipeline */
     public PipelineResult writeNextChapter(Book book, TruthState truthState) {
         log.info("Starting pipeline for book '{}', chapter {}", book.getTitle(), book.nextChapterNumber());
+
+        if (book.getChapters() == null || book.getChapters().isEmpty()) {
+            log.info("No existing chapters, starting from scratch");
+        }
+
         PipelineContext context = new PipelineContext(book, truthState, config);
 
         PipelineResult result = pipeline.runFull(context);
@@ -64,8 +69,34 @@ public class PipelineRunner {
 
     /** Run draft-only pipeline (Architect → Writer, skip quality) */
     public PipelineResult runDraftOnly(Book book, TruthState truthState) {
+        log.info("Starting draft-only pipeline for book '{}', chapter {}", book.getTitle(), book.nextChapterNumber());
+
+        if (book.getChapters() == null || book.getChapters().isEmpty()) {
+            log.info("No existing chapters, starting from scratch");
+        }
+
         PipelineContext context = new PipelineContext(book, truthState, config);
         // Run Architect through Writer (indexes 0-3)
-        return pipeline.runPartial(context, 0, 3);
+        PipelineResult result = pipeline.runPartial(context, 0, 3);
+
+        if (result.success()) {
+            PipelineContext finalContext = result.updatedContext();
+            String finalText = finalContext.getCurrentChapterDraft();
+            String writerDraft = finalContext.getWriterDraft();
+
+            Chapter chapter = new Chapter();
+            chapter.setNumber(book.nextChapterNumber());
+            chapter.setDraftText(writerDraft != null ? writerDraft : finalText);
+            chapter.setFinalText(finalText);
+            book.getChapters().add(chapter);
+            log.info("Draft chapter {} added to book '{}' ({} chars)",
+                    chapter.getNumber(), book.getTitle(), finalText.length());
+
+            // Save truth state after draft pipeline (fixes #9: draft mode not saving state)
+            truthState.saveAll();
+            log.info("Truth state saved for book '{}' after draft pipeline", book.getTitle());
+        }
+
+        return result;
     }
 }

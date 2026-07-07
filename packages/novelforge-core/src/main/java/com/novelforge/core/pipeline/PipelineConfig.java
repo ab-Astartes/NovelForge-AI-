@@ -58,9 +58,27 @@ public class PipelineConfig {
     public boolean isRunReviser() { return runReviser; }
     public void setRunReviser(boolean v) { this.runReviser = v; }
     public int getChapterWordsMin() { return chapterWordsMin; }
-    public void setChapterWordsMin(int v) { this.chapterWordsMin = v; }
+    public void setChapterWordsMin(int v) {
+        if (v <= 0) v = 2000; // prevent invalid: fall back to default
+        this.chapterWordsMin = v;
+        // Auto-swap if min > max
+        if (this.chapterWordsMin > this.chapterWordsMax) {
+            int tmp = this.chapterWordsMin;
+            this.chapterWordsMin = this.chapterWordsMax;
+            this.chapterWordsMax = tmp;
+        }
+    }
     public int getChapterWordsMax() { return chapterWordsMax; }
-    public void setChapterWordsMax(int v) { this.chapterWordsMax = v; }
+    public void setChapterWordsMax(int v) {
+        if (v <= 0) v = 4000; // prevent invalid: fall back to default
+        this.chapterWordsMax = v;
+        // Auto-swap if min > max
+        if (this.chapterWordsMin > this.chapterWordsMax) {
+            int tmp = this.chapterWordsMin;
+            this.chapterWordsMin = this.chapterWordsMax;
+            this.chapterWordsMax = tmp;
+        }
+    }
     public double getAuditPassThreshold() { return auditPassThreshold; }
     public void setAuditPassThreshold(double v) { this.auditPassThreshold = v; }
     public int getMaxRevisionPasses() { return maxRevisionPasses; }

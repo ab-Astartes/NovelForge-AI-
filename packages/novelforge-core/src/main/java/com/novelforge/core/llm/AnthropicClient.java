@@ -28,6 +28,10 @@ public class AnthropicClient implements LlmClient {
     private final ObjectMapper mapper;
 
     public AnthropicClient(String baseUrl, String apiKey) {
+        // Security: warn if baseUrl is not HTTPS (fixes #6)
+        if (baseUrl != null && !baseUrl.startsWith("https://")) {
+            log.warn("[WARNING] baseUrl is not HTTPS — API key will be transmitted in plaintext: {}", baseUrl);
+        }
         String url = baseUrl.replaceAll("/+$", "");
         // Anthropic API path is /v1/messages, not /v1/chat/completions
         url = url.replaceAll("(/v1)?/messages$", "");
@@ -118,7 +122,12 @@ public class AnthropicClient implements LlmClient {
                     result.append(block.get("text").asText());
                 }
             }
-            return result.toString();
+            String contentStr = result.toString();
+            if (contentStr == null || contentStr.trim().isEmpty()) {
+                log.warn("[AnthropicClient] LLM returned empty response");
+                return "[LLM returned empty response - please retry]";
+            }
+            return contentStr;
 
         } catch (LlmException e) {
             throw e;
@@ -219,7 +228,13 @@ public class AnthropicClient implements LlmClient {
                     }
                 }
             }
-            handler.onComplete(fullText.toString());
+            String streamResult = fullText.toString();
+            if (streamResult == null || streamResult.trim().isEmpty()) {
+                log.warn("[AnthropicClient] LLM streaming returned empty response");
+                handler.onComplete("[LLM returned empty response - please retry]");
+            } else {
+                handler.onComplete(streamResult);
+            }
 
         } catch (Exception e) {
             throw new LlmException("Anthropic streaming failed: " + e.getMessage(), e);

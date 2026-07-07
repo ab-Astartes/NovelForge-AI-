@@ -111,6 +111,13 @@ public class BookCommand {
     }
 
     private String findOption(String[] args, String key) {
+        // Support --key=value format
+        for (String arg : args) {
+            if (arg.startsWith(key + "=")) {
+                return arg.substring(key.length() + 1);
+            }
+        }
+        // Support --key value format
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }

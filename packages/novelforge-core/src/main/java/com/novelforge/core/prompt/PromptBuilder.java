@@ -19,6 +19,9 @@ import java.util.LinkedHashMap;
  */
 public class PromptBuilder {
 
+    /** Maximum prompt length to prevent LLM token overflow (fixes #11: unified truncation) */
+    public static final int MAX_PROMPT_LENGTH = 8000;
+
     private final GenreManager genreManager = new GenreManager();
 
     /**
@@ -100,7 +103,7 @@ public class PromptBuilder {
             ## 第 %d 章意图
             请为第 %d 章生成 hook agenda 和节奏规划。
             """,
-                truncate(architectOutput, 4000),
+                truncateShort(architectOutput, 4000),
                 state.hooks().getMustAdvanceSummary(),
                 state.characters().getSummary(),
                 book.nextChapterNumber(),
@@ -135,7 +138,7 @@ public class PromptBuilder {
             """;
 
         String prevEnd = prevChapter != null ?
-                truncate(prevChapter.getFinalText() != null ? prevChapter.getFinalText() : prevChapter.getDraftText(), 500) :
+                truncateShort(prevChapter.getFinalText() != null ? prevChapter.getFinalText() : prevChapter.getDraftText(), 500) :
                 "（这是第一章，无前文衔接）";
 
         String user = String.format("""
@@ -155,7 +158,7 @@ public class PromptBuilder {
             
             请组装第 %d 章的完整写作上下文包。
             """,
-                truncate(plannerOutput, 4000),
+                truncateShort(plannerOutput, 4000),
                 prevEnd,
                 state.characters().getSummary(),
                 state.world().getSummary(),
@@ -192,6 +195,25 @@ public class PromptBuilder {
                 genreRules.append("- 升级体系: ").append(genreProfile.getUpgradeSystem()).append("\n");
         }
 
+        // WritingStyle injection
+        WritingStyle style = book.getStyle();
+        StringBuilder styleRules = new StringBuilder();
+        if (style != null) {
+            styleRules.append("\n## 写作风格要求\n");
+            if (style.getVocabularyPattern() != null && !style.getVocabularyPattern().isEmpty())
+                styleRules.append("- 用词风格: ").append(style.getVocabularyPattern()).append("\n");
+            if (style.getSentenceStructure() != null && !style.getSentenceStructure().isEmpty())
+                styleRules.append("- 句式结构: ").append(style.getSentenceStructure()).append("\n");
+            if (style.getPacingPattern() != null && !style.getPacingPattern().isEmpty())
+                styleRules.append("- 节奏偏好: ").append(style.getPacingPattern()).append("\n");
+            if (style.getDialogueStyle() != null && !style.getDialogueStyle().isEmpty())
+                styleRules.append("- 对话风格: ").append(style.getDialogueStyle()).append("\n");
+            if (style.getDescriptionStyle() != null && !style.getDescriptionStyle().isEmpty())
+                styleRules.append("- 描写风格: ").append(style.getDescriptionStyle()).append("\n");
+            if (style.getReferenceSample() != null && !style.getReferenceSample().isEmpty())
+                styleRules.append("- 参考样例: ").append(truncateShort(style.getReferenceSample(), 300)).append("\n");
+        }
+
         String system = """
             你是小说写手。根据组装好的上下文包，创作本章内容。
             
@@ -207,10 +229,10 @@ public class PromptBuilder {
             - 每个场景要有画面感和动作
             - 对话要有角色个性，不要流水账
             - 避免过度描写心理活动，用行动展现
-            %s
+            %s%s
             """;
 
-        String formattedSystem = String.format(system, config.getChapterWordsMin(), config.getChapterWordsMax(), genreRules.toString());
+        String formattedSystem = String.format(system, config.getChapterWordsMin(), config.getChapterWordsMax(), genreRules.toString(), styleRules.toString());
 
         String user = String.format("""
             ## 写作上下文包
@@ -218,7 +240,7 @@ public class PromptBuilder {
             
             请创作第 %d 章完整内容。
             """,
-                truncate(composedContext, 8000),
+                truncate(composedContext),
                 book.nextChapterNumber()
         );
 
@@ -262,7 +284,7 @@ public class PromptBuilder {
             请提取所有事实变化。
             """,
                 book.nextChapterNumber(),
-                truncate(chapterDraft, 6000),
+                truncateShort(chapterDraft, 6000),
                 state.characters().getSummary(),
                 state.world().getSummary()
         );
@@ -300,7 +322,7 @@ public class PromptBuilder {
             
             请生成 hookOps 和 statePatch。
             """,
-                truncate(observerOutput, 4000),
+                truncateShort(observerOutput, 4000),
                 state.hooks().getSummary()
         );
 
@@ -314,7 +336,7 @@ public class PromptBuilder {
      */
     public List<Map<String, String>> buildNormalizerPrompt(Book book, TruthState state,
                                                             String chapterDraft, PipelineConfig config) {
-        int currentWords = estimateChineseWords(chapterDraft);
+        int currentWords = TextUtils.estimateChineseWordCount(chapterDraft);
         String system = """
             你是文本规范化器。调整章节文本长度至目标范围。
             
@@ -379,7 +401,7 @@ public class PromptBuilder {
             请进行 33 维审计评分。
             """,
                 book.nextChapterNumber(),
-                truncate(chapterText, 6000),
+                truncateShort(chapterText, 6000),
                 "（由大纲和规划定义）",
                 nullSafe(book.getGenre())
         );
@@ -429,7 +451,7 @@ public class PromptBuilder {
             请修复章节文本。
             """,
                 book.nextChapterNumber(),
-                truncate(chapterText, 6000),
+                truncateShort(chapterText, 6000),
                 auditResult.getOverallScore(),
                 criticalIssues,
                 warnings
@@ -451,8 +473,20 @@ public class PromptBuilder {
         return s == null ? "（未指定）" : s;
     }
 
-    private static String truncate(String s, int max) {
-        return s == null ? "（空）" : s.length() > max ? s.substring(0, max) + "\n...（已截断）" : s;
+    /** Unified truncation — uses MAX_PROMPT_LENGTH for main prompt content (fixes #11) */
+    private String truncate(String text) {
+        if (text != null && text.length() > MAX_PROMPT_LENGTH) {
+            return text.substring(0, MAX_PROMPT_LENGTH) + "\n[...truncated]";
+        }
+        return text != null ? text : "";
+    }
+
+    /** Short-context truncation for sub-sections (fixes #11: replaces all hardcoded limits) */
+    private String truncateShort(String text, int max) {
+        if (text != null && text.length() > max) {
+            return text.substring(0, max) + "\n[...truncated]";
+        }
+        return text != null ? text : "";
     }
 
     /**
@@ -497,7 +531,7 @@ public class PromptBuilder {
             """,
                 nullSafe(book.getAuthorIntent()),
                 nullSafe(book.getGenre()),
-                truncate(book.getOutline(), 6000),
+                truncateShort(book.getOutline(), 6000),
                 book.getChapters().size(),
                 state.characters().getSummary(),
                 state.hooks().getMustAdvanceSummary(),
@@ -513,15 +547,5 @@ public class PromptBuilder {
         return Math.max(4000, estimatedMaxTokens);
     }
 
-    /** Estimate Chinese word count (Chinese chars ≈ words, plus English words) */
-    public static int estimateChineseWords(String text) {
-        if (text == null) return 0;
-        int chineseChars = (int) text.chars().filter(c ->
-                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
-                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
-                (c >= 0x20000 && c <= 0x2A6DF)      // Extension B
-        ).count();
-        int otherChars = text.length() - chineseChars;
-        return chineseChars + otherChars / 5;
-    }
+    // estimateChineseWords moved to TextUtils.estimateChineseWordCount
 }

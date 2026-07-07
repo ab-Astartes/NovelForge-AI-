@@ -43,7 +43,8 @@ public class GenreManager {
                     profiles.put(key, profile);
                     log.debug("Loaded built-in genre: {}", key);
                 } else {
-                    // Generate default profile if JSON file not found
+                    // Resource file not found — use built-in default profile
+                    log.warn("Genre resource file {} not found, using built-in default for genre: {}", resourcePath, key);
                     profiles.put(key, createDefaultProfile(key));
                     log.debug("Created default genre: {}", key);
                 }

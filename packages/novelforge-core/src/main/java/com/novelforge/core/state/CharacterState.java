@@ -41,7 +41,7 @@ public class CharacterState {
             } else {
                 this.data = mapper.createObjectNode();
                 this.data.putArray("characters");
-                save();
+                // Don't auto-save on load — only save when explicitly requested
             }
         } catch (Exception e) {
             log.warn("Failed to load characters.json, starting fresh", e);
@@ -57,6 +57,7 @@ public class CharacterState {
             log.debug("characters.json saved");
         } catch (Exception e) {
             log.error("Failed to save characters.json", e);
+            throw new RuntimeException("Failed to save characters.json: " + e.getMessage(), e);
         }
     }
 

@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -97,31 +98,32 @@ public class ExportCommand {
     }
 
     private void exportEpub(Book book, String outputPath) throws Exception {
-        // Simple EPUB 3 generation (valid ZIP with mimetype + content)
-        // This is a minimal EPUB builder — no external dependencies needed
+        // EPUB 3 generation with cover, nav, paragraph formatting (fixes #5)
         Path out = Paths.get(outputPath);
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(out))) {
 
             // 1. mimetype (must be first, uncompressed)
+            byte[] mimetypeBytes = "application/epub+zip".getBytes();
+            CRC32 crc32 = new CRC32();
+            crc32.update(mimetypeBytes);
             ZipEntry mime = new ZipEntry("mimetype");
             mime.setMethod(ZipEntry.STORED);
-            mime.setSize("application/epub+zip".getBytes().length);
-            mime.setCrc(0x2CAB3750L); // precomputed CRC32 for "application/epub+zip"
+            mime.setSize(mimetypeBytes.length);
+            mime.setCrc(crc32.getValue());
             zos.putNextEntry(mime);
             zos.write("application/epub+zip".getBytes());
             zos.closeEntry();
 
             // 2. META-INF/container.xml
-            addStringEntry(zos, "META-INF/container.xml", """
-                <?xml version="1.0"?>
-                <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-                  <rootfiles>
-                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-                  </rootfiles>
-                </container>
-                """);
+            addStringEntry(zos, "META-INF/container.xml",
+                "<?xml version=\"1.0\"?>\n" +
+                "<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">\n" +
+                "  <rootfiles>\n" +
+                "    <rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/>\n" +
+                "  </rootfiles>\n" +
+                "</container>");
 
-            // 3. OEBPS/content.opf
+            // 3. OEBPS/content.opf — with cover + nav manifest
             StringBuilder opf = new StringBuilder();
             opf.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
             opf.append("<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"uid\">\n");
@@ -131,44 +133,90 @@ public class ExportCommand {
             opf.append("    <dc:language>zh</dc:language>\n");
             opf.append("  </metadata>\n  <manifest>\n");
             opf.append("    <item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>\n");
+            opf.append("    <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n");
+            opf.append("    <item id=\"cover\" href=\"cover.xhtml\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
             opf.append("    <item id=\"style\" href=\"style.css\" media-type=\"text/css\"/>\n");
             for (int i = 0; i < book.getChapters().size(); i++) {
-                opf.append("    <item id=\"ch").append(i + 1).append("\" href=\"ch").append(i + 1).append(".xhtml\" media-type=\"application/xhtml+xml\"/>\n");
+                opf.append("    <item id=\"ch").append(i + 1).append("\" href=\"ch").append(i + 1)
+                   .append(".xhtml\" media-type=\"application/xhtml+xml\"/>\n");
             }
             opf.append("  </manifest>\n  <spine toc=\"ncx\">\n");
+            opf.append("    <itemref idref=\"cover\"/>\n");
             for (int i = 0; i < book.getChapters().size(); i++) {
                 opf.append("    <itemref idref=\"ch").append(i + 1).append("\"/>\n");
             }
             opf.append("  </spine>\n</package>");
             addStringEntry(zos, "OEBPS/content.opf", opf.toString());
 
-            // 4. Chapter XHTML files
+            // 4. cover.xhtml — text cover page (fixes #5)
+            String coverXhtml =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<!DOCTYPE html>\n" +
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
+                "<head><title>Cover</title><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"/></head>\n" +
+                "<body style=\"text-align:center; padding-top:40%;\">\n" +
+                "<h1>" + escapeXml(book.getTitle()) + "</h1>\n" +
+                "<h2>" + escapeXml(book.getAuthor() != null ? book.getAuthor() : "") + "</h2>\n" +
+                "</body></html>";
+            addStringEntry(zos, "OEBPS/cover.xhtml", coverXhtml);
+
+            // 5. nav.xhtml — EPUB 3 navigation (fixes #5)
+            StringBuilder navOl = new StringBuilder();
+            for (int i = 0; i < book.getChapters().size(); i++) {
+                Chapter ch = book.getChapters().get(i);
+                navOl.append("      <li><a href=\"ch").append(i + 1).append(".xhtml\">第")
+                     .append(ch.getNumber()).append("章</a></li>\n");
+            }
+            String navXhtml =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<!DOCTYPE html>\n" +
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">\n" +
+                "<head><title>目录</title></head>\n" +
+                "<body>\n" +
+                "<nav epub:type=\"toc\">\n" +
+                "<h1>目录</h1>\n" +
+                "<ol>\n" +
+                navOl.toString() +
+                "</ol>\n" +
+                "</nav>\n" +
+                "</body></html>";
+            addStringEntry(zos, "OEBPS/nav.xhtml", navXhtml);
+
+            // 6. Chapter XHTML files with paragraph formatting
             for (int i = 0; i < book.getChapters().size(); i++) {
                 Chapter ch = book.getChapters().get(i);
                 String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
-                String xhtml = """
-                    <?xml version="1.0" encoding="UTF-8"?>
-                    <!DOCTYPE html>
-                    <html xmlns="http://www.w3.org/1999/xhtml">
-                    <head><title>第%d章</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
-                    <body>
-                    <h1>第%d章</h1>
-                    %s
-                    </body></html>
-                    """.formatted(ch.getNumber(), ch.getNumber(), textToHtml(text != null ? text : ""));
+                String xhtml =
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<!DOCTYPE html>\n" +
+                    "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
+                    "<head><title>第" + ch.getNumber() + "章</title>" +
+                    "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"/></head>\n" +
+                    "<body>\n" +
+                    "<h1>第" + ch.getNumber() + "章</h1>\n" +
+                    textToHtml(text != null ? text : "") +
+                    "</body></html>";
                 addStringEntry(zos, "OEBPS/ch" + (i + 1) + ".xhtml", xhtml);
             }
 
-            // 5. style.css
-            addStringEntry(zos, "OEBPS/style.css", "body { font-family: serif; margin: 2em; } p { text-indent: 2em; line-height: 1.8; }");
+            // 7. style.css
+            addStringEntry(zos, "OEBPS/style.css",
+                "body { font-family: serif; margin: 2em; } p { text-indent: 2em; line-height: 1.8; }");
 
-            // 6. toc.ncx (simplified)
+            // 8. toc.ncx
             StringBuilder ncx = new StringBuilder();
             ncx.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-            ncx.append("<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\" version=\"2005-1\">\n  <head><meta name=\"dtb:uid\" content=\"urn:uuid:").append(book.getId() != null ? book.getId() : "unknown").append("\"/></head>\n  <docTitle><text>").append(escapeXml(book.getTitle())).append("</text></docTitle>\n  <navMap>\n");
+            ncx.append("<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\" version=\"2005-1\">\n");
+            ncx.append("  <head><meta name=\"dtb:uid\" content=\"urn:uuid:")
+               .append(book.getId() != null ? book.getId() : "unknown").append("\"/></head>\n");
+            ncx.append("  <docTitle><text>").append(escapeXml(book.getTitle())).append("</text></docTitle>\n");
+            ncx.append("  <navMap>\n");
             for (int i = 0; i < book.getChapters().size(); i++) {
                 Chapter ch = book.getChapters().get(i);
-                ncx.append("    <navPoint id=\"nav").append(i + 1).append("\"><navLabel><text>第").append(ch.getNumber()).append("章</text></navLabel><content src=\"ch").append(i + 1).append(".xhtml\"/></navPoint>\n");
+                ncx.append("    <navPoint id=\"nav").append(i + 1)
+                   .append("\"><navLabel><text>第").append(ch.getNumber())
+                   .append("章</text></navLabel><content src=\"ch").append(i + 1)
+                   .append(".xhtml\"/></navPoint>\n");
             }
             ncx.append("  </navMap>\n</ncx>");
             addStringEntry(zos, "OEBPS/toc.ncx", ncx.toString());
@@ -185,12 +233,22 @@ public class ExportCommand {
         zos.closeEntry();
     }
 
+    /** Convert plain text to XHTML paragraphs — splits by double-newline into <p> blocks (fixes #5) */
     private String textToHtml(String text) {
         if (text == null) return "";
-        return text.replace("&", "&amp;")
+        String escaped = text.replace("&", "&amp;")
                   .replace("<", "&lt;")
-                  .replace(">", "&gt;")
-                  .replace("\n", "<br/>");
+                  .replace(">", "&gt;");
+        // Split by double-newline into paragraphs
+        String[] paragraphs = escaped.split("\n{2,}");
+        StringBuilder sb = new StringBuilder();
+        for (String p : paragraphs) {
+            String trimmed = p.trim().replace("\n", "<br/>");
+            if (!trimmed.isEmpty()) {
+                sb.append("<p>").append(trimmed).append("</p>\n");
+            }
+        }
+        return sb.toString();
     }
 
     private String escapeXml(String s) {
@@ -199,17 +257,22 @@ public class ExportCommand {
     }
 
     private void printUsage() {
-        System.out.println("""
-            Usage: novelforge export --book <path> --format <epub|txt|md> [--output <file>]
-            
-            Formats:
-              txt  — plain text (with chapter separators)
-              md   — Markdown (compatible with most editors)
-              epub — EPUB 3 (minimal, no external dependencies)
-            """);
+        System.out.println("Usage: novelforge export --book <path> --format <epub|txt|md> [--output <file>]");
+        System.out.println();
+        System.out.println("Formats:");
+        System.out.println("  txt  — plain text (with chapter separators)");
+        System.out.println("  md   — Markdown (compatible with most editors)");
+        System.out.println("  epub — EPUB 3 (cover + nav + paragraph formatting)");
     }
 
     private String findOption(String[] args, String key) {
+        // Support --key=value format
+        for (String arg : args) {
+            if (arg.startsWith(key + "=")) {
+                return arg.substring(key.length() + 1);
+            }
+        }
+        // Support --key value format
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }

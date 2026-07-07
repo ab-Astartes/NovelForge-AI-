@@ -5,6 +5,7 @@ import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.HookOp;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.prompt.PromptBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,44 +37,50 @@ public class ReflectorAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Reflector: generating state patches for chapter {}", context.getBook().nextChapterNumber());
+        try {
+            log.info("Reflector: generating state patches for chapter {}", context.getBook().nextChapterNumber());
 
-        String observerOutput = context.getObserverOutput();
-        if (observerOutput == null || observerOutput.isEmpty()) {
-            // Fallback: use chapter draft if observer was skipped
-            observerOutput = context.getCurrentChapterDraft();
+            String observerOutput = context.getObserverOutput();
+            if (observerOutput == null || observerOutput.isEmpty()) {
+                // Fallback: use chapter draft if observer was skipped
+                observerOutput = context.getCurrentChapterDraft();
+            }
+
+            List<Map<String, String>> messages = promptBuilder.buildReflectorPrompt(
+                    context.getBook(), context.getTruthState(), observerOutput, context.getConfig());
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            String response = client.chatComplete(messages, modelId, temperature(), 1500);
+
+            // Parse response into HookOp list + state patches, then apply
+            List<HookOp> hookOps = parseHookOps(response);
+            context.getTruthState().applyHookOps(hookOps);
+
+            // Apply character and world deltas from the response
+            applyStateDeltas(response, context);
+
+            // Add timeline events
+            applyTimelineEvents(response, context);
+
+            // Store reflector output in dedicated field
+            context.setReflectorOutput(response);
+            log.info("Reflector: {} hookOps applied, state patches generated ({})", hookOps.size(), response.length());
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Reflector] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
-
-        List<Map<String, String>> messages = promptBuilder.buildReflectorPrompt(
-                context.getBook(), context.getTruthState(), observerOutput, context.getConfig());
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        String response = client.chatComplete(messages, modelId, temperature(), 1500);
-
-        // Parse response into HookOp list + state patches, then apply
-        List<HookOp> hookOps = parseHookOps(response);
-        context.getTruthState().applyHookOps(hookOps);
-
-        // Apply character and world deltas from the response
-        applyStateDeltas(response, context);
-
-        // Add timeline events
-        applyTimelineEvents(response, context);
-
-        // Store reflector output in dedicated field
-        context.setReflectorOutput(response);
-        log.info("Reflector: {} hookOps applied, state patches generated ({})", hookOps.size(), response.length());
-
-        return new PipelineResult(context, response, name());
     }
 
     /** Parse hookOps from LLM JSON response */
     private List<HookOp> parseHookOps(String llmOutput) {
         List<HookOp> ops = new ArrayList<>();
         try {
-            String json = extractJson(llmOutput);
+            String json = TextUtils.extractJsonBlock(llmOutput);
             if (json == null) return ops;
 
             JsonNode root = mapper.readTree(json);
@@ -83,7 +90,15 @@ public class ReflectorAgent implements Agent {
             for (JsonNode opNode : hookOpsNode) {
                 HookOp op = new HookOp();
                 String typeStr = opNode.get("type").asText();
-                op.setType(HookOp.Type.valueOf(typeStr.toUpperCase().replace("-", "_")));
+                // Safe type mapping with fallback (#7 fix)
+                HookOp.Type type = switch(typeStr.toUpperCase().replace("-", "_")) {
+                    case "UPSERT" -> HookOp.Type.UPSERT;
+                    case "MENTION" -> HookOp.Type.MENTION;
+                    case "RESOLVE" -> HookOp.Type.RESOLVE;
+                    case "DEFER" -> HookOp.Type.DEFER;
+                    default -> HookOp.Type.UPSERT; // fallback for unknown types
+                };
+                op.setType(type);
                 op.setHookId(opNode.has("hookId") ? opNode.get("hookId").asText() : "hook-auto-" + ops.size());
                 op.setDescription(opNode.has("description") ? opNode.get("description").asText() : "");
                 op.setChapterOrigin(opNode.has("chapterOrigin") ? opNode.get("chapterOrigin").asInt() : 0);
@@ -100,7 +115,7 @@ public class ReflectorAgent implements Agent {
     /** Apply character deltas to TruthState */
     private void applyStateDeltas(String llmOutput, PipelineContext context) {
         try {
-            String json = extractJson(llmOutput);
+            String json = TextUtils.extractJsonBlock(llmOutput);
             if (json == null) return;
 
             JsonNode root = mapper.readTree(json);
@@ -140,7 +155,7 @@ public class ReflectorAgent implements Agent {
     /** Add timeline events from Reflector output */
     private void applyTimelineEvents(String llmOutput, PipelineContext context) {
         try {
-            String json = extractJson(llmOutput);
+            String json = TextUtils.extractJsonBlock(llmOutput);
             if (json == null) return;
 
             JsonNode root = mapper.readTree(json);
@@ -160,17 +175,5 @@ public class ReflectorAgent implements Agent {
         }
     }
 
-    /** Extract JSON block from LLM output */
-    private String extractJson(String text) {
-        int start = text.indexOf("```json");
-        if (start >= 0) {
-            int contentStart = text.indexOf('\n', start) + 1;
-            int end = text.indexOf("```", contentStart);
-            if (end > contentStart) return text.substring(contentStart, end).trim();
-        }
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
-        return null;
-    }
+    // extractJson moved to TextUtils.extractJsonBlock
 }

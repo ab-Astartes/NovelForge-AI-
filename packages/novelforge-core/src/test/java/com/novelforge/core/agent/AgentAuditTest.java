@@ -7,6 +7,7 @@ import com.novelforge.core.models.Chapter;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
 import com.novelforge.core.models.HookOp;
+import com.novelforge.core.models.TextUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -94,7 +95,7 @@ class AgentAuditTest {
         result.setWarnings(new ArrayList<>());
 
         try {
-            String json = extractJson(llmOutput);
+            String json = TextUtils.extractJsonBlock(llmOutput);
             if (json != null) {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
@@ -129,16 +130,5 @@ class AgentAuditTest {
         return result;
     }
 
-    private String extractJson(String text) {
-        int start = text.indexOf("```json");
-        if (start >= 0) {
-            int contentStart = text.indexOf('\n', start) + 1;
-            int end = text.indexOf("```", contentStart);
-            if (end > contentStart) return text.substring(contentStart, end).trim();
-        }
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
-        return null;
-    }
+
 }

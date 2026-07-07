@@ -29,6 +29,10 @@ public class OpenAiClient implements LlmClient {
     private final ObjectMapper mapper;
 
     public OpenAiClient(String baseUrl, String apiKey) {
+        // Security: warn if baseUrl is not HTTPS (fixes #6)
+        if (baseUrl != null && !baseUrl.startsWith("https://")) {
+            log.warn("[WARNING] baseUrl is not HTTPS — API key will be transmitted in plaintext: {}", baseUrl);
+        }
         // Normalize: strip trailing slash and /chat/completions, ensure /v1
         String url = baseUrl.replaceAll("/+$", "");
         // Strip known API path suffixes so we don't double-append
@@ -101,6 +105,10 @@ public class OpenAiClient implements LlmClient {
             }
 
             String content = choices.get(0).get("message").get("content").asText();
+            if (content == null || content.trim().isEmpty()) {
+                log.warn("[OpenAiClient] LLM returned empty response");
+                return "[LLM returned empty response - please retry]";
+            }
             log.debug("LLM response length: {} chars", content.length());
             return content;
 
@@ -180,7 +188,13 @@ public class OpenAiClient implements LlmClient {
                     }
                 }
             }
-            handler.onComplete(fullText.toString());
+            String streamResult = fullText.toString();
+            if (streamResult == null || streamResult.trim().isEmpty()) {
+                log.warn("[OpenAiClient] LLM streaming returned empty response");
+                handler.onComplete("[LLM returned empty response - please retry]");
+            } else {
+                handler.onComplete(streamResult);
+            }
 
         } catch (Exception e) {
             handler.onError(e);

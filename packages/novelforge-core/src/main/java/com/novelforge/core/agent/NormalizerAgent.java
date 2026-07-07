@@ -4,6 +4,7 @@ import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.prompt.PromptBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,46 +31,48 @@ public class NormalizerAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Normalizer: adjusting length for chapter {}", context.getBook().nextChapterNumber());
+        try {
+            log.info("Normalizer: adjusting length for chapter {}", context.getBook().nextChapterNumber());
 
-        String chapterDraft = context.getCurrentChapterDraft();
+            String chapterDraft = context.getCurrentChapterDraft();
 
-        // Skip if draft is already within range (±20% tolerance)
-        int estimatedWords = estimateChineseWords(chapterDraft);
-        int minTarget = context.getConfig().getChapterWordsMin();
-        int maxTarget = context.getConfig().getChapterWordsMax();
-        double tolerance = 0.20;
+            // Input validation — abort if critical input is null/empty
+            if (chapterDraft == null || chapterDraft.isEmpty()) {
+                log.warn("Normalizer: chapter draft is null/empty, skipping normalization");
+                return new PipelineResult(context, "（空章节）", name());
+            }
 
-        if (estimatedWords >= minTarget * (1 - tolerance) && estimatedWords <= maxTarget * (1 + tolerance)) {
-            log.info("Normalizer: draft already within range ({}/{}-{}), skipping", estimatedWords, minTarget, maxTarget);
-            return new PipelineResult(context, chapterDraft, name());
+            // Skip if draft is already within range (±20% tolerance)
+            int estimatedWords = TextUtils.estimateChineseWordCount(chapterDraft);
+            int minTarget = context.getConfig().getChapterWordsMin();
+            int maxTarget = context.getConfig().getChapterWordsMax();
+            double tolerance = 0.20;
+
+            if (estimatedWords >= minTarget * (1 - tolerance) && estimatedWords <= maxTarget * (1 + tolerance)) {
+                log.info("Normalizer: draft already within range ({}/{}-{}), skipping", estimatedWords, minTarget, maxTarget);
+                return new PipelineResult(context, chapterDraft, name());
+            }
+
+            List<Map<String, String>> messages = promptBuilder.buildNormalizerPrompt(
+                    context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            String response = client.chatComplete(messages, modelId, temperature(), 6000);
+
+            // Replace draft with normalized version
+            context.setCurrentChapterDraft(response);
+            context.setNormalizerOutput(response);
+            log.info("Normalizer: text adjusted ({}/{})", TextUtils.estimateChineseWordCount(response), estimatedWords);
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Normalizer] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
-
-        List<Map<String, String>> messages = promptBuilder.buildNormalizerPrompt(
-                context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        String response = client.chatComplete(messages, modelId, temperature(), 6000);
-
-        // Replace draft with normalized version
-        context.setCurrentChapterDraft(response);
-        context.setNormalizerOutput(response);
-        log.info("Normalizer: text adjusted ({}/{})", estimateChineseWords(response), estimatedWords);
-
-        return new PipelineResult(context, response, name());
     }
 
-    private static int estimateChineseWords(String text) {
-        if (text == null) return 0;
-        // CJK Unified Ideographs + Extensions A/B
-        int chineseChars = (int) text.chars().filter(c ->
-                (c >= 0x4E00 && c <= 0x9FFF) ||    // CJK Unified
-                (c >= 0x3400 && c <= 0x4DBF) ||    // Extension A
-                (c >= 0x20000 && c <= 0x2A6DF)     // Extension B
-        ).count();
-        int otherChars = text.length() - chineseChars;
-        return chineseChars + otherChars / 5;
-    }
+
 }

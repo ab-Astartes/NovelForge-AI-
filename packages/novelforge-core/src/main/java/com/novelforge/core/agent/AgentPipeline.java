@@ -85,6 +85,12 @@ public class AgentPipeline {
             }
         }
 
+        // All agents skipped → return error result instead of null
+        if (result == null) {
+            log.warn("All agents were disabled — pipeline produced no output");
+            return new PipelineResult("Pipeline", "All agents disabled — no work was done");
+        }
+
         // Final: save truth state
         try {
             current.getTruthState().saveAll();

@@ -33,42 +33,60 @@ public class ReviserAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Reviser: reviewing chapter {}", context.getBook().nextChapterNumber());
+        try {
+            log.info("Reviser: reviewing chapter {}", context.getBook().nextChapterNumber());
 
-        String chapterDraft = context.getCurrentChapterDraft();
-        AuditResult auditResult = context.getAuditResult();
+            String chapterDraft = context.getCurrentChapterDraft();
+            AuditResult auditResult = context.getAuditResult();
 
-        // Skip revision if audit passed with high score
-        if (auditResult != null && auditResult.isPass() && auditResult.getOverallScore() >= context.getConfig().getAuditPassThreshold()) {
-            log.info("Reviser: audit passed (score {}), no revision needed", String.format("%.1f", auditResult.getOverallScore()));
-            return new PipelineResult(context, chapterDraft, name());
+            // Skip revision if audit passed with high score
+            if (auditResult != null && auditResult.isPass() && auditResult.getOverallScore() >= context.getConfig().getAuditPassThreshold()) {
+                log.info("Reviser: audit passed (score {}), no revision needed", String.format("%.1f", auditResult.getOverallScore()));
+                return new PipelineResult(context, chapterDraft, name());
+            }
+
+            // Need revision
+            if (auditResult == null) {
+                log.warn("Reviser: no audit result, skipping revision");
+                return new PipelineResult(context, chapterDraft, name());
+            }
+
+            // Select revision mode based on audit score and critical issues
+            RevisionPlan.Mode mode = selectRevisionMode(auditResult);
+            log.info("Reviser: selected mode {} (score {}, {} critical issues",
+                    mode, String.format("%.1f", auditResult.getOverallScore()),
+                    auditResult.getCriticalIssues() != null ? auditResult.getCriticalIssues().size() : 0);
+
+            List<Map<String, String>> messages = promptBuilder.buildReviserPrompt(
+                    context.getBook(), context.getTruthState(), chapterDraft, auditResult, context.getConfig(), mode);
+
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
+
+            String response = client.chatComplete(messages, modelId, temperature(), 8000);
+
+            // Replace draft with revised version
+            context.setCurrentChapterDraft(response);
+            log.info("Reviser: chapter revised (mode {}, audit score {} → revised)", mode, String.format("%.1f", auditResult.getOverallScore()));
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[ReviserAgent] execute error: " + e.getMessage());
+            e.printStackTrace();
+            String draft = context.getCurrentChapterDraft();
+            if (draft != null && !draft.trim().isEmpty()) {
+                String lightRevision = lightRevise(draft);
+                context.setCurrentChapterDraft(lightRevision);
+                return new PipelineResult(context, lightRevision, name(), false);
+            }
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
         }
+    }
 
-        // Need revision
-        if (auditResult == null) {
-            log.warn("Reviser: no audit result, skipping revision");
-            return new PipelineResult(context, chapterDraft, name());
-        }
-
-        // Select revision mode based on audit score and critical issues
-        RevisionPlan.Mode mode = selectRevisionMode(auditResult);
-        log.info("Reviser: selected mode {} (score {}, {} critical issues)",
-                mode, String.format("%.1f", auditResult.getOverallScore()),
-                auditResult.getCriticalIssues() != null ? auditResult.getCriticalIssues().size() : 0);
-
-        List<Map<String, String>> messages = promptBuilder.buildReviserPrompt(
-                context.getBook(), context.getTruthState(), chapterDraft, auditResult, context.getConfig(), mode);
-
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
-
-        String response = client.chatComplete(messages, modelId, temperature(), 8000);
-
-        // Replace draft with revised version
-        context.setCurrentChapterDraft(response);
-        log.info("Reviser: chapter revised (mode {}, audit score {} → revised)", mode, String.format("%.1f", auditResult.getOverallScore()));
-
-        return new PipelineResult(context, response, name());
+    /** Lightweight fallback revision — normalize whitespace and remove excessive blank lines. */
+    private String lightRevise(String text) {
+        if (text == null) return "";
+        return text.replaceAll("\n{3,}", "\n\n").replaceAll("  +", " ");
     }
 
     /**

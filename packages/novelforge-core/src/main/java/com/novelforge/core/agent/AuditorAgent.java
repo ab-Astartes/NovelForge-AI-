@@ -6,6 +6,7 @@ import com.novelforge.core.audit.AuditEngine;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.prompt.PromptBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,28 +35,45 @@ public class AuditorAgent implements Agent {
 
     @Override
     public PipelineResult execute(PipelineContext context) {
-        log.info("Auditor: running 33-dimension audit on chapter {}", context.getBook().nextChapterNumber());
+        try {
+            log.info("Auditor: running 33-dimension audit on chapter {}", context.getBook().nextChapterNumber());
 
-        String chapterDraft = context.getCurrentChapterDraft();
+            String chapterDraft = context.getCurrentChapterDraft();
 
-        List<Map<String, String>> messages = promptBuilder.buildAuditorPrompt(
-                context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
+            if (chapterDraft == null || chapterDraft.isEmpty()) {
+                log.warn("Auditor: chapter draft is null/empty, skipping audit");
+                AuditResult emptyResult = new AuditResult();
+                emptyResult.setOverallScore(0);
+                emptyResult.setPass(false);
+                emptyResult.setCriticalIssues(java.util.List.of("无章节内容"));
+                emptyResult.setWarnings(java.util.List.of());
+                context.setAuditResult(emptyResult);
+                return new PipelineResult(context, "（空章节，无法审计）", name());
+            }
 
-        LlmClient client = router.getClientForAgent(name());
-        String modelId = router.getModelForAgent(name());
+            List<Map<String, String>> messages = promptBuilder.buildAuditorPrompt(
+                    context.getBook(), context.getTruthState(), chapterDraft, context.getConfig());
 
-        String response = client.chatComplete(messages, modelId, temperature(), 3000);
+            LlmClient client = router.getClientForAgent(name());
+            String modelId = router.getModelForAgent(name());
 
-        // Parse audit JSON into AuditResult
-        AuditResult auditResult = parseAuditResult(response, chapterDraft);
-        context.setAuditResult(auditResult);
+            String response = client.chatComplete(messages, modelId, temperature(), 3000);
 
-        log.info("Auditor: overall score {}, {} critical issues, {} warnings",
-                String.format("%.1f", auditResult.getOverallScore()),
-                auditResult.getCriticalIssues() != null ? auditResult.getCriticalIssues().size() : 0,
-                auditResult.getWarnings() != null ? auditResult.getWarnings().size() : 0);
+            // Parse audit JSON into AuditResult
+            AuditResult auditResult = parseAuditResult(response, chapterDraft);
+            context.setAuditResult(auditResult);
 
-        return new PipelineResult(context, response, name());
+            log.info("Auditor: overall score {}, {} critical issues, {} warnings",
+                    String.format("%.1f", auditResult.getOverallScore()),
+                    auditResult.getCriticalIssues() != null ? auditResult.getCriticalIssues().size() : 0,
+                    auditResult.getWarnings() != null ? auditResult.getWarnings().size() : 0);
+
+            return new PipelineResult(context, response, name());
+        } catch (Exception e) {
+            System.err.println("[Auditor] execute error: " + e.getMessage());
+            e.printStackTrace();
+            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
+        }
     }
 
     /** Parse LLM's JSON audit output into AuditResult object, then overlay objective checks */
@@ -69,7 +87,7 @@ public class AuditorAgent implements Agent {
 
         // Try to extract JSON from response
         try {
-            String json = extractJson(llmOutput);
+            String json = TextUtils.extractJsonBlock(llmOutput);
             if (json != null) {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
@@ -80,7 +98,7 @@ public class AuditorAgent implements Agent {
                             scores.put(entry.getKey(), entry.getValue().asDouble()));
                     result.setDimensionScores(scores);
 
-                    // Calculate weighted overall score
+                    // Calculate overall score (simple average of LLM dimensions — rule-engine will be overlaid later)
                     double total = 0;
                     for (double s : scores.values()) total += s;
                     result.setOverallScore(scores.isEmpty() ? 7.0 : total / scores.size());
@@ -118,10 +136,21 @@ public class AuditorAgent implements Agent {
                     }
                 }
             }
-            // Recalculate overall score with updated dimensions
-            double total = 0;
-            for (double s : scores.values()) total += s;
-            result.setOverallScore(scores.isEmpty() ? 7.0 : total / scores.size());
+            // Recalculate overall score with 60/40 weighting (fixes #8: LLM 60% + rule-engine 40%)
+            double llmTotal = 0, ruleTotal = 0;
+            int llmCount = 0, ruleCount = 0;
+            for (var entry : scores.entrySet()) {
+                String dim = entry.getKey();
+                double s = entry.getValue();
+                if (dim.startsWith("pacing.") || dim.startsWith("dialogue.") || dim.startsWith("world.") || dim.startsWith("outline.") || dim.startsWith("style.") || dim.startsWith("hook.")) {
+                    llmTotal += s; llmCount++;
+                } else {
+                    ruleTotal += s; ruleCount++;
+                }
+            }
+            double llmAvg = llmCount > 0 ? llmTotal / llmCount : 7.0;
+            double ruleAvg = ruleCount > 0 ? ruleTotal / ruleCount : 7.0;
+            result.setOverallScore(scores.isEmpty() ? 7.0 : (llmAvg * 0.6) + (ruleAvg * 0.4));
         } else if (objectiveCheck.getDimensionScores() != null) {
             // LLM parsing completely failed — use objective results as full fallback
             result.setDimensionScores(objectiveCheck.getDimensionScores());
@@ -140,19 +169,5 @@ public class AuditorAgent implements Agent {
         return result;
     }
 
-    /** Extract JSON block from LLM output (may be wrapped in markdown) */
-    private String extractJson(String text) {
-        // Try to find ```json ... ``` block
-        int start = text.indexOf("```json");
-        if (start >= 0) {
-            int contentStart = text.indexOf('\n', start) + 1;
-            int end = text.indexOf("```", contentStart);
-            if (end > contentStart) return text.substring(contentStart, end).trim();
-        }
-        // Try raw JSON
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
-        return null;
-    }
+    // extractJson moved to TextUtils.extractJsonBlock
 }

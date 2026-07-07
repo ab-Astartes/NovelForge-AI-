@@ -16,10 +16,13 @@ class CharacterStateTest {
     Path tempDir;
 
     @Test
-    void testLoadCreatesDefaultFile() {
+    void testLoadCreatesDefaultState() {
         Path file = tempDir.resolve("characters.json");
         CharacterState state = new CharacterState(file, new ObjectMapper());
-        assertTrue(file.toFile().exists());
+        // After removing auto-save, constructor no longer creates the file;
+        // verify the state object is correctly initialized instead.
+        assertNotNull(state.getSummary());
+        assertFalse(file.toFile().exists()); // file should NOT be auto-created
     }
 
     @Test

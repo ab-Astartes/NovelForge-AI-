@@ -4,6 +4,7 @@ import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.llm.OpenAiClient;
 import com.novelforge.core.models.WritingStyle;
+import com.novelforge.core.models.TextUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -115,6 +116,13 @@ public class StyleCommand {
     }
 
     private String findOption(String[] args, String key) {
+        // Support --key=value format
+        for (String arg : args) {
+            if (arg.startsWith(key + "=")) {
+                return arg.substring(key.length() + 1);
+            }
+        }
+        // Support --key value format
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) return args[i + 1];
         }
@@ -129,7 +137,7 @@ public class StyleCommand {
 
         try {
             // Extract JSON block from LLM response
-            String json = extractJson(llmResponse);
+            String json = TextUtils.extractJsonBlock(llmResponse);
             if (json == null) {
                 // Fallback: store raw response as description
                 style.setVocabularyPattern(llmResponse);
@@ -173,17 +181,5 @@ public class StyleCommand {
         return style;
     }
 
-    /** Extract JSON from LLM response (may be wrapped in markdown) */
-    private String extractJson(String text) {
-        int start = text.indexOf("```json");
-        if (start >= 0) {
-            int contentStart = text.indexOf('\n', start) + 1;
-            int end = text.indexOf("```", contentStart);
-            if (end > contentStart) return text.substring(contentStart, end).trim();
-        }
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) return text.substring(jsonStart, jsonEnd + 1);
-        return null;
-    }
+    // extractJson moved to TextUtils.extractJsonBlock
 }
