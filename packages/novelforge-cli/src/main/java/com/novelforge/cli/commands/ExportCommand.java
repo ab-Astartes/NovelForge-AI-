@@ -24,6 +24,7 @@ public class ExportCommand {
         String bookPath = findOption(args, "--book");
         String format = findOption(args, "--format");
         String output = findOption(args, "--output");
+        String coverImagePath = findOption(args, "--cover");  // fixes #G6: cover image support
 
         if (bookPath == null) {
             System.err.println("Error: --book <path> is required");
@@ -47,7 +48,7 @@ public class ExportCommand {
             switch (format.toLowerCase()) {
                 case "txt" -> exportTxt(book, output);
                 case "md"  -> exportMd(book, output);
-                case "epub" -> exportEpub(book, output);
+                case "epub" -> exportEpub(book, output, coverImagePath);  // fixes #G6
                 default -> {
                     System.err.println("Unsupported format: " + format);
                     printUsage();
@@ -97,7 +98,7 @@ public class ExportCommand {
         System.out.println("✅ Exported Markdown: " + outputPath);
     }
 
-    private void exportEpub(Book book, String outputPath) throws Exception {
+    private void exportEpub(Book book, String outputPath, String coverImagePath) throws Exception {  // fixes #G6: cover image
         // EPUB 3 generation with cover, nav, paragraph formatting (fixes #5)
         Path out = Paths.get(outputPath);
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(out))) {
@@ -136,6 +137,11 @@ public class ExportCommand {
             opf.append("    <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n");
             opf.append("    <item id=\"cover\" href=\"cover.xhtml\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
             opf.append("    <item id=\"style\" href=\"style.css\" media-type=\"text/css\"/>\n");
+            if (coverImagePath != null) {  // fixes #G6: cover image manifest
+                String coverMediaType = guessMediaType(coverImagePath);
+                String coverExt = coverImagePath.substring(coverImagePath.lastIndexOf(".") + 1).toLowerCase();
+                opf.append("    <item id=\"cover-image\" href=\"cover.").append(coverExt).append("\" media-type=\"").append(coverMediaType).append("\" properties=\"cover-image\"/>\n");
+            }
             for (int i = 0; i < book.getChapters().size(); i++) {
                 opf.append("    <item id=\"ch").append(i + 1).append("\" href=\"ch").append(i + 1)
                    .append(".xhtml\" media-type=\"application/xhtml+xml\"/>\n");
@@ -154,11 +160,20 @@ public class ExportCommand {
                 "<!DOCTYPE html>\n" +
                 "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
                 "<head><title>Cover</title><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"/></head>\n" +
-                "<body style=\"text-align:center; padding-top:40%;\">\n" +
+                "<body style=\"text-align:center; padding-top:30%;\">\n" +
+                (coverImagePath != null ? "<img src=\"cover." + coverImagePath.substring(coverImagePath.lastIndexOf(".") + 1).toLowerCase() + "\" alt=\"Cover\" style=\"max-width:80%; max-height:60vh;\"/>\n" : "") +
                 "<h1>" + escapeXml(book.getTitle()) + "</h1>\n" +
                 "<h2>" + escapeXml(book.getAuthor() != null ? book.getAuthor() : "") + "</h2>\n" +
                 "</body></html>";
             addStringEntry(zos, "OEBPS/cover.xhtml", coverXhtml);
+            if (coverImagePath != null) {  // fixes #G6: embed cover image
+                Path coverFile = Paths.get(coverImagePath);
+                if (Files.exists(coverFile)) {
+                    String coverExt = coverImagePath.substring(coverImagePath.lastIndexOf(".") + 1).toLowerCase();
+                    byte[] coverBytes = Files.readAllBytes(coverFile);
+                    addBinaryEntry(zos, "OEBPS/cover." + coverExt, coverBytes);
+                }
+            }
 
             // 5. nav.xhtml — EPUB 3 navigation (fixes #5)
             StringBuilder navOl = new StringBuilder();
@@ -263,6 +278,28 @@ public class ExportCommand {
         System.out.println("  txt  — plain text (with chapter separators)");
         System.out.println("  md   — Markdown (compatible with most editors)");
         System.out.println("  epub — EPUB 3 (cover + nav + paragraph formatting)");
+        System.out.println("Options:");
+        System.out.println("  --cover <path> — cover image for EPUB (jpg/png/gif/svg/webp)");
+    }
+
+    /** Guess MIME type from file extension (fixes #G6) */
+    private String guessMediaType(String path) {
+        String ext = path.substring(path.lastIndexOf(".") + 1).toLowerCase();
+        return switch (ext) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "svg" -> "image/svg+xml";
+            case "webp" -> "image/webp";
+            default -> "image/png";  // fallback
+        };
+    }
+
+    private void addBinaryEntry(ZipOutputStream zos, String entryName, byte[] data) throws Exception {
+        ZipEntry entry = new ZipEntry(entryName);
+        zos.putNextEntry(entry);
+        zos.write(data);
+        zos.closeEntry();
     }
 
     private String findOption(String[] args, String key) {

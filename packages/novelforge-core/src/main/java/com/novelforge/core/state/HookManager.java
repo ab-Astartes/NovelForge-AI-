@@ -25,7 +25,7 @@ public class HookManager {
 
     private final Path filePath;
     private final ObjectMapper mapper;
-    private ObjectNode data;
+    private volatile ObjectNode data;  // fixes #29: volatile for thread-safe reads
 
     public HookManager(Path filePath, ObjectMapper mapper) {
         this.filePath = filePath;
@@ -33,7 +33,7 @@ public class HookManager {
         load();
     }
 
-    public void load() {
+    public synchronized void load() {  // fixes #29
         try {
             if (Files.exists(filePath)) {
                 JsonNode root = mapper.readTree(Files.newInputStream(filePath));
@@ -54,7 +54,7 @@ public class HookManager {
         }
     }
 
-    public void save() {
+    public synchronized void save() {  // fixes #29
         try {
             Files.createDirectories(filePath.getParent());
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
@@ -64,8 +64,8 @@ public class HookManager {
         }
     }
 
-    /** Apply HookOps from Reflector */
-    public void applyOps(List<HookOp> ops) {
+    /** Apply HookOps from Reflector (fixes #29: synchronized) */
+    public synchronized void applyOps(List<HookOp> ops) {
         ArrayNode hooks = data.has("hooks") ? (ArrayNode) data.get("hooks") : data.putArray("hooks");
 
         for (HookOp op : ops) {
@@ -126,8 +126,8 @@ public class HookManager {
         save();
     }
 
-    /** Get mustAdvance hook list summary */
-    public String getMustAdvanceSummary() {
+    /** Get mustAdvance hook list summary (fixes #29: synchronized) */
+    public synchronized String getMustAdvanceSummary() {
         JsonNode mustAdvance = data.get("mustAdvance");
         if (mustAdvance == null || mustAdvance.isEmpty()) return "（无必须推进的悬念）";
         StringBuilder sb = new StringBuilder();
@@ -140,8 +140,8 @@ public class HookManager {
         return sb.toString();
     }
 
-    /** Get full hook state summary */
-    public String getSummary() {
+    /** Get full hook state summary (fixes #29: synchronized) */
+    public synchronized String getSummary() {
         JsonNode hooks = data.get("hooks");
         JsonNode stale = data.get("staleDebt");
         StringBuilder sb = new StringBuilder();

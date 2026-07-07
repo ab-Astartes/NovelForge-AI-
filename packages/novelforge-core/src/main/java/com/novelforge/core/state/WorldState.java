@@ -19,7 +19,7 @@ public class WorldState {
 
     private final Path filePath;
     private final ObjectMapper mapper;
-    private ObjectNode data;
+    private volatile ObjectNode data;  // fixes #29: volatile for thread-safe reads
 
     public WorldState(Path filePath, ObjectMapper mapper) {
         this.filePath = filePath;
@@ -27,7 +27,7 @@ public class WorldState {
         load();
     }
 
-    public void load() {
+    public synchronized void load() {  // fixes #29
         try {
             if (Files.exists(filePath)) {
                 JsonNode root = mapper.readTree(Files.newInputStream(filePath));
@@ -50,7 +50,7 @@ public class WorldState {
         }
     }
 
-    public void save() {
+    public synchronized void save() {  // fixes #29
         try {
             Files.createDirectories(filePath.getParent());
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
@@ -60,27 +60,26 @@ public class WorldState {
         }
     }
 
-    /** Get human-readable summary for prompt context */
-    /** Get raw ObjectNode for mutation */
-    public ObjectNode getData() { return data; }
+    /** Get raw ObjectNode for mutation (fixes #29: synchronized + fixed duplicate javadoc) */
+    public synchronized ObjectNode getData() { return data; }
 
-    /** Add a location entry */
-    public void addLocation(JsonNode loc) {
+    /** Add a location entry (fixes #29: synchronized) */
+    public synchronized void addLocation(JsonNode loc) {
         JsonNode arr = data.get("locations");
         if (arr != null && arr.isArray()) {
             ((com.fasterxml.jackson.databind.node.ArrayNode) arr).add(loc);
         }
     }
 
-    /** Add a rule entry */
-    public void addRule(JsonNode rule) {
+    /** Add a rule entry (fixes #29: synchronized) */
+    public synchronized void addRule(JsonNode rule) {
         JsonNode arr = data.get("rules");
         if (arr != null && arr.isArray()) {
             ((com.fasterxml.jackson.databind.node.ArrayNode) arr).add(rule);
         }
     }
 
-    public String getSummary() {
+    public synchronized String getSummary() {  // fixes #29
         StringBuilder sb = new StringBuilder();
         JsonNode locations = data.get("locations");
         if (locations != null && !locations.isEmpty()) {

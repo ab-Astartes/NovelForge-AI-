@@ -2,7 +2,6 @@ package com.novelforge.cli.commands;
 
 import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
-import com.novelforge.core.llm.OpenAiClient;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
@@ -55,8 +54,8 @@ public class InteractCommand {
             Book book = BookProject.loadBook(bookDir);
             TruthState state = new TruthState(bookDir);
 
-            LlmClient client = new OpenAiClient(baseUrl, apiKey);
             ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Interact");  // fixes #G5: use ModelRouter instead of standalone OpenAiClient
 
             System.out.println("📖 Interactive mode for '" + book.getTitle() + "' (genre: " + book.getGenre() + ")");
             System.out.println("   Type your questions/suggestions. Commands: /status, /characters, /world, /hooks, /quit");
@@ -95,7 +94,7 @@ public class InteractCommand {
                             messages.add(Map.of("role", "system", "content", "对话历史:\n" + context));
                         }
                         messages.add(Map.of("role", "user", "content", input));
-                        String response = client.chatComplete(messages, modelId, 0.8, 1000);
+                        String response = client.chatComplete(messages, router.getModelForAgent("Interact"), 0.8, 1000);  // fixes #G5
                         System.out.println("\n" + response);
                         conversationHistory.add("User: " + input);
                         conversationHistory.add("AI: " + response);
@@ -154,3 +153,4 @@ public class InteractCommand {
         return null;
     }
 }
+

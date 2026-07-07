@@ -19,7 +19,7 @@ public class TimelineState {
 
     private final Path filePath;
     private final ObjectMapper mapper;
-    private ObjectNode data;
+    private volatile ObjectNode data;  // fixes #29: volatile for thread-safe reads
 
     public TimelineState(Path filePath, ObjectMapper mapper) {
         this.filePath = filePath;
@@ -27,7 +27,7 @@ public class TimelineState {
         load();
     }
 
-    public void load() {
+    public synchronized void load() {  // fixes #29
         try {
             if (Files.exists(filePath)) {
                 JsonNode root = mapper.readTree(Files.newInputStream(filePath));
@@ -44,7 +44,7 @@ public class TimelineState {
         }
     }
 
-    public void save() {
+    public synchronized void save() {  // fixes #29
         try {
             Files.createDirectories(filePath.getParent());
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
@@ -54,7 +54,7 @@ public class TimelineState {
         }
     }
 
-    public void addEvent(int chapter, String description) {
+    public synchronized void addEvent(int chapter, String description) {  // fixes #29
         JsonNode events = data.get("events");
         if (events == null || !events.isArray()) {
             events = data.putArray("events");
@@ -65,8 +65,8 @@ public class TimelineState {
         ((com.fasterxml.jackson.databind.node.ArrayNode) events).add(event);
     }
 
-    /** Get recent events for context */
-    public String getRecentEvents(int lastN) {
+    /** Get recent events for context (fixes #29: synchronized) */
+    public synchronized String getRecentEvents(int lastN) {
         JsonNode events = data.get("events");
         if (events == null || events.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();

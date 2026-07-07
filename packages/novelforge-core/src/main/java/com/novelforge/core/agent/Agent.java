@@ -15,7 +15,9 @@ public interface Agent {
     /** Human-readable agent name (e.g. "Architect", "Writer") */
     String name();
 
-    /** Suggested model ID override (null = use global default) */
+    /** Suggested model ID override (null = use global default).
+     *  (fixes #24: when non-null, ModelRouter.getClientForAgent(name()) will use this model
+     *   instead of global default. Set via ModelRouter.setAgentModel() or CLI --agent-model flags.) */
     String model();
 
     /** Suggested temperature for this agent's creative phase */

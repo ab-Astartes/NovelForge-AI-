@@ -41,7 +41,7 @@ public class Book {
         return chapters.size() + 1;
     }
 
-    /** Calculate writing progress statistics */
+    /** Calculate writing progress statistics (fixes #G6: null-safe text handling) */
     public WritingProgress getProgress() {
         WritingProgress progress = new WritingProgress();
         progress.setTotalChapters(chapters.size());
@@ -50,8 +50,8 @@ public class Book {
         progress.setPassedChapters(0);
 
         for (Chapter ch : chapters) {
-            String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
-            int words = TextUtils.estimateChineseWordCount(text);
+            String text = ch.getFinalText() != null ? ch.getFinalText() : (ch.getDraftText() != null ? ch.getDraftText() : "");
+            int words = TextUtils.estimateChineseWordCount(text);  // null-safe: text is never null here
             progress.setTotalWords(progress.getTotalWords() + words);
             if (ch.getAuditResult() != null) {
                 progress.setAuditedChapters(progress.getAuditedChapters() + 1);

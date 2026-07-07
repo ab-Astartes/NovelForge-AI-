@@ -28,6 +28,18 @@ public class ModelRouter {
         agentModels.put(agentName, config);
     }
 
+    /** Register per-agent model override if not already set (fixes #24).
+     *  Uses the global default config but with the specified model ID.
+     *  This is called by AgentPipeline for agents that declare model() overrides. */
+    public void registerAgentModelIfAbsent(String agentName, String modelId) {
+        if (!agentModels.containsKey(agentName) && modelId != null && !modelId.equals(globalDefault.model())) {
+            agentModels.put(agentName, new ModelConfig(globalDefault.provider(), modelId, globalDefault.baseUrl(), globalDefault.apiKey()));
+        }
+    }
+
+    /** Get global default config (for cross-package access) */
+    public ModelConfig getGlobalDefault() { return globalDefault; }
+
     /** Get the LLM client for an agent (fallback to global) */
     public LlmClient getClientForAgent(String agentName) {
         ModelConfig config = agentModels.getOrDefault(agentName, globalDefault);

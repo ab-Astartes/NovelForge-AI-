@@ -83,4 +83,29 @@ public class PipelineConfig {
     public void setAuditPassThreshold(double v) { this.auditPassThreshold = v; }
     public int getMaxRevisionPasses() { return maxRevisionPasses; }
     public void setMaxRevisionPasses(int v) { this.maxRevisionPasses = v; }
+
+    /** Hot-reload config from a JSON file (fixes #28: configuration hot-update).
+     *  Reads the file and updates all fields, preserving any that are missing in the JSON. */
+    public void reloadFromJson(java.nio.file.Path configFile) {
+        if (configFile == null || !java.nio.file.Files.exists(configFile)) return;
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(java.nio.file.Files.newInputStream(configFile));
+            if (root.has("chapterWordsMin")) this.chapterWordsMin = root.get("chapterWordsMin").asInt();
+            if (root.has("chapterWordsMax")) this.chapterWordsMax = root.get("chapterWordsMax").asInt();
+            if (root.has("auditPassThreshold")) this.auditPassThreshold = root.get("auditPassThreshold").asDouble();
+            if (root.has("maxRevisionPasses")) this.maxRevisionPasses = root.get("maxRevisionPasses").asInt();
+            if (root.has("runArchitect")) this.runArchitect = root.get("runArchitect").asBoolean();
+            if (root.has("runPlanner")) this.runPlanner = root.get("runPlanner").asBoolean();
+            if (root.has("runComposer")) this.runComposer = root.get("runComposer").asBoolean();
+            if (root.has("runWriter")) this.runWriter = root.get("runWriter").asBoolean();
+            if (root.has("runObserver")) this.runObserver = root.get("runObserver").asBoolean();
+            if (root.has("runReflector")) this.runReflector = root.get("runReflector").asBoolean();
+            if (root.has("runNormalizer")) this.runNormalizer = root.get("runNormalizer").asBoolean();
+            if (root.has("runAuditor")) this.runAuditor = root.get("runAuditor").asBoolean();
+            if (root.has("runReviser")) this.runReviser = root.get("runReviser").asBoolean();
+        } catch (Exception e) {
+            // Silently ignore reload failures — old config remains valid
+        }
+    }
 }

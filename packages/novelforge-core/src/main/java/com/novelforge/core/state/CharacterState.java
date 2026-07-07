@@ -21,7 +21,7 @@ public class CharacterState {
 
     private final Path filePath;
     private final ObjectMapper mapper;
-    private ObjectNode data;
+    private volatile ObjectNode data;  // fixes #29: volatile for thread-safe reads
 
     public CharacterState(Path filePath, ObjectMapper mapper) {
         this.filePath = filePath;
@@ -29,7 +29,7 @@ public class CharacterState {
         load();
     }
 
-    public void load() {
+    public synchronized void load() {  // fixes #29: synchronized for concurrent access
         try {
             if (Files.exists(filePath)) {
                 JsonNode root = mapper.readTree(Files.newInputStream(filePath));
@@ -50,7 +50,7 @@ public class CharacterState {
         }
     }
 
-    public void save() {
+    public synchronized void save() {  // fixes #29: synchronized
         try {
             Files.createDirectories(filePath.getParent());
             mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
@@ -61,7 +61,7 @@ public class CharacterState {
         }
     }
 
-    public JsonNode getCharacter(String name) {
+    public synchronized JsonNode getCharacter(String name) {  // fixes #29
         JsonNode chars = data.get("characters");
         if (chars == null || !chars.isArray()) return null;
         for (JsonNode c : chars) {
@@ -70,7 +70,7 @@ public class CharacterState {
         return null;
     }
 
-    public void upsertCharacter(String name, JsonNode delta) {
+    public synchronized void upsertCharacter(String name, JsonNode delta) {  // fixes #29
         JsonNode chars = data.get("characters");
         if (chars == null || !chars.isArray()) {
             chars = data.putArray("characters");
@@ -88,8 +88,8 @@ public class CharacterState {
         ((com.fasterxml.jackson.databind.node.ArrayNode) chars).add(delta);
     }
 
-    /** Get human-readable summary for prompt context */
-    public String getSummary() {
+    /** Get human-readable summary for prompt context (fixes #29: synchronized) */
+    public synchronized String getSummary() {
         JsonNode chars = data.get("characters");
         if (chars == null || chars.isEmpty()) return "（暂无角色数据）";
 

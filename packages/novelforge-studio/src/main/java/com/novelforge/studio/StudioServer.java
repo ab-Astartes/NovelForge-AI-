@@ -29,6 +29,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * StudioServer — embedded HTTP server providing the NovelForge Studio Web UI.
@@ -47,6 +50,10 @@ public class StudioServer {
 
     // Pipeline components (configured per-request based on user's API key)
     private PipelineConfig defaultConfig;
+
+    // fixes #28: Configuration hot-reload — watches pipeline.json for changes
+    private final ScheduledExecutorService configWatcher = Executors.newSingleThreadScheduledExecutor();
+    private long configLastModified = 0;
 
     public StudioServer() throws IOException {
         this(DEFAULT_PORT);
@@ -77,11 +84,29 @@ public class StudioServer {
 
     public void start() {
         server.start();
+        // fixes #28: Start config file watcher for hot-reload
+        Path globalConfigFile = Paths.get(System.getProperty("user.home"), "NovelForge", "config", "pipeline.json");
+        if (Files.exists(globalConfigFile)) {
+            try { configLastModified = Files.getLastModifiedTime(globalConfigFile).toMillis(); } catch (Exception e) { /* ignore */ }
+        }
+        configWatcher.scheduleAtFixedRate(() -> {
+            try {
+                if (Files.exists(globalConfigFile)) {
+                    long currentModified = Files.getLastModifiedTime(globalConfigFile).toMillis();
+                    if (currentModified != configLastModified) {
+                        configLastModified = currentModified;
+                        defaultConfig.reloadFromJson(globalConfigFile);
+                        log.info("[Hot-reload] Configuration updated from {}", globalConfigFile);
+                    }
+                }
+            } catch (Exception e) { log.warn("Config watcher error: {}", e.getMessage()); }
+        }, 5, 5, TimeUnit.SECONDS);  // check every 5 seconds
         log.info("NovelForge Studio started at http://localhost:{}", server.getAddress().getPort());
         System.out.println("NovelForge Studio: http://localhost:" + server.getAddress().getPort());
     }
 
     public void stop() {
+        configWatcher.shutdownNow();  // fixes #28: stop watcher on shutdown
         server.stop(0);
         log.info("NovelForge Studio stopped");
     }

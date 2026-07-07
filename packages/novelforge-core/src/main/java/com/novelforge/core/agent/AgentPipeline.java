@@ -45,6 +45,12 @@ public class AgentPipeline {
         // Initialize all agents with the same router
         for (Agent agent : agents) {
             agent.init(router);
+            // fixes #24: If agent declares a model() override, register it with the router
+            // so that getClientForAgent/getModelForAgent will use the per-agent model.
+            // This only registers if no explicit override was already set via CLI or API.
+            if (agent.model() != null) {
+                router.registerAgentModelIfAbsent(agent.name(), agent.model());
+            }
         }
     }
 
