@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.UUID;
 
 /**
@@ -149,32 +148,34 @@ public class BookProject {
             book.setAuthorIntent(Files.readString(intentPath));
         }
 
-        // Load chapters from directory
+        // Load chapters from directory (efficient sorted stream, fixes #10)
         Path chaptersDir = bookDir.resolve("chapters");
         if (Files.exists(chaptersDir)) {
-            for (Path p : Files.newDirectoryStream(chaptersDir, "chapter-*.md")) {
-                String name = p.getFileName().toString();
-                if (name.endsWith(".intent.md")) continue; // skip intent files
-                String numStr = name.replace("chapter-", "").replace(".md", "");
-                try {
-                    int num = Integer.parseInt(numStr);
-                    Chapter ch = new Chapter();
-                    ch.setNumber(num);
-                    ch.setFinalText(Files.readString(p));
+            Files.list(chaptersDir)
+                .filter(p -> p.getFileName().toString().startsWith("chapter-") && p.getFileName().toString().endsWith(".md") && !p.getFileName().toString().endsWith(".intent.md"))
+                .sorted()
+                .forEach(p -> {
+                    String name = p.getFileName().toString();
+                    String numStr = name.replace("chapter-", "").replace(".md", "");
+                    try {
+                        int num = Integer.parseInt(numStr);
+                        Chapter ch = new Chapter();
+                        ch.setNumber(num);
+                        ch.setFinalText(Files.readString(p));
 
-                    // Load intent if exists
-                    Path intentFile = chaptersDir.resolve("chapter-" + numStr + ".intent.md");
-                    if (Files.exists(intentFile)) {
-                        ch.setIntent(Files.readString(intentFile));
+                        // Load intent if exists
+                        Path intentFile = chaptersDir.resolve("chapter-" + numStr + ".intent.md");
+                        if (Files.exists(intentFile)) {
+                            ch.setIntent(Files.readString(intentFile));
+                        }
+
+                        book.getChapters().add(ch);
+                    } catch (NumberFormatException e) {
+                        log.warn("Skipping non-standard chapter file: {}", name);
+                    } catch (java.io.IOException e) {
+                        log.warn("Failed to read chapter file: {}", name, e);
                     }
-
-                    book.getChapters().add(ch);
-                } catch (NumberFormatException e) {
-                    log.warn("Skipping non-standard chapter file: {}", name);
-                }
-            }
-            // Sort chapters by number to guarantee consistent ordering (fixes #10)
-            book.getChapters().sort(Comparator.comparingInt(Chapter::getNumber));
+                });
         }
 
         return book;

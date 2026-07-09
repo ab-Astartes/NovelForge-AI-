@@ -473,20 +473,24 @@ public class PromptBuilder {
         return s == null ? "（未指定）" : s;
     }
 
-    /** Unified truncation — uses MAX_PROMPT_LENGTH for main prompt content (fixes #11) */
-    private String truncate(String text) {
-        if (text != null && text.length() > MAX_PROMPT_LENGTH) {
-            return text.substring(0, MAX_PROMPT_LENGTH) + "\n[...truncated]";
-        }
-        return text != null ? text : "";
-    }
-
-    /** Short-context truncation for sub-sections (fixes #11: replaces all hardcoded limits) */
-    private String truncateShort(String text, int max) {
-        if (text != null && text.length() > max) {
+    /** Unified truncation — truncates to given max length with marker (fixes #11).
+     *  Default: MAX_PROMPT_LENGTH for main content; shorter limits for sub-sections. */
+    private String truncate(String text, int max) {
+        if (text == null || text.isEmpty()) return "";
+        if (text.length() > max) {
             return text.substring(0, max) + "\n[...truncated]";
         }
-        return text != null ? text : "";
+        return text;
+    }
+
+    /** Convenience: truncate to MAX_PROMPT_LENGTH */
+    private String truncate(String text) {
+        return truncate(text, MAX_PROMPT_LENGTH);
+    }
+
+    /** Convenience: truncate to custom short limit */
+    private String truncateShort(String text, int max) {
+        return truncate(text, max);
     }
 
     /**

@@ -1,0 +1,11 @@
+{
+  "key": "scifi",
+  "label": "Sci-Fi",
+  "language": "en",
+  "outlineTemplate": "Discovery → Crisis → Solution at cost → New world order",
+  "tropes": ["AI", "space travel", "dystopia", "first contact", "technology gone wrong"],
+  "avoidanceList": ["hard science without narrative", "tech-magic without explanation"],
+  "namingConvention": "Futuristic or culturally diverse names",
+  "pacingRules": "Discovery chapters slow, crisis chapters fast, resolution balanced",
+  "upgradeSystem": "Tech/knowledge progression: Ignorance → Awareness → Mastery → Innovation"
+}

@@ -63,8 +63,8 @@ public class PipelineRunner {
     public PipelineResult runAuditOnly(Book book, TruthState truthState, String chapterText) {
         PipelineContext context = new PipelineContext(book, truthState, config);
         context.setCurrentChapterDraft(chapterText);
-        // Run only Auditor + Reviser (indexes 7-8)
-        return pipeline.runPartial(context, 7, 8);
+        // Run only Auditor + Reviser
+        return pipeline.runPartialByName(context, "Auditor", "Reviser");
     }
 
     /** Run draft-only pipeline (Architect → Writer, skip quality) */
@@ -76,8 +76,8 @@ public class PipelineRunner {
         }
 
         PipelineContext context = new PipelineContext(book, truthState, config);
-        // Run Architect through Writer (indexes 0-3)
-        PipelineResult result = pipeline.runPartial(context, 0, 3);
+        // Run Architect through Writer
+        PipelineResult result = pipeline.runPartialByName(context, "Architect", "Writer");
 
         if (result.success()) {
             PipelineContext finalContext = result.updatedContext();

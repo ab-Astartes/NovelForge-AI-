@@ -1,0 +1,11 @@
+{
+  "key": "fantasy",
+  "label": "Fantasy",
+  "language": "en",
+  "outlineTemplate": "Hero's journey: Call to adventure → Trials → Growth → Final confrontation",
+  "tropes": ["chosen one", "magic system", "quest", "mentor", "ancient prophecy", "dark lord"],
+  "avoidanceList": ["generic chosen one without twist", "magic without rules"],
+  "namingConvention": "Fantasy naming: evocative, slightly archaic (e.g., Kael, Rowen, Aelith)",
+  "pacingRules": "Slow build in book 1, escalation in book 2, climactic in book 3",
+  "upgradeSystem": "Power progression: Novice → Apprentice → Adept → Master → Legendary"
+}

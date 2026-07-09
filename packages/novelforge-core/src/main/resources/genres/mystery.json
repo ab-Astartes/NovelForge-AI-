@@ -1,0 +1,11 @@
+{
+  "key": "mystery",
+  "label": "Mystery",
+  "language": "en",
+  "outlineTemplate": "Crime/disappearance → Investigation → Red herrings → True reveal",
+  "tropes": ["whodunit", "locked room", "detective", "clues", "false confession", "hidden motive"],
+  "avoidanceList": ["solution revealed too early", "detective with no flaws"],
+  "namingConvention": "Names that could belong to anyone (suspicion on all)",
+  "pacingRules": "Clues distributed evenly. 1 major clue per 3 chapters. False leads every 2 chapters",
+  "upgradeSystem": "Evidence chain: Suspicion → Lead → Clue → Connection → Proof → Reveal"
+}

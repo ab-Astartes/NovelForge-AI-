@@ -1,0 +1,11 @@
+{
+  "key": "romance-en",
+  "label": "Romance",
+  "language": "en",
+  "outlineTemplate": "Meet → Conflict → Growth → Commitment",
+  "tropes": ["meet-cute", "misunderstanding", "slow burn", "grand gesture", "love triangle"],
+  "avoidanceList": ["toxic dynamics portrayed as romantic", "no character growth"],
+  "namingConvention": "Contemporary names reflecting setting",
+  "pacingRules": "Every chapter must advance the relationship or reveal character depth",
+  "upgradeSystem": "Relationship stages: Interest → Attraction → Commitment → Deep love"
+}

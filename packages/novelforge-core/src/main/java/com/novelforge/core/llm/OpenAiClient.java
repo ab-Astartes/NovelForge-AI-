@@ -45,6 +45,7 @@ public class OpenAiClient implements LlmClient {
         this.apiKey = apiKey;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(java.time.Duration.ofSeconds(30))
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
         this.mapper = new ObjectMapper();
     }
@@ -166,16 +167,20 @@ public class OpenAiClient implements LlmClient {
                     .timeout(java.time.Duration.ofMinutes(10))
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            // Real SSE streaming: InputStream line-by-line, invoke onChunk per delta
+            HttpResponse<java.io.InputStream> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() != 200) {
-                handler.onError(new LlmException("API returned " + response.statusCode()));
+                String errorBody = new java.io.BufferedReader(new java.io.InputStreamReader(response.body())).lines().collect(java.util.stream.Collectors.joining("\n"));
+                handler.onError(new LlmException("API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
                 return;
             }
 
-            // Parse SSE lines
             StringBuilder fullText = new StringBuilder();
-            for (String line : response.body().split("\n")) {
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()));
+            String line;
+            while ((line = reader.readLine()) != null) {
                 if (line.startsWith("data: ") && !line.contains("[DONE]")) {
                     String data = line.substring(6).trim();
                     if (data.isEmpty()) continue;
@@ -188,6 +193,7 @@ public class OpenAiClient implements LlmClient {
                     }
                 }
             }
+            reader.close();
             String streamResult = fullText.toString();
             if (streamResult == null || streamResult.trim().isEmpty()) {
                 log.warn("[OpenAiClient] LLM streaming returned empty response");
@@ -196,8 +202,10 @@ public class OpenAiClient implements LlmClient {
                 handler.onComplete(streamResult);
             }
 
-        } catch (Exception e) {
+        } catch (LlmException e) {
             handler.onError(e);
+        } catch (Exception e) {
+            handler.onError(new LlmException("OpenAI streaming failed: " + e.getMessage(), e));
         }
     }
 

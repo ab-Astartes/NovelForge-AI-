@@ -4,7 +4,12 @@ package com.novelforge.core.pipeline;
  * PipelineConfig — configuration for a pipeline run.
  * Controls which agents run, model overrides, length targets, etc.
  */
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class PipelineConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(PipelineConfig.class);
 
     private boolean runArchitect;
     private boolean runPlanner;
@@ -105,7 +110,9 @@ public class PipelineConfig {
             if (root.has("runAuditor")) this.runAuditor = root.get("runAuditor").asBoolean();
             if (root.has("runReviser")) this.runReviser = root.get("runReviser").asBoolean();
         } catch (Exception e) {
-            // Silently ignore reload failures — old config remains valid
+            // Log diagnostic info instead of silently swallowing (tech debt fix)
+            log.error("Failed to reload pipeline config from {}: {}. Old config remains valid.",
+                    configFile, e.getMessage(), e);
         }
     }
 }

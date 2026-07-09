@@ -40,7 +40,7 @@ public class ObserverAgent implements Agent {
             if (chapterDraft == null || chapterDraft.trim().length() < 100) {
                 System.err.println("[ObserverAgent] Draft too short for observation");
                 context.setObserverOutput("[观察跳过: 章节内容过短]");
-                return new PipelineResult(context, context.getObserverOutput(), name(), false);
+                return new PipelineResult(context, context.getObserverOutput(), name());
             }
 
             List<Map<String, String>> messages = promptBuilder.buildObserverPrompt(
@@ -60,7 +60,7 @@ public class ObserverAgent implements Agent {
         } catch (Exception e) {
             System.err.println("[Observer] execute error: " + e.getMessage());
             e.printStackTrace();
-            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
+            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
         }
     }
 }

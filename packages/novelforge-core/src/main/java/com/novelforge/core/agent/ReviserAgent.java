@@ -77,9 +77,9 @@ public class ReviserAgent implements Agent {
             if (draft != null && !draft.trim().isEmpty()) {
                 String lightRevision = lightRevise(draft);
                 context.setCurrentChapterDraft(lightRevision);
-                return new PipelineResult(context, lightRevision, name(), false);
+                return PipelineResult.recovery(context, lightRevision, name(), "Score above threshold, light revision applied");
             }
-            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
+            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
         }
     }
 

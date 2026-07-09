@@ -1,0 +1,11 @@
+{
+  "key": "thriller",
+  "label": "Thriller",
+  "language": "en",
+  "outlineTemplate": "Tension spiral: Normal life disrupted → escalating danger → twist reveal → survival",
+  "tropes": ["conspiracy", "chase", "betrayal", "false lead", "clock ticking", "hidden identity"],
+  "avoidanceList": ["dumb protagonist", "convenience coincidences"],
+  "namingConvention": "Modern realistic names",
+  "pacingRules": "Tight pacing, every chapter must raise stakes. Never let tension drop for more than 1 chapter",
+  "upgradeSystem": "No traditional power system. Escalation through information and stakes"
+}

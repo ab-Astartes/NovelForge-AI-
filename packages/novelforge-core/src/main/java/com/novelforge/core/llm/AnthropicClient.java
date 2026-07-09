@@ -42,6 +42,7 @@ public class AnthropicClient implements LlmClient {
         this.apiKey = apiKey;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(java.time.Duration.ofSeconds(30))
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
         this.mapper = new ObjectMapper();
     }
@@ -198,12 +199,20 @@ public class AnthropicClient implements LlmClient {
                     .timeout(java.time.Duration.ofMinutes(10))
                     .build();
 
-            // Use HttpClient streaming response handler
-            HttpResponse<java.util.stream.Stream<String>> response = httpClient.send(
-                    request, HttpResponse.BodyHandlers.ofLines());
+            // Real SSE streaming: read InputStream line-by-line, invoke handler.onChunk() per delta
+            HttpResponse<java.io.InputStream> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
+
+            if (response.statusCode() != 200) {
+                String errorBody = new java.io.BufferedReader(new java.io.InputStreamReader(response.body())).lines().collect(java.util.stream.Collectors.joining("\n"));
+                handler.onError(new LlmException("Anthropic API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
+                return;
+            }
 
             StringBuilder fullText = new StringBuilder();
-            for (String line : response.body().toList()) {
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()));
+            String line;
+            while ((line = reader.readLine()) != null) {
                 if (line.startsWith("data: ")) {
                     String data = line.substring(6);
                     if (data.equals("[DONE]")) continue;
@@ -228,6 +237,7 @@ public class AnthropicClient implements LlmClient {
                     }
                 }
             }
+            reader.close();
             String streamResult = fullText.toString();
             if (streamResult == null || streamResult.trim().isEmpty()) {
                 log.warn("[AnthropicClient] LLM streaming returned empty response");
@@ -236,8 +246,10 @@ public class AnthropicClient implements LlmClient {
                 handler.onComplete(streamResult);
             }
 
+        } catch (LlmException e) {
+            handler.onError(e);
         } catch (Exception e) {
-            throw new LlmException("Anthropic streaming failed: " + e.getMessage(), e);
+            handler.onError(new LlmException("Anthropic streaming failed: " + e.getMessage(), e));
         }
     }
 

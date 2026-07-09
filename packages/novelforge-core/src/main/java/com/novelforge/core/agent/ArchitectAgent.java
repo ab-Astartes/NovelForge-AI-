@@ -72,7 +72,7 @@ public class ArchitectAgent implements Agent {
         } catch (Exception e) {
             System.err.println("[Architect] execute error: " + e.getMessage());
             e.printStackTrace();
-            return new PipelineResult(context, "[Error] " + e.getMessage(), name(), true);
+            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
         }
     }
 }

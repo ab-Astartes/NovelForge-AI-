@@ -108,7 +108,19 @@ public class AgentPipeline {
         return result;
     }
 
-    /** Run partial pipeline (e.g. draft only, audit only) */
+    /** Run partial pipeline by agent name range (e.g. "Architect" to "Writer", "Auditor" to "Reviser")
+     *  Resolves names to indexes — safer than raw index hardcoding. */
+    public PipelineResult runPartialByName(PipelineContext context, String fromAgent, String toAgent) {
+        int fromIndex = findAgentIndex(fromAgent);
+        int toIndex = findAgentIndex(toAgent);
+        if (fromIndex < 0 || toIndex < 0) {
+            log.error("Unknown agent names: from={} to={}", fromAgent, toAgent);
+            return new PipelineResult("Pipeline", "Unknown agent: " + fromAgent + " or " + toAgent);
+        }
+        return runPartial(context, fromIndex, toIndex);
+    }
+
+    /** Run partial pipeline by index range */
     public PipelineResult runPartial(PipelineContext context, int fromIndex, int toIndex) {
         PipelineContext current = context;
         PipelineResult result = null;
@@ -126,6 +138,14 @@ public class AgentPipeline {
         }
 
         return result;
+    }
+
+    /** Find agent index by name */
+    private int findAgentIndex(String name) {
+        for (int i = 0; i < agents.size(); i++) {
+            if (agents.get(i).name().equalsIgnoreCase(name)) return i;
+        }
+        return -1;
     }
 
     /** Get agent by name */

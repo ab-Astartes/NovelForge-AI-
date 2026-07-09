@@ -27,7 +27,9 @@ public class GenreManager {
         loadBuiltInProfiles();
     }
 
-    /** Load built-in genre profiles from resources */
+    /** Load built-in genre profiles from JSON resource files.
+     *  Falls back to createDefaultProfile() only if resource file is genuinely missing.
+     *  Resource files now exist for all 10 built-in genres. */
     private void loadBuiltInProfiles() {
         String[] builtInKeys = {
             "xuanhuan", "xianxia", "urban", "horror", "romance-zh",
@@ -41,20 +43,22 @@ public class GenreManager {
                 if (is != null) {
                     GenreProfile profile = mapper.readValue(is, GenreProfile.class);
                     profiles.put(key, profile);
-                    log.debug("Loaded built-in genre: {}", key);
+                    log.debug("Loaded genre from resource: {}", key);
+                    is.close();
                 } else {
-                    // Resource file not found — use built-in default profile
-                    log.warn("Genre resource file {} not found, using built-in default for genre: {}", resourcePath, key);
+                    log.warn("Genre resource {} not found, generating default for: {}", resourcePath, key);
                     profiles.put(key, createDefaultProfile(key));
-                    log.debug("Created default genre: {}", key);
                 }
             } catch (Exception e) {
-                log.warn("Failed to load genre {}, creating default", key, e);
+                log.warn("Failed to parse genre {}, generating default: {}", key, e.getMessage());
                 profiles.put(key, createDefaultProfile(key));
             }
         }
 
-        log.info("GenreManager initialized with {} profiles", profiles.size());
+        log.info("GenreManager initialized with {} profiles ({} from resources, {} defaults)",
+                profiles.size(),
+                profiles.values().stream().filter(p -> p.getTropes() != null && p.getTropes().length > 0).count(),
+                profiles.values().stream().filter(p -> p.getTropes() == null || p.getTropes().length == 0).count());
     }
 
     /** Load custom genre from book project config */
