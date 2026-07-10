@@ -20,10 +20,15 @@ public class GenreManager {
 
     private static final Logger log = LoggerFactory.getLogger(GenreManager.class);
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final GenreManager INSTANCE = new GenreManager();
 
     private final Map<String, GenreProfile> profiles = new HashMap<>();
 
-    public GenreManager() {
+    /** Get the singleton instance */
+    public static GenreManager getInstance() { return INSTANCE; }
+
+    /** Private constructor — use getInstance() */
+    private GenreManager() {
         loadBuiltInProfiles();
     }
 

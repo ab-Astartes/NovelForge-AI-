@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.novelforge.core.models.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,8 +96,8 @@ public class OpenAiClient implements LlmClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                log.error("LLM API error: status={}, body={}", response.statusCode(), truncate(response.body(), 500));
-                throw new LlmException("API returned " + response.statusCode() + ": " + truncate(response.body(), 200));
+                log.error("LLM API error: status={}, body={}", response.statusCode(), TextUtils.truncate(response.body(), 500));
+                throw new LlmException("API returned " + response.statusCode() + ": " + TextUtils.truncate(response.body(), 200));
             }
 
             JsonNode root = mapper.readTree(response.body());
@@ -168,32 +169,40 @@ public class OpenAiClient implements LlmClient {
                     .build();
 
             // Real SSE streaming: InputStream line-by-line, invoke onChunk per delta
+            // try-with-resources ensures InputStream closure on all paths
             HttpResponse<java.io.InputStream> response = httpClient.send(
                     request, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() != 200) {
-                String errorBody = new java.io.BufferedReader(new java.io.InputStreamReader(response.body())).lines().collect(java.util.stream.Collectors.joining("\n"));
-                handler.onError(new LlmException("API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
+                try (java.io.InputStream errStream = response.body()) {
+                    String errorBody = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(errStream)).lines()
+                            .collect(java.util.stream.Collectors.joining("\n"));
+                    handler.onError(new LlmException(
+                            "API returned " + response.statusCode() + ": " + TextUtils.truncate(errorBody, 500)));
+                }
                 return;
             }
 
             StringBuilder fullText = new StringBuilder();
-            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("data: ") && !line.contains("[DONE]")) {
-                    String data = line.substring(6).trim();
-                    if (data.isEmpty()) continue;
-                    JsonNode chunk = mapper.readTree(data);
-                    JsonNode delta = chunk.at("/choices/0/delta/content");
-                    if (!delta.isMissingNode() && !delta.isNull()) {
-                        String text = delta.asText();
-                        fullText.append(text);
-                        handler.onChunk(text);
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(response.body()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("data: ") && !line.contains("[DONE]")) {
+                        String data = line.substring(6).trim();
+                        if (data.isEmpty()) continue;
+                        JsonNode chunk = mapper.readTree(data);
+                        JsonNode delta = chunk.at("/choices/0/delta/content");
+                        if (!delta.isMissingNode() && !delta.isNull()) {
+                            String text = delta.asText();
+                            fullText.append(text);
+                            handler.onChunk(text);
+                        }
                     }
                 }
-            }
-            reader.close();
+            } // reader + InputStream auto-closed
+
             String streamResult = fullText.toString();
             if (streamResult == null || streamResult.trim().isEmpty()) {
                 log.warn("[OpenAiClient] LLM streaming returned empty response");
@@ -219,10 +228,5 @@ public class OpenAiClient implements LlmClient {
         ).count();
         int otherCount = text.length() - cjkCount;
         return cjkCount * 3 / 2 + otherCount / 4 + 1;
-    }
-
-    /** Truncate for logging */
-    private String truncate(String s, int max) {
-        return s == null ? "null" : s.length() > max ? s.substring(0, max) + "..." : s;
     }
 }

@@ -9,9 +9,10 @@ public final class TextUtils {
     private TextUtils() {} // no instances
 
     /**
-     * Extract the first complete JSON object from text using bracket matching.
+     * Extract the first complete JSON object or array from text using bracket matching.
      * Handles nested JSON correctly (unlike indexOf('{') + lastIndexOf('}')).
      * Also handles ```json code blocks.
+     * Supports both JSON objects ({...}) and arrays ([...]) (🟡-10).
      */
     public static String extractJsonBlock(String text) {
         if (text == null || text.isEmpty()) return null;
@@ -23,14 +24,21 @@ public final class TextUtils {
             int codeEnd = text.indexOf("```", contentStart);
             if (codeEnd > contentStart) {
                 String block = text.substring(contentStart, codeEnd).trim();
-                // Validate it's a complete JSON object
-                if (block.startsWith("{") && bracketMatched(block)) return block;
+                // Validate it's a complete JSON object or array
+                if ((block.startsWith("{") || block.startsWith("[")) && bracketMatched(block)) return block;
             }
         }
 
-        // Find the first '{' and use bracket matching to find its matching '}'
-        int jsonStart = text.indexOf('{');
-        if (jsonStart < 0) return null;
+        // Find the first '{' or '[' and use bracket matching to find its matching closer
+        int objStart = text.indexOf('{');
+        int arrStart = text.indexOf('[');
+        int jsonStart;
+        char openChar, closeChar;
+
+        if (objStart < 0 && arrStart < 0) return null;
+        if (objStart < 0) { jsonStart = arrStart; openChar = '['; closeChar = ']'; }
+        else if (arrStart < 0) { jsonStart = objStart; openChar = '{'; closeChar = '}'; }
+        else { jsonStart = Math.min(objStart, arrStart); openChar = jsonStart == objStart ? '{' : '['; closeChar = jsonStart == objStart ? '}' : ']'; }
 
         int depth = 0;
         int jsonEnd = -1;
@@ -60,12 +68,13 @@ public final class TextUtils {
                 continue;
             }
 
-            if (c == '{') depth++;
-            else if (c == '}') {
+            // Track both bracket types for nesting inside arrays/objects
+            if (c == '{' || c == '[') depth++;
+            else if (c == '}' || c == ']') {
                 depth--;
                 if (depth == 0) {
                     jsonEnd = i;
-                    break; // found the matching closing brace
+                    break; // found the matching closing bracket
                 }
             }
             prev = c;
@@ -75,7 +84,7 @@ public final class TextUtils {
         return null;
     }
 
-    /** Check if a string has balanced curly braces (quick validation) */
+    /** Check if a string has balanced brackets (both {} and []) */
     private static boolean bracketMatched(String s) {
         int depth = 0;
         boolean inString = false;
@@ -89,8 +98,8 @@ public final class TextUtils {
                 continue;
             }
             if (c == '"') { inString = true; prev = c; continue; }
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
+            if (c == '{' || c == '[') depth++;
+            else if (c == '}' || c == ']') depth--;
             prev = c;
         }
         return depth == 0;

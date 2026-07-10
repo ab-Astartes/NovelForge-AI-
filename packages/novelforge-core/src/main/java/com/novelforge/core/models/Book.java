@@ -50,7 +50,14 @@ public class Book {
         progress.setPassedChapters(0);
 
         for (Chapter ch : chapters) {
-            String text = ch.getFinalText() != null ? ch.getFinalText() : (ch.getDraftText() != null ? ch.getDraftText() : "");
+            String text;
+            if (ch.getFinalText() != null) {
+                text = ch.getFinalText();
+            } else if (ch.getDraftText() != null) {
+                text = ch.getDraftText();
+            } else {
+                text = "";
+            }
             int words = TextUtils.estimateChineseWordCount(text);  // null-safe: text is never null here
             progress.setTotalWords(progress.getTotalWords() + words);
             if (ch.getAuditResult() != null) {

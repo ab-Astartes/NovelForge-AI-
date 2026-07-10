@@ -396,7 +396,7 @@ public class StudioServer {
             config.put("chapterWordsMax", defaultConfig.getChapterWordsMax());
             config.put("auditPassThreshold", defaultConfig.getAuditPassThreshold());
             config.put("maxRevisionPasses", defaultConfig.getMaxRevisionPasses());
-            config.put("genreKeys", new GenreManager().listGenreKeys().toString());
+            config.put("genreKeys", GenreManager.getInstance().listGenreKeys().toString());
             sendJson(exchange, 200, mapper.writeValueAsString(config));
         } else if (exchange.getRequestMethod().equals("POST")) {
             JsonNode body = readBody(exchange);
@@ -528,6 +528,13 @@ public class StudioServer {
             cfg.put("runNormalizer", defaultConfig.isRunNormalizer());
             cfg.put("runAuditor", defaultConfig.isRunAuditor());
             cfg.put("runReviser", defaultConfig.isRunReviser());
+            // LLM defaults (🟡-11: pipeline.json should include model/provider/baseUrl)
+            String envProvider = System.getenv().containsKey("LLM_PROVIDER") ? System.getenv("LLM_PROVIDER") : "openai";
+            String envModel = System.getenv().containsKey("LLM_MODEL") ? System.getenv("LLM_MODEL") : "gpt-4o";
+            String envBaseUrl = System.getenv().containsKey("LLM_BASE_URL") ? System.getenv("LLM_BASE_URL") : "https://api.openai.com/v1";
+            cfg.put("defaultProvider", envProvider);
+            cfg.put("defaultModel", envModel);
+            cfg.put("defaultBaseUrl", envBaseUrl);
             Files.writeString(configDir.resolve("pipeline.json"), mapper.writeValueAsString(cfg));
         } catch (Exception e) {
             log.warn("Failed to save default config: {}", e.getMessage());

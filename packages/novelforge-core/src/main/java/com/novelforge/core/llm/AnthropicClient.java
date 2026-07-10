@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.novelforge.core.models.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,8 +108,8 @@ public class AnthropicClient implements LlmClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                log.error("Anthropic API error: status={}, body={}", response.statusCode(), truncate(response.body(), 500));
-                throw new LlmException("Anthropic API returned " + response.statusCode() + ": " + truncate(response.body(), 200));
+                log.error("Anthropic API error: status={}, body={}", response.statusCode(), TextUtils.truncate(response.body(), 500));
+                throw new LlmException("Anthropic API returned " + response.statusCode() + ": " + TextUtils.truncate(response.body(), 200));
             }
 
             JsonNode root = mapper.readTree(response.body());
@@ -210,7 +211,7 @@ public class AnthropicClient implements LlmClient {
                             new java.io.InputStreamReader(errStream)).lines()
                             .collect(java.util.stream.Collectors.joining("\n"));
                     handler.onError(new LlmException(
-                            "Anthropic API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
+                            "Anthropic API returned " + response.statusCode() + ": " + TextUtils.truncate(errorBody, 500)));
                 }
                 return;
             }
@@ -273,7 +274,5 @@ public class AnthropicClient implements LlmClient {
         return cjkCount * 3 / 2 + otherCount / 4 + 1;
     }
 
-    private String truncate(String s, int max) {
-        return s == null ? "null" : s.length() > max ? s.substring(0, max) + "..." : s;
-    }
 }
+

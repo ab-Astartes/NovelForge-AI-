@@ -54,6 +54,10 @@ public class PipelineRunner {
             log.info("Chapter {} added to book '{}' ({} chars, draft {} chars)",
                     chapter.getNumber(), book.getTitle(), finalText.length(),
                     writerDraft != null ? writerDraft.length() : 0);
+
+            // Save truth state after full pipeline (🟡-7: was missing)
+            truthState.saveAll();
+            log.info("Truth state saved for book '{}' after write pipeline", book.getTitle());
         }
 
         return result;

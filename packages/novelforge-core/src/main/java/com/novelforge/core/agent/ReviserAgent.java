@@ -7,6 +7,7 @@ import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
 import com.novelforge.core.models.RevisionPlan;
 import com.novelforge.core.prompt.PromptBuilder;
+import com.novelforge.core.prompt.PromptBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +64,7 @@ public class ReviserAgent implements Agent {
             LlmClient client = router.getClientForAgent(name());
             String modelId = router.getModelForAgent(name());
 
-            String response = client.chatComplete(messages, modelId, temperature(), 8000);
+            String response = client.chatComplete(messages, modelId, temperature(), PromptBuilder.MAX_PROMPT_LENGTH);
 
             // Replace draft with revised version
             context.setCurrentChapterDraft(response);

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 public class PipelineConfig {
 
     private static final Logger log = LoggerFactory.getLogger(PipelineConfig.class);
+    private static final com.fasterxml.jackson.databind.ObjectMapper SHARED_MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private boolean runArchitect;
     private boolean runPlanner;
@@ -95,7 +96,7 @@ public class PipelineConfig {
         if (configFile == null || !java.nio.file.Files.exists(configFile)) return;
         try {
             com.fasterxml.jackson.databind.JsonNode root =
-                new com.fasterxml.jackson.databind.ObjectMapper().readTree(java.nio.file.Files.newInputStream(configFile));
+                SHARED_MAPPER.readTree(java.nio.file.Files.newInputStream(configFile));
             if (root.has("chapterWordsMin")) this.chapterWordsMin = root.get("chapterWordsMin").asInt();
             if (root.has("chapterWordsMax")) this.chapterWordsMax = root.get("chapterWordsMax").asInt();
             if (root.has("auditPassThreshold")) this.auditPassThreshold = root.get("auditPassThreshold").asDouble();

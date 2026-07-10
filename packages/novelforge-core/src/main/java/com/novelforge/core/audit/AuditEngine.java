@@ -67,6 +67,9 @@ public class AuditEngine {
         DIMENSIONS.put("antiAI.repetitivePatterns", 1.0);
         DIMENSIONS.put("antiAI.genericExpressions", 0.9);
         DIMENSIONS.put("antiAI.overlyBalancedStructure", 0.8);
+        // Freeze: prevent accidental mutation (🟡-6)
+        // We cannot wrap DIMENSIONS itself in unmodifiableMap because the static block
+        // populates it incrementally. Instead, provide an unmodifiable view via getter.
     }
 
     // Repetitive phrase patterns for anti-AI detection

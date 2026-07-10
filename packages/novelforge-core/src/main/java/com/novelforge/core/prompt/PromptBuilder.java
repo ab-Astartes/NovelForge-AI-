@@ -22,7 +22,7 @@ public class PromptBuilder {
     /** Maximum prompt length to prevent LLM token overflow (fixes #11: unified truncation) */
     public static final int MAX_PROMPT_LENGTH = 8000;
 
-    private final GenreManager genreManager = new GenreManager();
+    private final GenreManager genreManager = GenreManager.getInstance();
 
     /**
      * Build messages for Architect agent.
