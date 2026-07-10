@@ -200,44 +200,53 @@ public class AnthropicClient implements LlmClient {
                     .build();
 
             // Real SSE streaming: read InputStream line-by-line, invoke handler.onChunk() per delta
+            // InputStream wrapped in try-with-resources to ensure closure on all paths (fixes 🔴-4)
             HttpResponse<java.io.InputStream> response = httpClient.send(
                     request, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() != 200) {
-                String errorBody = new java.io.BufferedReader(new java.io.InputStreamReader(response.body())).lines().collect(java.util.stream.Collectors.joining("\n"));
-                handler.onError(new LlmException("Anthropic API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
+                try (java.io.InputStream errStream = response.body()) {
+                    String errorBody = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(errStream)).lines()
+                            .collect(java.util.stream.Collectors.joining("\n"));
+                    handler.onError(new LlmException(
+                            "Anthropic API returned " + response.statusCode() + ": " + truncate(errorBody, 500)));
+                }
                 return;
             }
 
             StringBuilder fullText = new StringBuilder();
-            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("data: ")) {
-                    String data = line.substring(6);
-                    if (data.equals("[DONE]")) continue;
-                    try {
-                        JsonNode event = mapper.readTree(data);
-                        String eventType = event.has("type") ? event.get("type").asText() : "";
-                        switch (eventType) {
-                            case "content_block_delta" -> {
-                                JsonNode delta = event.get("delta");
-                                if (delta != null && "text_delta".equals(delta.get("type").asText())) {
-                                    String text = delta.get("text").asText();
-                                    fullText.append(text);
-                                    handler.onChunk(text);
+            // try-with-resources ensures both BufferedReader and underlying InputStream are closed
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(response.body()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("data: ")) {
+                        String data = line.substring(6);
+                        if (data.equals("[DONE]")) continue;
+                        try {
+                            JsonNode event = mapper.readTree(data);
+                            String eventType = event.has("type") ? event.get("type").asText() : "";
+                            switch (eventType) {
+                                case "content_block_delta" -> {
+                                    JsonNode delta = event.get("delta");
+                                    if (delta != null && "text_delta".equals(delta.get("type").asText())) {
+                                        String text = delta.get("text").asText();
+                                        fullText.append(text);
+                                        handler.onChunk(text);
+                                    }
+                                }
+                                case "message_stop" -> {
+                                    // Stream complete
                                 }
                             }
-                            case "message_stop" -> {
-                                // Stream complete
-                            }
+                        } catch (Exception ignored) {
+                            // Malformed SSE line, skip
                         }
-                    } catch (Exception ignored) {
-                        // Malformed SSE line, skip
                     }
                 }
-            }
-            reader.close();
+            } // reader + InputStream auto-closed here
+
             String streamResult = fullText.toString();
             if (streamResult == null || streamResult.trim().isEmpty()) {
                 log.warn("[AnthropicClient] LLM streaming returned empty response");

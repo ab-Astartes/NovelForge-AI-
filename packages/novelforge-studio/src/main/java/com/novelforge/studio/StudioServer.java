@@ -221,6 +221,9 @@ public class StudioServer {
     }
 
     // --- API: Write next chapter ---
+    // ⚠ Known limitation: no async execution. Pipeline can take minutes,
+    // and if client disconnects, LLM calls still consume API tokens.
+    // Future improvement: async job queue with progress polling.
     private void handleWriteApi(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
 

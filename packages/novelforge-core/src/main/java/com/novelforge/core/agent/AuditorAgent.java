@@ -70,22 +70,21 @@ public class AuditorAgent implements Agent {
 
             return new PipelineResult(context, response, name());
         } catch (Exception e) {
-            System.err.println("[Auditor] execute error: " + e.getMessage());
-            e.printStackTrace();
-            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
+            log.error("[{}] execute error: {}", name(), e.getMessage(), e);
+            return new PipelineResult(name(), "Agent exception: " + e.getMessage());
         }
     }
 
-    /** Parse LLM's JSON audit output into AuditResult object, then overlay objective checks */
+    /** Parse LLM's JSON audit output into AuditResult object, then overlay objective checks.
+     *  Overall score uses AuditEngine's 33-dimension weights (not simple average).
+     *  Rule-engine dimensions override LLM scores for objective metrics. */
     private AuditResult parseAuditResult(String llmOutput, String chapterText) {
-        // Parse LLM JSON audit output into AuditResult
         AuditResult result = new AuditResult();
-        result.setOverallScore(7.0); // fallback if parsing fails
+        result.setOverallScore(7.0);
         result.setPass(true);
         result.setCriticalIssues(new java.util.ArrayList<>());
         result.setWarnings(new java.util.ArrayList<>());
 
-        // Try to extract JSON from response
         try {
             String json = TextUtils.extractJsonBlock(llmOutput);
             if (json != null) {
@@ -97,11 +96,6 @@ public class AuditorAgent implements Agent {
                     root.get("scores").fields().forEachRemaining(entry ->
                             scores.put(entry.getKey(), entry.getValue().asDouble()));
                     result.setDimensionScores(scores);
-
-                    // Calculate overall score (simple average of LLM dimensions — rule-engine will be overlaid later)
-                    double total = 0;
-                    for (double s : scores.values()) total += s;
-                    result.setOverallScore(scores.isEmpty() ? 7.0 : total / scores.size());
                 }
 
                 if (root.has("criticalIssues")) {
@@ -121,7 +115,7 @@ public class AuditorAgent implements Agent {
             log.warn("Failed to parse audit JSON, using defaults", e);
         }
 
-        // Overlay objective rule-engine checks from AuditEngine
+        // Overlay objective rule-engine checks
         AuditResult objectiveCheck = auditEngine.quickAudit(chapterText);
         Map<String, Double> scores = result.getDimensionScores();
         if (scores != null && !scores.isEmpty()) {
@@ -136,28 +130,26 @@ public class AuditorAgent implements Agent {
                     }
                 }
             }
-            // Recalculate overall score with 60/40 weighting (fixes #8: LLM 60% + rule-engine 40%)
-            double llmTotal = 0, ruleTotal = 0;
-            int llmCount = 0, ruleCount = 0;
-            for (var entry : scores.entrySet()) {
-                String dim = entry.getKey();
-                double s = entry.getValue();
-                if (dim.startsWith("pacing.") || dim.startsWith("dialogue.") || dim.startsWith("world.") || dim.startsWith("outline.") || dim.startsWith("style.") || dim.startsWith("hook.")) {
-                    llmTotal += s; llmCount++;
-                } else {
-                    ruleTotal += s; ruleCount++;
-                }
+            // Fill missing dimensions with default 7.0
+            for (String dim : AuditEngine.dimensionNames()) {
+                scores.putIfAbsent(dim, 7.0);
             }
-            double llmAvg = llmCount > 0 ? llmTotal / llmCount : 7.0;
-            double ruleAvg = ruleCount > 0 ? ruleTotal / ruleCount : 7.0;
-            result.setOverallScore(scores.isEmpty() ? 7.0 : (llmAvg * 0.6) + (ruleAvg * 0.4));
+            // Calculate weighted overall score using AuditEngine's 33-dimension weights
+            // (not simple average — each dimension has its own weight)
+            double totalWeight = 0, totalScore = 0;
+            for (String dim : AuditEngine.dimensionNames()) {
+                double weight = AuditEngine.getDimensionWeight(dim);
+                double score = scores.getOrDefault(dim, 7.0);
+                totalScore += score * weight;
+                totalWeight += weight;
+            }
+            result.setOverallScore(totalWeight > 0 ? totalScore / totalWeight : 7.0);
         } else if (objectiveCheck.getDimensionScores() != null) {
-            // LLM parsing completely failed — use objective results as full fallback
             result.setDimensionScores(objectiveCheck.getDimensionScores());
             result.setOverallScore(objectiveCheck.getOverallScore());
             result.setPass(objectiveCheck.isPass());
         }
-        // Add objective issues/warnings to LLM's list
+        // Add objective issues/warnings
         if (objectiveCheck.getCriticalIssues() != null) {
             result.getCriticalIssues().addAll(objectiveCheck.getCriticalIssues());
             if (!objectiveCheck.getCriticalIssues().isEmpty()) result.setPass(false);

@@ -38,8 +38,11 @@ public class PipelineResult {
         this.updatedContext = null;
     }
 
-    /** Recovery result: agent hit a non-fatal error but still produced usable output.
-     *  Context is preserved for downstream agents to continue. */
+    /** Recovery result: agent hit a non-fatal issue but still produced usable output.
+     *  Context is preserved for downstream agents to continue.
+     *  IMPORTANT: Only use when the output is genuinely usable (e.g. audit passed, light revision applied).
+     *  Do NOT use for hard errors (API failure, exception) — those should use the error constructor
+     *  so the pipeline stops rather than propagating garbage text. */
     public static PipelineResult recovery(PipelineContext context, String partialText, String agent, String warning) {
         PipelineResult r = new PipelineResult(context, partialText, agent);
         r.errorMessage = warning; // non-null but success=true indicates partial success
@@ -54,4 +57,7 @@ public class PipelineResult {
     public String errorMessage() { return errorMessage; }
     /** Has non-fatal warning (success=true but something suboptimal happened) */
     public boolean hasWarning() { return success && errorMessage != null; }
+
+    /** Is this a hard failure that should stop the pipeline? (success=false) */
+    public boolean isHardFailure() { return !success; }
 }

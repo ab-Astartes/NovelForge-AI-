@@ -296,4 +296,9 @@ public class AuditEngine {
     public static String[] dimensionNames() {
         return DIMENSIONS.keySet().toArray(new String[0]);
     }
+
+    /** Get weight for a specific dimension */
+    public static double getDimensionWeight(String dim) {
+        return DIMENSIONS.getOrDefault(dim, 0.7); // default weight for unknown dimensions
+    }
 }

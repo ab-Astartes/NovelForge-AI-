@@ -58,9 +58,8 @@ public class ObserverAgent implements Agent {
 
             return new PipelineResult(context, response, name());
         } catch (Exception e) {
-            System.err.println("[Observer] execute error: " + e.getMessage());
-            e.printStackTrace();
-            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
+            log.error("[{}] execute error: {}", name(), e.getMessage(), e);
+            return new PipelineResult(name(), "Agent exception: " + e.getMessage());
         }
     }
 }

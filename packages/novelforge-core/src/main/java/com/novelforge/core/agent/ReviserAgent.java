@@ -71,15 +71,17 @@ public class ReviserAgent implements Agent {
 
             return new PipelineResult(context, response, name());
         } catch (Exception e) {
-            System.err.println("[ReviserAgent] execute error: " + e.getMessage());
-            e.printStackTrace();
+            log.error("[{}] execute error: {}", name(), e.getMessage(), e);
+            // If we have a draft, apply light revision as best-effort fallback
             String draft = context.getCurrentChapterDraft();
             if (draft != null && !draft.trim().isEmpty()) {
                 String lightRevision = lightRevise(draft);
                 context.setCurrentChapterDraft(lightRevision);
-                return PipelineResult.recovery(context, lightRevision, name(), "Score above threshold, light revision applied");
+                return PipelineResult.recovery(context, lightRevision, name(),
+                        "Reviser exception, light whitespace normalization applied as fallback: " + e.getMessage());
             }
-            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
+            // No draft available — hard failure
+            return new PipelineResult(name(), "Reviser exception: " + e.getMessage());
         }
     }
 

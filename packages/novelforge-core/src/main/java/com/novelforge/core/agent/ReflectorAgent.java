@@ -54,15 +54,22 @@ public class ReflectorAgent implements Agent {
 
             String response = client.chatComplete(messages, modelId, temperature(), 1500);
 
-            // Parse response into HookOp list + state patches, then apply
-            List<HookOp> hookOps = parseHookOps(response);
+            // Parse LLM response once and reuse the parsed tree
+            String json = TextUtils.extractJsonBlock(response);
+            com.fasterxml.jackson.databind.JsonNode root = null;
+            if (json != null) {
+                root = mapper.readTree(json);
+            }
+
+            // Parse hookOps + state patches + timeline events from single parsed JSON
+            List<HookOp> hookOps = parseHookOps(root);
             context.getTruthState().applyHookOps(hookOps);
 
             // Apply character and world deltas from the response
-            applyStateDeltas(response, context);
+            applyStateDeltas(root, context);
 
             // Add timeline events
-            applyTimelineEvents(response, context);
+            applyTimelineEvents(root, context);
 
             // Store reflector output in dedicated field
             context.setReflectorOutput(response);
@@ -70,20 +77,16 @@ public class ReflectorAgent implements Agent {
 
             return new PipelineResult(context, response, name());
         } catch (Exception e) {
-            System.err.println("[Reflector] execute error: " + e.getMessage());
-            e.printStackTrace();
-            return PipelineResult.recovery(context, "[Error] " + e.getMessage(), name(), "Agent exception: " + e.getMessage());
+            log.error("[{}] execute error: {}", name(), e.getMessage(), e);
+            return new PipelineResult(name(), "Agent exception: " + e.getMessage());
         }
     }
 
-    /** Parse hookOps from LLM JSON response */
-    private List<HookOp> parseHookOps(String llmOutput) {
+    /** Parse hookOps from pre-parsed JSON tree */
+    private List<HookOp> parseHookOps(com.fasterxml.jackson.databind.JsonNode root) {
         List<HookOp> ops = new ArrayList<>();
+        if (root == null) return ops;
         try {
-            String json = TextUtils.extractJsonBlock(llmOutput);
-            if (json == null) return ops;
-
-            JsonNode root = mapper.readTree(json);
             JsonNode hookOpsNode = root.get("hookOps");
             if (hookOpsNode == null || !hookOpsNode.isArray()) return ops;
 
@@ -112,13 +115,10 @@ public class ReflectorAgent implements Agent {
         return ops;
     }
 
-    /** Apply character deltas to TruthState */
-    private void applyStateDeltas(String llmOutput, PipelineContext context) {
+    /** Apply character deltas to TruthState from pre-parsed JSON tree */
+    private void applyStateDeltas(com.fasterxml.jackson.databind.JsonNode root, PipelineContext context) {
+        if (root == null) return;
         try {
-            String json = TextUtils.extractJsonBlock(llmOutput);
-            if (json == null) return;
-
-            JsonNode root = mapper.readTree(json);
             JsonNode statePatch = root.get("statePatch");
             if (statePatch == null) return;
 
@@ -152,13 +152,10 @@ public class ReflectorAgent implements Agent {
         }
     }
 
-    /** Add timeline events from Reflector output */
-    private void applyTimelineEvents(String llmOutput, PipelineContext context) {
+    /** Add timeline events from pre-parsed JSON tree */
+    private void applyTimelineEvents(com.fasterxml.jackson.databind.JsonNode root, PipelineContext context) {
+        if (root == null) return;
         try {
-            String json = TextUtils.extractJsonBlock(llmOutput);
-            if (json == null) return;
-
-            JsonNode root = mapper.readTree(json);
             JsonNode statePatch = root.get("statePatch");
             if (statePatch == null) return;
 
