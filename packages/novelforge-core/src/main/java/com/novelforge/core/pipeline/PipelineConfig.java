@@ -91,12 +91,13 @@ public class PipelineConfig {
     public void setMaxRevisionPasses(int v) { this.maxRevisionPasses = v; }
 
     /** Hot-reload config from a JSON file (fixes #28: configuration hot-update).
-     *  Reads the file and updates all fields, preserving any that are missing in the JSON. */
+     *  Reads the file and updates all fields, preserving any that are missing in the JSON.
+     *  Also fixes InputStream leak in original implementation. */
     public void reloadFromJson(java.nio.file.Path configFile) {
         if (configFile == null || !java.nio.file.Files.exists(configFile)) return;
         try {
-            com.fasterxml.jackson.databind.JsonNode root =
-                SHARED_MAPPER.readTree(java.nio.file.Files.newInputStream(configFile));
+            String configStr = java.nio.file.Files.readString(configFile, java.nio.charset.StandardCharsets.UTF_8);
+            com.fasterxml.jackson.databind.JsonNode root = SHARED_MAPPER.readTree(configStr);
             if (root.has("chapterWordsMin")) this.chapterWordsMin = root.get("chapterWordsMin").asInt();
             if (root.has("chapterWordsMax")) this.chapterWordsMax = root.get("chapterWordsMax").asInt();
             if (root.has("auditPassThreshold")) this.auditPassThreshold = root.get("auditPassThreshold").asDouble();
@@ -111,7 +112,7 @@ public class PipelineConfig {
             if (root.has("runAuditor")) this.runAuditor = root.get("runAuditor").asBoolean();
             if (root.has("runReviser")) this.runReviser = root.get("runReviser").asBoolean();
         } catch (Exception e) {
-            // Log diagnostic info instead of silently swallowing (tech debt fix)
+            // Log diagnostic info instead of silently swallowing
             log.error("Failed to reload pipeline config from {}: {}. Old config remains valid.",
                     configFile, e.getMessage(), e);
         }

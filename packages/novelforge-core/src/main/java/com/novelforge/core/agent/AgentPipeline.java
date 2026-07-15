@@ -83,6 +83,12 @@ public class AgentPipeline {
             log.info("=== Running agent: {} ===", agent.name());
             try {
                 result = agent.execute(current);
+                // 🟡-5 fix: Check for hard failure — updatedContext() returns null on error,
+                // which would cause NPE on next agent's execute()
+                if (result.isHardFailure()) {
+                    log.error("Agent {} hard failure: {}", agent.name(), result.errorMessage());
+                    return result; // Stop pipeline immediately
+                }
                 current = result.updatedContext();
                 log.info("Agent {} completed successfully", agent.name());
             } catch (Exception e) {
@@ -130,6 +136,10 @@ public class AgentPipeline {
             log.info("=== Running agent: {} (partial pipeline {}-{}) ===", agent.name(), fromIndex, toIndex);
             try {
                 result = agent.execute(current);
+                if (result.isHardFailure()) {
+                    log.error("Agent {} hard failure in partial pipeline", agent.name());
+                    return result;
+                }
                 current = result.updatedContext();
             } catch (Exception e) {
                 log.error("Agent {} failed", agent.name(), e);

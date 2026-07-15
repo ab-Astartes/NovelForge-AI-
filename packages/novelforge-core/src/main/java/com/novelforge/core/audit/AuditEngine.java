@@ -23,53 +23,52 @@ public class AuditEngine {
     private static final Logger log = LoggerFactory.getLogger(AuditEngine.class);
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    // 33 audit dimensions (name → weight)
-    private static final Map<String, Double> DIMENSIONS = new LinkedHashMap<>();
+    // 33 audit dimensions (name → weight) — unmodifiable after static init (🟢-3)
+    private static final Map<String, Double> DIMENSIONS;
 
     static {
+        LinkedHashMap<String, Double> dims = new LinkedHashMap<>();
         // Pacing (5)
-        DIMENSIONS.put("pacing.flow", 1.0);
-        DIMENSIONS.put("pacing.variation", 0.8);
-        DIMENSIONS.put("pacing.tensionCurve", 1.0);
-        DIMENSIONS.put("pacing.sceneLengthBalance", 0.7);
-        DIMENSIONS.put("pacing.transitionSmoothness", 0.7);
+        dims.put("pacing.flow", 1.0);
+        dims.put("pacing.variation", 0.8);
+        dims.put("pacing.tensionCurve", 1.0);
+        dims.put("pacing.sceneLengthBalance", 0.7);
+        dims.put("pacing.transitionSmoothness", 0.7);
         // Dialogue (5)
-        DIMENSIONS.put("dialogue.naturalness", 1.0);
-        DIMENSIONS.put("dialogue.characterVoice", 1.0);
-        DIMENSIONS.put("dialogue.subtext", 0.8);
-        DIMENSIONS.put("dialogue.tagVariety", 0.6);
-        DIMENSIONS.put("dialogue.actionBeats", 0.7);
+        dims.put("dialogue.naturalness", 1.0);
+        dims.put("dialogue.characterVoice", 1.0);
+        dims.put("dialogue.subtext", 0.8);
+        dims.put("dialogue.tagVariety", 0.6);
+        dims.put("dialogue.actionBeats", 0.7);
         // World-building (5)
-        DIMENSIONS.put("world.consistency", 1.0);
-        DIMENSIONS.put("world.detailLevel", 0.8);
-        DIMENSIONS.put("world.sensoryImmersion", 0.8);
-        DIMENSIONS.put("world.powerSystemLogic", 0.9);
-        DIMENSIONS.put("world.settingFreshness", 0.7);
+        dims.put("world.consistency", 1.0);
+        dims.put("world.detailLevel", 0.8);
+        dims.put("world.sensoryImmersion", 0.8);
+        dims.put("world.powerSystemLogic", 0.9);
+        dims.put("world.settingFreshness", 0.7);
         // Outline adherence (5)
-        DIMENSIONS.put("outline.chapterIntentMatch", 1.0);
-        DIMENSIONS.put("outline.hookFulfillment", 1.0);
-        DIMENSIONS.put("outline.progressionDirection", 0.9);
-        DIMENSIONS.put("outline.characterArcAlignment", 0.8);
-        DIMENSIONS.put("outline.plotTwistSetup", 0.7);
+        dims.put("outline.chapterIntentMatch", 1.0);
+        dims.put("outline.hookFulfillment", 1.0);
+        dims.put("outline.progressionDirection", 0.9);
+        dims.put("outline.characterArcAlignment", 0.8);
+        dims.put("outline.plotTwistSetup", 0.7);
         // Style consistency (5)
-        DIMENSIONS.put("style.vocabularyConsistency", 0.7);
-        DIMENSIONS.put("style.sentenceVariety", 0.7);
-        DIMENSIONS.put("style.toneConsistency", 0.8);
-        DIMENSIONS.put("style.genreVoice", 0.8);
-        DIMENSIONS.put("style.descriptionBalance", 0.7);
+        dims.put("style.vocabularyConsistency", 0.7);
+        dims.put("style.sentenceVariety", 0.7);
+        dims.put("style.toneConsistency", 0.8);
+        dims.put("style.genreVoice", 0.8);
+        dims.put("style.descriptionBalance", 0.7);
         // Hook health (5)
-        DIMENSIONS.put("hook.mustAdvanceHandled", 1.0);
-        DIMENSIONS.put("hook.newHooksPlanted", 0.8);
-        DIMENSIONS.put("hook.staleDebt", 1.0);
-        DIMENSIONS.put("hook.burstDetection", 0.9);
-        DIMENSIONS.put("hook.resolutionQuality", 0.9);
+        dims.put("hook.mustAdvanceHandled", 1.0);
+        dims.put("hook.newHooksPlanted", 0.8);
+        dims.put("hook.staleDebt", 1.0);
+        dims.put("hook.burstDetection", 0.9);
+        dims.put("hook.resolutionQuality", 0.9);
         // Anti-AI detection (3)
-        DIMENSIONS.put("antiAI.repetitivePatterns", 1.0);
-        DIMENSIONS.put("antiAI.genericExpressions", 0.9);
-        DIMENSIONS.put("antiAI.overlyBalancedStructure", 0.8);
-        // Freeze: prevent accidental mutation (🟡-6)
-        // We cannot wrap DIMENSIONS itself in unmodifiableMap because the static block
-        // populates it incrementally. Instead, provide an unmodifiable view via getter.
+        dims.put("antiAI.repetitivePatterns", 1.0);
+        dims.put("antiAI.genericExpressions", 0.9);
+        dims.put("antiAI.overlyBalancedStructure", 0.8);
+        DIMENSIONS = Collections.unmodifiableMap(dims);
     }
 
     // Repetitive phrase patterns for anti-AI detection

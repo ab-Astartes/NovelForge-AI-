@@ -69,15 +69,16 @@ public class StudioServer {
         server.createContext("/", this::serveStatic);
 
         // API endpoints
-        server.createContext("/api/books", this::handleBooksApi);
-        server.createContext("/api/book/create", this::handleBookCreate);
-        server.createContext("/api/book/info", this::handleBookInfo);
-        server.createContext("/api/write", this::handleWriteApi);
-        server.createContext("/api/audit", this::handleAuditApi);
-        server.createContext("/api/state", this::handleStateApi);
-        server.createContext("/api/export", this::handleExportApi);
-        server.createContext("/api/config", this::handleConfigApi);
-        server.createContext("/api/progress", this::handleProgressApi);
+        // API endpoints with CORS support
+        server.createContext("/api/books", this::corsThenBooksApi);
+        server.createContext("/api/book/create", this::corsThenBookCreate);
+        server.createContext("/api/book/info", this::corsThenBookInfo);
+        server.createContext("/api/write", this::corsThenWriteApi);
+        server.createContext("/api/audit", this::corsThenAuditApi);
+        server.createContext("/api/state", this::corsThenStateApi);
+        server.createContext("/api/export", this::corsThenExportApi);
+        server.createContext("/api/config", this::corsThenConfigApi);
+        server.createContext("/api/progress", this::corsThenProgressApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
     }
@@ -154,17 +155,21 @@ public class StudioServer {
 
         ArrayNode books = mapper.createArrayNode();
         if (Files.exists(booksRoot)) {
-            for (Path p : Files.newDirectoryStream(booksRoot)) {
-                if (Files.exists(p.resolve("book.json"))) {
-                    try {
-                        JsonNode bookJson = mapper.readTree(Files.newInputStream(p.resolve("book.json")));
-                        ObjectNode item = mapper.createObjectNode();
-                        item.put("title", bookJson.get("title").asText());
-                        item.put("genre", bookJson.get("genre").asText());
-                        item.put("path", p.toString());
-                        item.put("chapters", bookJson.has("chapters") ? bookJson.get("chapters").size() : 0);
-                        books.add(item);
-                    } catch (Exception e) { log.warn("Failed to read book at {}", p); }
+            try (java.nio.file.DirectoryStream<Path> dirStream = Files.newDirectoryStream(booksRoot)) {
+                for (Path p : dirStream) {
+                    Path bookJsonPath = p.resolve("book.json");
+                    if (Files.exists(bookJsonPath)) {
+                        try {
+                            String jsonStr = Files.readString(bookJsonPath, StandardCharsets.UTF_8);
+                            JsonNode bookJson = mapper.readTree(jsonStr);
+                            ObjectNode item = mapper.createObjectNode();
+                            item.put("title", bookJson.get("title").asText());
+                            item.put("genre", bookJson.get("genre").asText());
+                            item.put("path", p.toString());
+                            item.put("chapters", bookJson.has("chapters") ? bookJson.get("chapters").size() : 0);
+                            books.add(item);
+                        } catch (Exception e) { log.warn("Failed to read book at {}", p); }
+                    }
                 }
             }
         }
@@ -354,28 +359,28 @@ public class StudioServer {
     }
 
     // --- API: Export ---
+    // 🟡-7 fix: use core BookExporter for proper EPUB/TXT/MD generation
     private void handleExportApi(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
 
         JsonNode body = readBody(exchange);
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         String format = body.has("format") ? body.get("format").asText() : "txt";
+        String coverPath = body.has("cover") ? body.get("cover").asText() : null;
 
         if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
 
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
-            StringBuilder content = new StringBuilder();
-            content.append("# ").append(book.getTitle()).append("\n\n");
-            for (Chapter ch : book.getChapters()) {
-                String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
-                if (text == null) continue;
-                content.append("## 第").append(ch.getNumber()).append("章\n\n").append(text).append("\n\n");
-            }
-
             String ext = format.equals("epub") ? "epub" : format.equals("md") ? "md" : "txt";
             Path outputPath = Paths.get(bookPath).resolve(book.getTitle() + "." + ext);
-            Files.writeString(outputPath, content.toString());
+
+            switch (format.toLowerCase()) {
+                case "txt" -> com.novelforge.core.export.BookExporter.exportTxt(book, outputPath);
+                case "md"  -> com.novelforge.core.export.BookExporter.exportMd(book, outputPath);
+                case "epub" -> com.novelforge.core.export.BookExporter.exportEpub(book, outputPath, coverPath);
+                default -> { sendJson(exchange, 400, "{\"error\":\"unsupported format\"}"); return; }
+            }
 
             ObjectNode response = mapper.createObjectNode();
             response.put("status", "ok");
@@ -469,25 +474,8 @@ public class StudioServer {
     private PipelineConfig loadConfig(Path bookDir) {
         Path configFile = bookDir.resolve("config/pipeline.json");
         PipelineConfig config = new PipelineConfig();
-        if (Files.exists(configFile)) {
-            try {
-                JsonNode root = mapper.readTree(Files.newInputStream(configFile));
-                if (root.has("chapterWordsMin")) config.setChapterWordsMin(root.get("chapterWordsMin").asInt());
-                if (root.has("chapterWordsMax")) config.setChapterWordsMax(root.get("chapterWordsMax").asInt());
-                if (root.has("auditPassThreshold")) config.setAuditPassThreshold(root.get("auditPassThreshold").asDouble());
-                if (root.has("maxRevisionPasses")) config.setMaxRevisionPasses(root.get("maxRevisionPasses").asInt());
-                // Agent toggles
-                if (root.has("runArchitect")) config.setRunArchitect(root.get("runArchitect").asBoolean());
-                if (root.has("runPlanner")) config.setRunPlanner(root.get("runPlanner").asBoolean());
-                if (root.has("runComposer")) config.setRunComposer(root.get("runComposer").asBoolean());
-                if (root.has("runWriter")) config.setRunWriter(root.get("runWriter").asBoolean());
-                if (root.has("runObserver")) config.setRunObserver(root.get("runObserver").asBoolean());
-                if (root.has("runReflector")) config.setRunReflector(root.get("runReflector").asBoolean());
-                if (root.has("runNormalizer")) config.setRunNormalizer(root.get("runNormalizer").asBoolean());
-                if (root.has("runAuditor")) config.setRunAuditor(root.get("runAuditor").asBoolean());
-                if (root.has("runReviser")) config.setRunReviser(root.get("runReviser").asBoolean());
-            } catch (Exception e) { log.warn("Failed to load pipeline config"); }
-        }
+        // 🟡-4 fix: use shared reloadFromJson instead of duplicating the parsing logic
+        config.reloadFromJson(configFile);
         return config;
     }
 
@@ -502,11 +490,27 @@ public class StudioServer {
 
     private void sendJson(HttpExchange exchange, int code, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        addCorsHeaders(exchange);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(code, bytes.length);
         OutputStream os = exchange.getResponseBody();
         os.write(bytes);
         os.close();
+    }
+
+    /** Add CORS headers for cross-origin requests (fixes 🔴-3: all POST endpoints blocked by browser CORS) */
+    private void addCorsHeaders(HttpExchange exchange) {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+        exchange.getResponseHeaders().set("Access-Control-Max-Age", "86400");
+    }
+
+    /** Handle CORS preflight OPTIONS requests */
+    private void handleCorsPreflight(HttpExchange exchange) throws IOException {
+        addCorsHeaders(exchange);
+        exchange.sendResponseHeaders(204, -1); // 204 No Content for preflight
+        exchange.getResponseBody().close();
     }
 
     /** Persist defaultConfig to ~/.NovelForge/config/pipeline.json */
@@ -539,6 +543,44 @@ public class StudioServer {
         } catch (Exception e) {
             log.warn("Failed to save default config: {}", e.getMessage());
         }
+    }
+
+    // --- CORS wrappers: handle OPTIONS preflight, then dispatch to real handler ---
+    private void corsThenBooksApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleBooksApi(ex);
+    }
+    private void corsThenBookCreate(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleBookCreate(ex);
+    }
+    private void corsThenBookInfo(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleBookInfo(ex);
+    }
+    private void corsThenWriteApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleWriteApi(ex);
+    }
+    private void corsThenAuditApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleAuditApi(ex);
+    }
+    private void corsThenStateApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleStateApi(ex);
+    }
+    private void corsThenExportApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleExportApi(ex);
+    }
+    private void corsThenConfigApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleConfigApi(ex);
+    }
+    private void corsThenProgressApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        handleProgressApi(ex);
     }
 
     /** Main entry for Studio standalone launch */

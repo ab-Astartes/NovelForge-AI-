@@ -9,8 +9,6 @@ import com.novelforge.core.state.TruthState;
 import com.novelforge.core.pipeline.PipelineConfig;
 import com.novelforge.core.pipeline.PipelineRunner;
 import com.novelforge.core.llm.ModelRouter;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,6 +88,10 @@ public class WriteCommand {
                         if (book.getChapters() == null || book.getChapters().isEmpty()) {
                             System.err.println("❌ Pipeline reported success but no chapter was added");
                             return;
+                        }
+                        // 🟡-6 fix: show warning info for recovery results
+                        if (result.hasWarning()) {
+                            System.out.println("⚠️ Warning: " + result.errorMessage());
                         }
                         // Save chapter to disk
                         Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
@@ -263,28 +265,8 @@ public class WriteCommand {
     private PipelineConfig loadPipelineConfig(Path bookDir) {
         Path configFile = bookDir.resolve("config/pipeline.json");
         PipelineConfig config = new PipelineConfig();
-        if (Files.exists(configFile)) {
-            try {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode root = mapper.readTree(Files.newInputStream(configFile));
-                if (root.has("chapterWordsMin")) config.setChapterWordsMin(root.get("chapterWordsMin").asInt());
-                if (root.has("chapterWordsMax")) config.setChapterWordsMax(root.get("chapterWordsMax").asInt());
-                if (root.has("auditPassThreshold")) config.setAuditPassThreshold(root.get("auditPassThreshold").asDouble());
-                if (root.has("maxRevisionPasses")) config.setMaxRevisionPasses(root.get("maxRevisionPasses").asInt());
-                // Agent toggles
-                if (root.has("runArchitect")) config.setRunArchitect(root.get("runArchitect").asBoolean());
-                if (root.has("runPlanner")) config.setRunPlanner(root.get("runPlanner").asBoolean());
-                if (root.has("runComposer")) config.setRunComposer(root.get("runComposer").asBoolean());
-                if (root.has("runWriter")) config.setRunWriter(root.get("runWriter").asBoolean());
-                if (root.has("runObserver")) config.setRunObserver(root.get("runObserver").asBoolean());
-                if (root.has("runReflector")) config.setRunReflector(root.get("runReflector").asBoolean());
-                if (root.has("runNormalizer")) config.setRunNormalizer(root.get("runNormalizer").asBoolean());
-                if (root.has("runAuditor")) config.setRunAuditor(root.get("runAuditor").asBoolean());
-                if (root.has("runReviser")) config.setRunReviser(root.get("runReviser").asBoolean());
-            } catch (Exception e) {
-                System.err.println("Warning: Failed to load pipeline config, using defaults");
-            }
-        }
+        // 🟡-4 fix: use shared reloadFromJson instead of duplicating the parsing logic
+        config.reloadFromJson(configFile);
         return config;
     }
 

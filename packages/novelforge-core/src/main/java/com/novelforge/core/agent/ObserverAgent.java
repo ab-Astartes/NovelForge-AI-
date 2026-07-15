@@ -38,7 +38,7 @@ public class ObserverAgent implements Agent {
 
             // Skip observation for very short drafts
             if (chapterDraft == null || chapterDraft.trim().length() < 100) {
-                System.err.println("[ObserverAgent] Draft too short for observation");
+                log.warn("Draft too short for observation");
                 context.setObserverOutput("[观察跳过: 章节内容过短]");
                 return new PipelineResult(context, context.getObserverOutput(), name());
             }
