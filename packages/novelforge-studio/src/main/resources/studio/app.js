@@ -2,6 +2,45 @@
 
 const API = '';  // same origin
 
+// 🟡-1: Auth token — auto-set on page load from startup message
+let AUTH_TOKEN = '';
+
+// 🟢-1: Shared LLM config — single source for all panels
+const sharedConfig = {
+  apiKey: '',
+  baseUrl: 'https://api.openai.com/v1',
+  modelId: 'gpt-4o'
+};
+
+function syncConfigToUI() {
+  document.querySelectorAll('.shared-api-key').forEach(el => el.value = sharedConfig.apiKey);
+  document.querySelectorAll('.shared-base-url').forEach(el => el.value = sharedConfig.baseUrl);
+  document.querySelectorAll('.shared-model-id').forEach(el => el.value = sharedConfig.modelId);
+}
+
+function syncConfigFromUI(sourceId) {
+  sharedConfig.apiKey = document.getElementById(sourceId + '-api-key')?.value?.trim() || sharedConfig.apiKey;
+  sharedConfig.baseUrl = document.getElementById(sourceId + '-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  sharedConfig.modelId = document.getElementById(sourceId + '-model-id')?.value?.trim() || sharedConfig.modelId;
+  syncConfigToUI();
+}
+
+// 🟢-2: Safe path encoding for HTML onclick
+function safePath(path) {
+  return path.replace(/\\/g, '/');
+}
+
+function authHeaders() {
+  const headers = { 'Content-Type': 'application/json' };  
+  if (AUTH_TOKEN) headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+  return headers;
+}
+
+function authUrl(url) {
+  if (!AUTH_TOKEN) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'token=' + AUTH_TOKEN;
+}
+
 // ========== Navigation ==========
 function showPanel(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -37,9 +76,9 @@ async function createBook() {
   if (!title) { showResult(resultDiv, '请输入书名', true); return; }
 
   try {
-    const res = await fetch(API + '/api/book/create', {
+    const res = await fetch(authUrl(API + '/api/book/create'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ title, genre, author })
     });
     const data = await res.json();
@@ -67,13 +106,13 @@ const GENRE_LABELS = {
 async function loadBooks() {
   const listDiv = document.getElementById('books-list');
   try {
-    const res = await fetch(API + '/api/books');
+    const res = await fetch(authUrl(API + '/api/books'), { headers: authHeaders() });
     const books = await res.json();
     if (books.length === 0) {
       listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">书阁空空，先开卷创作吧</p>';
     } else {
       listDiv.innerHTML = books.map(b => `
-        <div class="book-card" onclick="selectBook('${b.path}')">
+        <div class="book-card" onclick="selectBook('${safePath(b.path)}')">
           <div class="card-title">${b.title}</div>
           <div class="card-genre">${GENRE_LABELS[b.genre] || b.genre}</div>
           <div class="card-meta">
@@ -103,7 +142,7 @@ function selectBook(path) {
 async function populateBookSelects(books) {
   if (!books) {
     try {
-      const res = await fetch(API + '/api/books');
+      const res = await fetch(authUrl(API + '/api/books'), { headers: authHeaders() });
       books = await res.json();
     } catch (e) { return; }
   }
@@ -112,7 +151,7 @@ async function populateBookSelects(books) {
     const sel = document.getElementById(id);
     if (!sel) return;
     sel.innerHTML = books.map(b =>
-      `<option value="${b.path}">${b.title} · ${GENRE_LABELS[b.genre] || b.genre}</option>`
+      `<option value="${safePath(b.path)}">${b.title} · ${GENRE_LABELS[b.genre] || b.genre}</option>`
     ).join('');
   });
 }
@@ -157,9 +196,16 @@ function markStepCompleted(agentName) {
 async function writeChapter() {
   const bookPath = document.getElementById('write-book').value;
   const mode = document.getElementById('write-mode').value;
-  const apiKey = document.getElementById('api-key').value.trim();
-  const baseUrl = document.getElementById('base-url').value.trim();
-  const modelId = document.getElementById('model-id').value.trim();
+  // 🟢-1: Read from shared config fields (write panel)
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+
+  // Sync back to shared config
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
   const progressDiv = document.getElementById('write-progress');
   const resultDiv = document.getElementById('write-result');
   const btnWrite = document.getElementById('btn-write');
@@ -193,17 +239,23 @@ async function writeChapter() {
   }, 5000);
 
   try {
-    const res = await fetch(API + '/api/write', {
+    const res = await fetch(authUrl(API + '/api/write'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ path: bookPath, mode, apiKey, baseUrl, model: modelId })
     });
     const data = await res.json();
 
     clearInterval(stepTimer);
-    progressDiv.textContent = '';
 
-    // Mark all remaining steps as completed
+    // 🟡-2: Handle async job response
+    if (data.jobId) {
+      pollWriteJob(data.jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
+      return;
+    }
+
+    // Legacy sync fallback
+    progressDiv.textContent = '';
     agents.forEach(a => markStepCompleted(a));
 
     if (data.status === 'ok') {
@@ -238,11 +290,13 @@ async function showChapterPreview(bookPath, chapterNum) {
   const statsDiv = document.getElementById('chapter-stats');
 
   try {
-    const infoRes = await fetch(API + `/api/book/info?path=${encodeURIComponent(bookPath)}`);
+    const infoRes = await fetch(authUrl(API + `/api/book/info?path=${encodeURIComponent(bookPath)}`), {
+      headers: authHeaders()
+    });
     const info = await infoRes.json();
 
     // Load the chapter from books list
-    const booksRes = await fetch(API + '/api/books');
+    const booksRes = await fetch(authUrl(API + '/api/books'), { headers: authHeaders() });
     const books = await booksRes.json();
 
     preview.style.display = 'block';
@@ -261,9 +315,15 @@ async function showChapterPreview(bookPath, chapterNum) {
 async function auditChapter() {
   const bookPath = document.getElementById('audit-book').value;
   const chapterNum = document.getElementById('audit-chapter').value;
-  const apiKey = document.getElementById('audit-api-key').value.trim();
-  const baseUrl = document.getElementById('audit-base-url').value.trim();
-  const modelId = document.getElementById('audit-model').value.trim();
+  const apiKey = document.getElementById('audit-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('audit-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('audit-model-id')?.value?.trim() || sharedConfig.modelId;
+
+  // Sync
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
   const progressDiv = document.getElementById('audit-progress');
 
   if (!bookPath) { return; }
@@ -272,9 +332,9 @@ async function auditChapter() {
   progressDiv.innerHTML = '<span class="spinner"></span> 33维审阅运行中…';
 
   try {
-    const res = await fetch(API + '/api/audit', {
+    const res = await fetch(authUrl(API + '/api/audit'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         path: bookPath,
         chapter: chapterNum ? parseInt(chapterNum) : null,
@@ -367,12 +427,16 @@ async function loadState() {
 
   try {
     // Load state
-    const stateRes = await fetch(API + `/api/state?path=${encodeURIComponent(bookPath)}&type=${type}`);
+    const stateRes = await fetch(authUrl(API + `/api/state?path=${encodeURIComponent(bookPath)}&type=${type}`), {
+      headers: authHeaders()
+    });
     const stateData = await stateRes.json();
     content.textContent = stateData.summary || '无数据';
 
     // Load progress stats
-    const progRes = await fetch(API + `/api/progress?path=${encodeURIComponent(bookPath)}`);
+    const progRes = await fetch(authUrl(API + `/api/progress?path=${encodeURIComponent(bookPath)}`), {
+      headers: authHeaders()
+    });
     const progData = await progRes.json();
 
     statsRow.style.display = 'grid';
@@ -395,9 +459,9 @@ async function exportBook() {
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
 
   try {
-    const res = await fetch(API + '/api/export', {
+    const res = await fetch(authUrl(API + '/api/export'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ path: bookPath, format })
     });
     const data = await res.json();
@@ -464,9 +528,9 @@ async function saveConfig() {
   });
 
   try {
-    const res = await fetch(API + '/api/config', {
+    const res = await fetch(authUrl(API + '/api/config'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(body)
     });
     const data = await res.json();
@@ -476,10 +540,70 @@ async function saveConfig() {
   }
 }
 
+// ========== 🟡-2: Async Write Job Polling ==========
+async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath) {
+  let stepIndex = 0;
+  const completedAgents = [];
+
+  const poll = async () => {
+    try {
+      const res = await fetch(authUrl(API + `/api/write/status?jobId=${jobId}`), { headers: authHeaders() });
+      const data = await res.json();
+
+      // Update step animation based on progress
+      const progressStep = Math.floor(data.progress / 100 * agents.length);
+      while (stepIndex < progressStep && stepIndex < agents.length) {
+        if (stepIndex > 0) markStepCompleted(agents[stepIndex - 1]);
+        markStepRunning(agents[stepIndex]);
+        stepIndex++;
+      }
+
+      progressDiv.innerHTML = `<span class="spinner"></span> 进度 ${data.progress}% · ${data.elapsedSeconds}s`;
+
+      if (data.status === 'completed') {
+        // Mark all steps completed
+        agents.forEach(a => markStepCompleted(a));
+        progressDiv.textContent = '';
+
+        let resultData;
+        try { resultData = JSON.parse(data.result || '{}'); } catch { resultData = {}; }
+
+        let msg = '✦ 章已成！';
+        if (resultData.warning) msg += ` · ⚠ ${resultData.warning}`;
+        showResult(resultDiv, msg, false);
+
+        // Auto-cleanup job reference
+        btnWrite.disabled = false;
+        btnWrite.textContent = '落笔！';
+        return;
+      }
+
+      if (data.status === 'failed') {
+        resetPipelineSteps();
+        progressDiv.textContent = '';  
+        showResult(resultDiv, '✗ ' + (data.error || '写作失败'), true);
+        btnWrite.disabled = false;
+        btnWrite.textContent = '落笔！';
+        return;
+      }
+
+      // Still running — poll again in 3s
+      setTimeout(poll, 3000);
+    } catch (e) {
+      resetPipelineSteps();
+      showResult(resultDiv, '✗ 轮询失败: ' + e.message, true);
+      btnWrite.disabled = false;
+      btnWrite.textContent = '落笔！';
+    }
+  };
+
+  poll();
+}
+
 // ========== Load Config ==========
 async function loadConfig() {
   try {
-    const res = await fetch(API + '/api/config');
+    const res = await fetch(authUrl(API + '/api/config'), { headers: authHeaders() });
     const data = await res.json();
 
     document.getElementById('cfg-min-words').value = data.chapterWordsMin || 2000;

@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * StudioServer — embedded HTTP server providing the NovelForge Studio Web UI.
@@ -48,12 +49,31 @@ public class StudioServer {
     private final Path booksRoot;
     private final ConcurrentHashMap<String, String> apiKeys = new ConcurrentHashMap<>();
 
+    // 🟡-1: Simple auth token for local Studio access
+    private final String authToken;
+
     // Pipeline components (configured per-request based on user's API key)
     private PipelineConfig defaultConfig;
 
     // fixes #28: Configuration hot-reload — watches pipeline.json for changes
     private final ScheduledExecutorService configWatcher = Executors.newSingleThreadScheduledExecutor();
     private long configLastModified = 0;
+
+    // 🟡-2: Async write job queue — clients submit a job, then poll for progress
+    private final ConcurrentHashMap<String, WriteJob> writeJobs = new ConcurrentHashMap<>();
+    private final AtomicLong jobIdCounter = new AtomicLong(0);
+    private final ScheduledExecutorService writeExecutor = Executors.newScheduledThreadPool(2);
+
+    /** Async write job record */
+    private static class WriteJob {
+        final String jobId;
+        volatile String status = "pending"; // pending, running, completed, failed
+        volatile String result = null;
+        volatile String error = null;
+        volatile int progress = 0; // 0-100
+        volatile long startTime = System.currentTimeMillis();
+        WriteJob(String jobId) { this.jobId = jobId; }
+    }
 
     public StudioServer() throws IOException {
         this(DEFAULT_PORT);
@@ -63,17 +83,20 @@ public class StudioServer {
         this.booksRoot = Paths.get(System.getProperty("user.home"), "NovelForge", "books");
         Files.createDirectories(booksRoot);
         this.defaultConfig = new PipelineConfig();
+        // 🟡-1: Generate random auth token for local API access
+        this.authToken = generateToken();
         this.server = HttpServer.create(new InetSocketAddress("localhost", port), 0);
 
         // Static frontend
         server.createContext("/", this::serveStatic);
 
         // API endpoints
-        // API endpoints with CORS support
+        // API endpoints with CORS + auth
         server.createContext("/api/books", this::corsThenBooksApi);
         server.createContext("/api/book/create", this::corsThenBookCreate);
         server.createContext("/api/book/info", this::corsThenBookInfo);
         server.createContext("/api/write", this::corsThenWriteApi);
+        server.createContext("/api/write/status", this::corsThenWriteStatusApi);  // 🟡-2: job status polling
         server.createContext("/api/audit", this::corsThenAuditApi);
         server.createContext("/api/state", this::corsThenStateApi);
         server.createContext("/api/export", this::corsThenExportApi);
@@ -104,10 +127,12 @@ public class StudioServer {
         }, 5, 5, TimeUnit.SECONDS);  // check every 5 seconds
         log.info("NovelForge Studio started at http://localhost:{}", server.getAddress().getPort());
         System.out.println("NovelForge Studio: http://localhost:" + server.getAddress().getPort());
+        System.out.println("Auth token: " + authToken);  // 🟡-1: show token for frontend to use
     }
 
     public void stop() {
-        configWatcher.shutdownNow();  // fixes #28: stop watcher on shutdown
+        configWatcher.shutdownNow();
+        writeExecutor.shutdownNow();  // 🟡-2: stop write executor on shutdown
         server.stop(0);
         log.info("NovelForge Studio stopped");
     }
@@ -225,10 +250,8 @@ public class StudioServer {
         }
     }
 
-    // --- API: Write next chapter ---
-    // ⚠ Known limitation: no async execution. Pipeline can take minutes,
-    // and if client disconnects, LLM calls still consume API tokens.
-    // Future improvement: async job queue with progress polling.
+    // --- API: Write next chapter (async 🟡-2) ---
+    // Submit returns a jobId immediately; client polls /api/write/status?jobId=<id> for progress
     private void handleWriteApi(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
 
@@ -242,39 +265,84 @@ public class StudioServer {
         if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
         if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
-        try {
-            Book book = BookProject.loadBook(Paths.get(bookPath));
-            TruthState state = new TruthState(Paths.get(bookPath));
-            PipelineConfig config = loadConfig(Paths.get(bookPath));
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
-            PipelineRunner runner = new PipelineRunner(config, router);
+        // Create async job
+        String jobId = "job-" + jobIdCounter.incrementAndGet();
+        WriteJob job = new WriteJob(jobId);
+        writeJobs.put(jobId, job);
 
-            PipelineResult result;
-            if (mode.equals("draft")) {
-                result = runner.runDraftOnly(book, state);
-            } else {
-                result = runner.writeNextChapter(book, state);
-            }
+        // Submit to background executor
+        writeExecutor.submit(() -> {
+            job.status = "running";
+            job.progress = 10;
+            try {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                TruthState state = new TruthState(Paths.get(bookPath));
+                PipelineConfig config = loadConfig(Paths.get(bookPath));
+                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+                PipelineRunner runner = new PipelineRunner(config, router);
 
-            ObjectNode response = mapper.createObjectNode();
-            response.put("status", result.success() ? "ok" : "error");
-            if (result.success()) {
-                Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
-                Path bookDir = Paths.get(bookPath);
-                BookProject.saveChapter(bookDir, chapter);
-                BookProject.saveBookMetadata(bookDir, book);
-                response.put("chapterNumber", chapter.getNumber());
-                response.put("length", chapter.getFinalText() != null ? chapter.getFinalText().length() : 0);
-                if (chapter.getAuditResult() != null) {
-                    response.put("auditScore", chapter.getAuditResult().getOverallScore());
+                job.progress = 30;
+                PipelineResult result;
+                if (mode.equals("draft")) {
+                    result = runner.runDraftOnly(book, state);
+                } else {
+                    result = runner.writeNextChapter(book, state);
                 }
-            } else {
-                response.put("error", sanitizeForJson(result.errorMessage()));
+
+                job.progress = 80;
+                if (result.success()) {
+                    Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                    Path bookDir = Paths.get(bookPath);
+                    BookProject.saveChapter(bookDir, chapter);
+                    BookProject.saveBookMetadata(bookDir, book);
+                    if (result.hasWarning()) {
+                        job.result = "{\"status\":\"ok\",\"warning\":\"" + sanitizeForJson(result.errorMessage()) + "\"}";
+                    } else {
+                        job.result = "{\"status\":\"ok\"}";
+                    }
+                    job.progress = 100;
+                    job.status = "completed";
+                } else {
+                    job.error = result.errorMessage();
+                    job.status = "failed";
+                }
+            } catch (Exception e) {
+                job.error = e.getMessage();
+                job.status = "failed";
             }
-            sendJson(exchange, 200, mapper.writeValueAsString(response));
-        } catch (Exception e) {
-            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        });
+
+        // Return jobId immediately
+        ObjectNode response = mapper.createObjectNode();
+        response.put("jobId", jobId);
+        response.put("status", "pending");
+        sendJson(exchange, 200, mapper.writeValueAsString(response));
+    }
+
+    // --- API: Write job status polling (🟡-2) ---
+    private void handleWriteStatusApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+
+        String query = exchange.getRequestURI().getQuery();
+        String jobId = getQueryParam(query, "jobId");
+        if (jobId == null) { sendJson(exchange, 400, "{\"error\":\"jobId required\"}"); return; }
+
+        WriteJob job = writeJobs.get(jobId);
+        if (job == null) { sendJson(exchange, 404, "{\"error\":\"job not found\"}"); return; }
+
+        ObjectNode response = mapper.createObjectNode();
+        response.put("jobId", job.jobId);
+        response.put("status", job.status);
+        response.put("progress", job.progress);
+        response.put("elapsedSeconds", (System.currentTimeMillis() - job.startTime) / 1000);
+        if (job.result != null) response.put("result", job.result);
+        if (job.error != null) response.put("error", sanitizeForJson(job.error));
+        // Auto-cleanup completed/failed jobs after 5 minutes
+        if (job.status.equals("completed") || job.status.equals("failed")) {
+            long elapsed = System.currentTimeMillis() - job.startTime;
+            if (elapsed > 300_000) writeJobs.remove(jobId);
         }
+        sendJson(exchange, 200, mapper.writeValueAsString(response));
     }
 
     // --- API: Audit ---
@@ -498,6 +566,37 @@ public class StudioServer {
         os.close();
     }
 
+    /** 🟡-1: Generate a random 16-char token for local API authentication */
+    private String generateToken() {
+        StringBuilder sb = new StringBuilder(16);
+        for (int i = 0; i < 16; i++) {
+            sb.append((char) ('A' + (int) (Math.random() * 26)));
+        }
+        return sb.toString();
+    }
+
+    /** 🟡-1: Validate auth token from request header or query param */
+    private boolean validateAuth(HttpExchange exchange) {
+        // Check Authorization header: Bearer <token>
+        String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7).equals(authToken);
+        }
+        // Check query param: ?token=<token>
+        String query = exchange.getRequestURI().getQuery();
+        String tokenParam = getQueryParam(query, "token");
+        if (tokenParam != null) {
+            return tokenParam.equals(authToken);
+        }
+        // Static resources and OPTIONS don't need auth
+        return false;
+    }
+
+    /** 🟡-1: Send 401 Unauthorized */
+    private void sendUnauthorized(HttpExchange exchange) throws IOException {
+        sendJson(exchange, 401, "{\"error\":\"authentication required — provide token via Authorization header or ?token param\"}");
+    }
+
     /** Add CORS headers for cross-origin requests (fixes 🔴-3: all POST endpoints blocked by browser CORS) */
     private void addCorsHeaders(HttpExchange exchange) {
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
@@ -548,39 +647,53 @@ public class StudioServer {
     // --- CORS wrappers: handle OPTIONS preflight, then dispatch to real handler ---
     private void corsThenBooksApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleBooksApi(ex);
     }
     private void corsThenBookCreate(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleBookCreate(ex);
     }
     private void corsThenBookInfo(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleBookInfo(ex);
     }
     private void corsThenWriteApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleWriteApi(ex);
     }
     private void corsThenAuditApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleAuditApi(ex);
     }
     private void corsThenStateApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleStateApi(ex);
     }
     private void corsThenExportApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleExportApi(ex);
     }
     private void corsThenConfigApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleConfigApi(ex);
     }
     private void corsThenProgressApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleProgressApi(ex);
+    }
+    private void corsThenWriteStatusApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleWriteStatusApi(ex);
     }
 
     /** Main entry for Studio standalone launch */
