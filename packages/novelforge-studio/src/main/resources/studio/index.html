@@ -3,193 +3,387 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NovelForge Studio</title>
+<title>墨阁 · NovelForge Studio</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=ZCOOL+QingKe+HuangYou&display=swap" rel="stylesheet">
 </head>
 <body>
+<div class="ink-texture"></div>
+
 <div id="app">
-  <header>
-    <h1>🔥 NovelForge Studio</h1>
-    <p class="subtitle">AI 小说创作引擎</p>
+  <!-- Header -->
+  <header class="header">
+    <div class="logo-area">
+      <span class="logo-brush">墨</span><span class="logo-dot">·</span><span class="logo-sub">阁</span>
+    </div>
+    <p class="header-desc">AI 网文创作引擎 · 九重炼章</p>
+    <div class="header-stats">
+      <span class="stat-pill"><span class="stat-icon">📜</span> 9 Agent</span>
+      <span class="stat-pill"><span class="stat-icon">🎯</span> 33维审计</span>
+      <span class="stat-pill"><span class="stat-icon">📖</span> 10流派</span>
+    </div>
   </header>
 
-  <nav>
-    <button onclick="showPanel('create')" class="nav-btn active" id="nav-create">创建</button>
-    <button onclick="showPanel('books')" class="nav-btn" id="nav-books">书库</button>
-    <button onclick="showPanel('write')" class="nav-btn" id="nav-write">写作</button>
-    <button onclick="showPanel('audit')" class="nav-btn" id="nav-audit">审计</button>
-    <button onclick="showPanel('state')" class="nav-btn" id="nav-state">状态</button>
-    <button onclick="showPanel('config')" class="nav-btn" id="nav-config">配置</button>
-    <button onclick="showPanel('progress')" class="nav-btn" id="nav-progress">进度</button>
+  <!-- Nav -->
+  <nav class="nav-bar">
+    <button onclick="showPanel('create')" class="nav-tab active" id="nav-create">
+      <span class="nav-icon">✦</span> 开卷
+    </button>
+    <button onclick="showPanel('books')" class="nav-tab" id="nav-books">
+      <span class="nav-icon">📚</span> 书阁
+    </button>
+    <button onclick="showPanel('write')" class="nav-tab" id="nav-write">
+      <span class="nav-icon">✒️</span> 落笔
+    </button>
+    <button onclick="showPanel('audit')" class="nav-tab" id="nav-audit">
+      <span class="nav-icon">🔍</span> 审阅
+    </button>
+    <button onclick="showPanel('state')" class="nav-tab" id="nav-state">
+      <span class="nav-icon">🌐</span> 世界
+    </button>
+    <button onclick="showPanel('config')" class="nav-tab" id="nav-config">
+      <span class="nav-icon">⚙</span> 炼炉
+    </button>
   </nav>
 
-  <!-- Create Book -->
+  <!-- ========== 开卷：创建新书 ========== -->
   <section id="panel-create" class="panel active">
-    <h2>创建新书</h2>
-    <div class="form-group">
-      <label>书名</label>
-      <input type="text" id="book-title" placeholder="输入小说标题">
+    <div class="panel-header">
+      <h2 class="panel-title">开卷有益</h2>
+      <p class="panel-desc">新建一本小说项目，选择流派与题材</p>
     </div>
-    <div class="form-group">
-      <label>题材</label>
-      <select id="book-genre">
-        <option value="xuanhuan">玄幻</option>
-        <option value="xianxia">仙侠</option>
-        <option value="urban">都市</option>
-        <option value="horror">恐怖</option>
-        <option value="romance-zh">言情</option>
-        <option value="fantasy">Fantasy</option>
-        <option value="thriller">Thriller</option>
-        <option value="romance-en">Romance</option>
-        <option value="scifi">Sci-Fi</option>
-        <option value="mystery">Mystery</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>作者</label>
-      <input type="text" id="book-author" placeholder="作者名（可选）">
-    </div>
-    <button onclick="createBook()" class="btn-primary">创建项目</button>
-    <div id="create-result" class="result"></div>
-  </section>
 
-  <!-- Books List -->
-  <section id="panel-books" class="panel">
-    <h2>书库</h2>
-    <button onclick="loadBooks()" class="btn-secondary">刷新</button>
-    <div id="books-list"></div>
-    <div id="export-section" style="margin-top:16px">
-      <div class="form-group">
-        <label>导出书籍</label>
-        <select id="export-book"></select>
+    <div class="form-grid">
+      <div class="form-group wide">
+        <label class="form-label">书名</label>
+        <input type="text" id="book-title" class="input-field" placeholder="输入小说标题">
       </div>
       <div class="form-group">
-        <label>格式</label>
-        <select id="export-format">
-          <option value="txt">TXT</option>
-          <option value="md">Markdown</option>
-          <option value="epub">EPUB</option>
+        <label class="form-label">题材流派</label>
+        <select id="book-genre" class="input-field">
+          <option value="xuanhuan">玄幻 · 修真升级</option>
+          <option value="xianxia">仙侠 · 仙途飞升</option>
+          <option value="urban">都市 · 逆袭崛起</option>
+          <option value="horror">恐怖 · 诡异求生</option>
+          <option value="romance-zh">言情 · 缱绻情深</option>
+          <option value="fantasy">Fantasy · 西幻征途</option>
+          <option value="thriller">Thriller · 悬疑惊悚</option>
+          <option value="romance-en">Romance · 英伦情缘</option>
+          <option value="scifi">Sci-Fi · 未来纪元</option>
+          <option value="mystery">Mystery · 探案推理</option>
         </select>
       </div>
-      <button onclick="exportBook()" class="btn-primary">导出</button>
-      <div id="export-result" class="result"></div>
+      <div class="form-group">
+        <label class="form-label">作者（可选）</label>
+        <input type="text" id="book-author" class="input-field" placeholder="笔名">
+      </div>
+    </div>
+
+    <button onclick="createBook()" class="btn-ink">开卷创作</button>
+    <div id="create-result" class="result-box"></div>
+  </section>
+
+  <!-- ========== 书阁：书库管理 ========== -->
+  <section id="panel-books" class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">书阁藏书</h2>
+      <p class="panel-desc">管理你的小说项目</p>
+      <button onclick="loadBooks()" class="btn-ghost btn-sm">刷新 ↻</button>
+    </div>
+
+    <div id="books-list" class="books-grid"></div>
+
+    <div class="export-section">
+      <h3 class="sub-title">导出成书</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">选择书籍</label>
+          <select id="export-book" class="input-field"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">格式</label>
+          <select id="export-format" class="input-field">
+            <option value="txt">TXT · 纯文本</option>
+            <option value="md">Markdown · 标记</option>
+            <option value="epub">EPUB · 电子书</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
+      <div id="export-result" class="result-box"></div>
     </div>
   </section>
 
-  <!-- Write Chapter -->
+  <!-- ========== 落笔：写作 ========== -->
   <section id="panel-write" class="panel">
-    <h2>写作</h2>
-    <div class="form-group">
-      <label>选择书籍</label>
-      <select id="write-book"></select>
+    <div class="panel-header">
+      <h2 class="panel-title">落笔成章</h2>
+      <p class="panel-desc">九重炼章流水线：构思→计划→编排→书写→观察→反思→润色→审查→修订</p>
     </div>
-    <div class="form-group">
-      <label>模式</label>
-      <select id="write-mode">
-        <option value="next">完整流水线（9 Agent）</option>
-        <option value="draft">仅草稿（4 Agent）</option>
-      </select>
+
+    <!-- Pipeline Steps Visualization -->
+    <div id="pipeline-steps" class="pipeline-track">
+      <div class="step-node" data-agent="Architect">
+        <div class="step-icon">🏛</div>
+        <div class="step-label">构思</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Planner">
+        <div class="step-icon">📋</div>
+        <div class="step-label">计划</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Composer">
+        <div class="step-icon">🎼</div>
+        <div class="step-label">编排</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Writer">
+        <div class="step-icon">✒️</div>
+        <div class="step-label">书写</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Observer">
+        <div class="step-icon">👁</div>
+        <div class="step-label">观察</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Reflector">
+        <div class="step-icon">🪞</div>
+        <div class="step-label">反思</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Normalizer">
+        <div class="step-icon">⚖</div>
+        <div class="step-label">润色</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Auditor">
+        <div class="step-icon">🔍</div>
+        <div class="step-label">审查</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" data-agent="Reviser">
+        <div class="step-icon">🔧</div>
+        <div class="step-label">修订</div>
+        <div class="step-bar"></div>
+      </div>
     </div>
-    <div class="form-group">
-      <label>API Key</label>
-      <input type="password" id="api-key" placeholder="sk-xxx">
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="write-book" class="input-field"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">模式</label>
+        <select id="write-mode" class="input-field">
+          <option value="next">完整九重炼章</option>
+          <option value="draft">草稿速写（4 Agent）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input type="password" id="api-key" class="input-field" placeholder="sk-xxx">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Base URL</label>
+        <input type="text" id="base-url" class="input-field" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">模型</label>
+        <input type="text" id="model-id" class="input-field" value="gpt-4o" placeholder="gpt-4o">
+      </div>
     </div>
-    <div class="form-group">
-      <label>Base URL</label>
-      <input type="text" id="base-url" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+
+    <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
+    <div id="write-progress" class="progress-indicator"></div>
+    <div id="write-result" class="result-box"></div>
+
+    <!-- Chapter Preview -->
+    <div id="chapter-preview" class="chapter-preview" style="display:none">
+      <h3 class="sub-title">最新章节预览</h3>
+      <div id="chapter-text" class="chapter-text-content"></div>
+      <div id="chapter-stats" class="chapter-meta"></div>
     </div>
-    <div class="form-group">
-      <label>模型</label>
-      <input type="text" id="model-id" placeholder="gpt-4o" value="gpt-4o">
-    </div>
-    <button onclick="writeChapter()" class="btn-primary">开始写作</button>
-    <div id="write-progress" class="progress"></div>
-    <div id="write-result" class="result"></div>
   </section>
 
-  <!-- Audit Chapter -->
+  <!-- ========== 审阅：质量审计 ========== -->
   <section id="panel-audit" class="panel">
-    <h2>质量审计</h2>
-    <div class="form-group">
-      <label>选择书籍</label>
-      <select id="audit-book"></select>
+    <div class="panel-header">
+      <h2 class="panel-title">审阅定稿</h2>
+      <p class="panel-desc">33维质量审计 + 修订引擎</p>
     </div>
-    <div class="form-group">
-      <label>章节号</label>
-      <input type="number" id="audit-chapter" placeholder="留空 = 最后一章">
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="audit-book" class="input-field"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">章节号（留空=最后一章）</label>
+        <input type="number" id="audit-chapter" class="input-field" placeholder="自动">
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input type="password" id="audit-api-key" class="input-field" placeholder="sk-xxx">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Base URL</label>
+        <input type="text" id="audit-base-url" class="input-field" value="https://api.openai.com/v1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">模型</label>
+        <input type="text" id="audit-model" class="input-field" value="gpt-4o">
+      </div>
     </div>
-    <div class="form-group">
-      <label>API Key</label>
-      <input type="password" id="audit-api-key" placeholder="sk-xxx">
+
+    <button onclick="auditChapter()" class="btn-ink">审阅</button>
+    <div id="audit-progress" class="progress-indicator"></div>
+
+    <!-- Audit Result Visualization -->
+    <div id="audit-result-area" style="display:none">
+      <div class="audit-summary-bar">
+        <div class="audit-score-display">
+          <span class="audit-score-label">总分</span>
+          <span id="audit-total-score" class="audit-score-value">0.0</span>
+          <span class="audit-score-max">/10</span>
+        </div>
+        <div id="audit-pass-badge" class="pass-badge">未通过</div>
+      </div>
+
+      <!-- Dimension Score Grid -->
+      <div id="audit-dim-grid" class="dim-grid"></div>
+
+      <!-- Critical Issues -->
+      <div id="audit-issues" class="issues-section"></div>
     </div>
-    <div class="form-group">
-      <label>Base URL</label>
-      <input type="text" id="audit-base-url" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
-    </div>
-    <div class="form-group">
-      <label>模型</label>
-      <input type="text" id="audit-model" placeholder="gpt-4o" value="gpt-4o">
-    </div>
-    <button onclick="auditChapter()" class="btn-primary">开始审计</button>
-    <pre id="audit-result" class="state-view"></pre>
   </section>
 
-  <!-- State View -->
+  <!-- ========== 世界：状态查看 ========== -->
   <section id="panel-state" class="panel">
-    <h2>状态查看</h2>
-    <div class="form-group">
-      <label>选择书籍</label>
-      <select id="state-book"></select>
+    <div class="panel-header">
+      <h2 class="panel-title">世界观</h2>
+      <p class="panel-desc">角色、世界观、悬念、时间线状态</p>
     </div>
-    <div class="form-group">
-      <label>类型</label>
-      <select id="state-type">
-        <option value="all">全部</option>
-        <option value="characters">角色</option>
-        <option value="world">世界观</option>
-        <option value="hooks">悬念</option>
-      </select>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="state-book" class="input-field"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">类型</label>
+        <select id="state-type" class="input-field">
+          <option value="all">全部</option>
+          <option value="characters">角色</option>
+          <option value="world">世界观</option>
+          <option value="hooks">悬念</option>
+        </select>
+      </div>
     </div>
-    <button onclick="loadState()" class="btn-secondary">查看</button>
-    <pre id="state-content" class="state-view"></pre>
+
+    <button onclick="loadState()" class="btn-ghost">查看</button>
+
+    <!-- Progress Stats -->
+    <div id="state-stats" class="stats-row" style="display:none">
+      <div class="stat-card"><div class="stat-num" id="stat-chapters">0</div><div class="stat-label">章节</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-words">0</div><div class="stat-label">总字数</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-audited">0</div><div class="stat-label">已审计</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-passed">0</div><div class="stat-label">已通过</div></div>
+    </div>
+
+    <pre id="state-content" class="state-scroll"></pre>
   </section>
 
-  <!-- Writing Progress -->
-  <section id="panel-progress" class="panel">
-    <h2>写作进度</h2>
-    <div class="form-group">
-      <label>选择书籍</label>
-      <select id="progress-book"></select>
-    </div>
-    <button onclick="loadProgress()" class="btn-primary">查看进度</button>
-    <pre id="progress-result" class="state-view"></pre>
-  </section>
-
-  <!-- Config -->
+  <!-- ========== 炼炉：配置 ========== -->
   <section id="panel-config" class="panel">
-    <h2>流水线配置</h2>
-    <div class="form-group">
-      <label>最小字数</label>
-      <input type="number" id="cfg-min-words" value="2000">
+    <div class="panel-header">
+      <h2 class="panel-title">炼炉调校</h2>
+      <p class="panel-desc">流水线参数、Agent 开关、写作风格配置</p>
     </div>
-    <div class="form-group">
-      <label>最大字数</label>
-      <input type="number" id="cfg-max-words" value="4000">
+
+    <div class="config-section">
+      <h3 class="sub-title">章节参数</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">最小字数</label>
+          <input type="number" id="cfg-min-words" class="input-field" value="2000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">最大字数</label>
+          <input type="number" id="cfg-max-words" class="input-field" value="4000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">审计通过阈值</label>
+          <input type="number" id="cfg-audit-threshold" class="input-field" value="7.0" step="0.1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">最大修订轮次</label>
+          <input type="number" id="cfg-max-revisions" class="input-field" value="1">
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      <label>审计通过阈值</label>
-      <input type="number" id="cfg-audit-threshold" value="7.0" step="0.1">
+
+    <div class="config-section">
+      <h3 class="sub-title">Agent 开关</h3>
+      <div class="toggle-grid">
+        <div class="toggle-item">
+          <label class="toggle-label">构思 Architect</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runArchitect">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">计划 Planner</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runPlanner">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">编排 Composer</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runComposer">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">书写 Writer</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runWriter">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">观察 Observer</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runObserver">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">反思 Reflector</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReflector">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">润色 Normalizer</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runNormalizer">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">审查 Auditor</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runAuditor">✓</button>
+        </div>
+        <div class="toggle-item">
+          <label class="toggle-label">修订 Reviser</label>
+          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReviser">✓</button>
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      <label>最大修订轮次</label>
-      <input type="number" id="cfg-max-revisions" value="1">
-    </div>
-    <button onclick="saveConfig()" class="btn-primary">保存</button>
-    <div id="config-result" class="result"></div>
+
+    <button onclick="saveConfig()" class="btn-ink">保存配置</button>
+    <div id="config-result" class="result-box"></div>
   </section>
 
-  <footer>
-    <p>NovelForge v0.2 | 9-Agent Pipeline | 10 Genre Profiles | 33-Dimension Audit</p>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-ink-line"></div>
+    <p class="footer-text">墨阁 NovelForge v0.3.8 · 九重炼章 · 三十三维审计 · 十流派</p>
   </footer>
 </div>
 
