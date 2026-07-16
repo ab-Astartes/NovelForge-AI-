@@ -281,6 +281,23 @@ body {
   transform: none;
 }
 
+/* 🟢-4: Danger button for delete */
+.btn-danger {
+  background: #8b0000;
+  box-shadow: 0 2px 8px rgba(139,0,0,0.3);
+}
+.btn-danger:hover {
+  background: #a00000;
+  box-shadow: 0 4px 16px rgba(139,0,0,0.4);
+}
+
+/* 🟢-4: Delete section */
+.delete-section {
+  margin-top: 24px;
+  border-top: 1px dashed var(--ink-border);
+  padding-top: 16px;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--cyan-ink);

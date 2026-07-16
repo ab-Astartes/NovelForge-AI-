@@ -130,7 +130,7 @@ async function loadBooks() {
 
 function selectBook(path) {
   // Auto-select in all dropdowns
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     sel.value = path;
@@ -146,7 +146,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -447,6 +447,40 @@ async function loadState() {
 
   } catch (e) {
     content.textContent = '加载失败: ' + e.message;
+  }
+}
+
+// ========== 🟢-4: Delete Book/Chapter ==========
+async function deleteBook() {
+  const bookPath = document.getElementById('delete-book').value;
+  const type = document.getElementById('delete-type').value;
+  const resultDiv = document.getElementById('delete-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+
+  const confirmMsg = type === 'project' 
+    ? '确认焚卷？整部书将永久删除，不可恢复！'
+    : '确认删除最后一章？不可恢复！';
+
+  if (!window.confirm(confirmMsg)) { return; }
+
+  try {
+    const res = await fetch(authUrl(API + '/api/book/delete'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, type })
+    });
+    const data = await res.json();
+
+    if (data.status === 'deleted') {
+      showResult(resultDiv, `✦ ${type === 'project' ? '整部书已焚卷' : '最后一章已删除'}`, false);
+      loadBooks();
+      populateBookSelects();
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '删除失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
   }
 }
 

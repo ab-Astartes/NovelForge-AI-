@@ -94,6 +94,26 @@
 
     <div id="books-list" class="books-grid"></div>
 
+    <!-- 🟢-4: Delete book/project -->
+    <div class="delete-section">
+      <h3 class="sub-title">焚卷销书</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">选择书籍</label>
+          <select id="delete-book" class="input-field"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">删除类型</label>
+          <select id="delete-type" class="input-field">
+            <option value="project">整部书（项目目录）</option>
+            <option value="chapter">最后一章</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="deleteBook()" class="btn-ink btn-sm btn-danger">确认焚卷</button>
+      <div id="delete-result" class="result-box"></div>
+    </div>
+
     <div class="export-section">
       <h3 class="sub-title">导出成书</h3>
       <div class="form-grid">
@@ -193,15 +213,15 @@
       </div>
       <div class="form-group">
         <label class="form-label">API Key</label>
-        <input type="password" id="api-key" class="input-field" placeholder="sk-xxx">
+        <input type="password" id="write-api-key" class="input-field shared-api-key" placeholder="sk-xxx">
       </div>
       <div class="form-group">
         <label class="form-label">Base URL</label>
-        <input type="text" id="base-url" class="input-field" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+        <input type="text" id="write-base-url" class="input-field shared-base-url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
       </div>
       <div class="form-group">
         <label class="form-label">模型</label>
-        <input type="text" id="model-id" class="input-field" value="gpt-4o" placeholder="gpt-4o">
+        <input type="text" id="write-model-id" class="input-field shared-model-id" value="gpt-4o" placeholder="gpt-4o">
       </div>
     </div>
 
@@ -235,15 +255,15 @@
       </div>
       <div class="form-group">
         <label class="form-label">API Key</label>
-        <input type="password" id="audit-api-key" class="input-field" placeholder="sk-xxx">
+        <input type="password" id="audit-api-key" class="input-field shared-api-key" placeholder="sk-xxx">
       </div>
       <div class="form-group">
         <label class="form-label">Base URL</label>
-        <input type="text" id="audit-base-url" class="input-field" value="https://api.openai.com/v1">
+        <input type="text" id="audit-base-url" class="input-field shared-base-url" value="https://api.openai.com/v1">
       </div>
       <div class="form-group">
         <label class="form-label">模型</label>
-        <input type="text" id="audit-model" class="input-field" value="gpt-4o">
+        <input type="text" id="audit-model-id" class="input-field shared-model-id" value="gpt-4o">
       </div>
     </div>
 
@@ -383,7 +403,7 @@
   <!-- Footer -->
   <footer class="footer">
     <div class="footer-ink-line"></div>
-    <p class="footer-text">墨阁 NovelForge v0.3.8 · 九重炼章 · 三十三维审计 · 十流派</p>
+    <p class="footer-text">墨阁 NovelForge v0.3.10 · 九重炼章 · 三十三维审计 · 十流派</p>
   </footer>
 </div>
 

@@ -94,6 +94,7 @@ public class StudioServer {
         // API endpoints with CORS + auth
         server.createContext("/api/books", this::corsThenBooksApi);
         server.createContext("/api/book/create", this::corsThenBookCreate);
+        server.createContext("/api/book/delete", this::corsThenBookDeleteApi);  // 🟢-4
         server.createContext("/api/book/info", this::corsThenBookInfo);
         server.createContext("/api/write", this::corsThenWriteApi);
         server.createContext("/api/write/status", this::corsThenWriteStatusApi);  // 🟡-2: job status polling
@@ -245,6 +246,50 @@ public class StudioServer {
             result.put("world", state.world().getSummary());
             result.put("hooks", state.hooks().getSummary());
             sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Delete book/project (🟢-4) ---
+    private void handleBookDeleteApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String type = body.has("type") ? body.get("type").asText() : "project";
+
+        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+
+        Path path = Paths.get(bookPath);
+        try {
+            if (type.equals("chapter")) {
+                // Delete the last chapter file
+                Book book = BookProject.loadBook(path);
+                int lastNum = book.getChapters().size();
+                if (lastNum > 0) {
+                    Chapter last = book.getChapters().remove(lastNum - 1);
+                    Path chapterFile = path.resolve("chapters/chapter-" + String.format("%03d", last.getNumber()) + ".md");
+                    if (Files.exists(chapterFile)) Files.delete(chapterFile);
+                    Path draftFile = path.resolve("chapters/chapter-" + String.format("%03d", last.getNumber()) + ".draft.md");
+                    if (Files.exists(draftFile)) Files.delete(draftFile);
+                    BookProject.saveBookMetadata(path, book);
+                    sendJson(exchange, 200, "{\"status\":\"deleted\",\"type\":\"chapter\",\"chapterNumber\":\"" + last.getNumber() + "\"}");
+                } else {
+                    sendJson(exchange, 400, "{\"error\":\"no chapters to delete\"}");
+                }
+            } else {
+                // Delete entire project directory
+                if (Files.exists(path)) {
+                    // Recursively delete
+                    Files.walk(path)
+                         .sorted(java.util.Comparator.reverseOrder())
+                         .forEach(p -> { try { Files.delete(p); } catch (Exception e) { /* ignore */ } });
+                    sendJson(exchange, 200, "{\"status\":\"deleted\",\"type\":\"project\"}");
+                } else {
+                    sendJson(exchange, 404, "{\"error\":\"project not found\"}");
+                }
+            }
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
@@ -654,6 +699,11 @@ public class StudioServer {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
         if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleBookCreate(ex);
+    }
+    private void corsThenBookDeleteApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleBookDeleteApi(ex);
     }
     private void corsThenBookInfo(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
