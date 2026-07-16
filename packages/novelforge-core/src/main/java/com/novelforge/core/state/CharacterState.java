@@ -32,11 +32,13 @@ public class CharacterState {
     public synchronized void load() {  // fixes #29: synchronized for concurrent access
         try {
             if (Files.exists(filePath)) {
-                JsonNode root = mapper.readTree(Files.newInputStream(filePath));
-                if (root.isObject()) {
-                    this.data = (ObjectNode) root;
-                } else {
-                    this.data = mapper.createObjectNode();
+                try (java.io.InputStream is = Files.newInputStream(filePath)) {
+                    JsonNode root = mapper.readTree(is);
+                    if (root.isObject()) {
+                        this.data = (ObjectNode) root;
+                    } else {
+                        this.data = mapper.createObjectNode();
+                    }
                 }
             } else {
                 this.data = mapper.createObjectNode();
@@ -53,7 +55,9 @@ public class CharacterState {
     public synchronized void save() {  // fixes #29: synchronized
         try {
             Files.createDirectories(filePath.getParent());
-            mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
+            try (java.io.OutputStream os = Files.newOutputStream(filePath)) {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(os, data);
+            }
             log.debug("characters.json saved");
         } catch (Exception e) {
             log.error("Failed to save characters.json", e);

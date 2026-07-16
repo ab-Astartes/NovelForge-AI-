@@ -64,8 +64,9 @@ public class BookProject {
         bookJson.put("author", author != null ? author : "");
         bookJson.put("createdAt", java.time.Instant.now().toString());
         bookJson.putArray("chapters");
-        mapper.writerWithDefaultPrettyPrinter().writeValue(
-                Files.newOutputStream(bookDir.resolve("book.json")), bookJson);
+        try (java.io.OutputStream os = Files.newOutputStream(bookDir.resolve("book.json"))) {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(os, bookJson);
+        }
 
         // Write author_intent.md
         String intentTemplate = """
@@ -113,8 +114,9 @@ public class BookProject {
         pipelineJson.put("runNormalizer", true);
         pipelineJson.put("runAuditor", true);
         pipelineJson.put("runReviser", true);
-        mapper.writerWithDefaultPrettyPrinter().writeValue(
-                Files.newOutputStream(bookDir.resolve("config/pipeline.json")), pipelineJson);
+        try (java.io.OutputStream os = Files.newOutputStream(bookDir.resolve("config/pipeline.json"))) {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(os, pipelineJson);
+        }
 
         log.info("Book project created: {} at {}", title, bookDir);
         return bookDir;
@@ -130,11 +132,13 @@ public class BookProject {
         }
 
         Book book = new Book();
-        JsonNode root = mapper.readTree(Files.newInputStream(bookJsonPath));
-        book.setId(root.has("id") ? root.get("id").asText() : UUID.randomUUID().toString());
-        book.setTitle(root.has("title") ? root.get("title").asText() : "Unknown Title");
-        book.setGenre(root.has("genre") ? root.get("genre").asText() : "general");
-        book.setAuthor(root.has("author") ? root.get("author").asText() : "");
+        try (java.io.InputStream is = Files.newInputStream(bookJsonPath)) {
+            JsonNode root = mapper.readTree(is);
+            book.setId(root.has("id") ? root.get("id").asText() : UUID.randomUUID().toString());
+            book.setTitle(root.has("title") ? root.get("title").asText() : "Unknown Title");
+            book.setGenre(root.has("genre") ? root.get("genre").asText() : "general");
+            book.setAuthor(root.has("author") ? root.get("author").asText() : "");
+        }
 
         // Load outline
         Path outlinePath = bookDir.resolve("outline.md");
@@ -227,7 +231,9 @@ public class BookProject {
             chNode.put("wordCount", TextUtils.estimateChineseWordCount(ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText()));
             chaptersArr.add(chNode);
         }
-        mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(bookJsonPath), bookJson);
+        try (java.io.OutputStream os = Files.newOutputStream(bookJsonPath)) {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(os, bookJson);
+        }
         log.info("book.json metadata saved ({} chapters)", book.getChapters().size());
     }
 

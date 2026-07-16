@@ -261,7 +261,9 @@ public class StudioServer {
 
         if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
 
-        Path path = Paths.get(bookPath);
+        Path path = Paths.get(bookPath).normalize();
+        Path normalizedRoot = booksRoot.normalize();
+        if (!path.startsWith(normalizedRoot)) { sendJson(exchange, 403, "{\"error\":\"path must be within books directory\"}"); return; }
         try {
             if (type.equals("chapter")) {
                 // Delete the last chapter file
@@ -646,7 +648,7 @@ public class StudioServer {
     private void addCorsHeaders(HttpExchange exchange) {
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
         exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
         exchange.getResponseHeaders().set("Access-Control-Max-Age", "86400");
     }
 

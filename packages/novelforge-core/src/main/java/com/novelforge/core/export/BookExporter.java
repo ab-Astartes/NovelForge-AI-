@@ -203,7 +203,7 @@ public final class BookExporter {
     static void addStringEntry(ZipOutputStream zos, String name, String content) throws Exception {
         ZipEntry entry = new ZipEntry(name);
         zos.putNextEntry(entry);
-        zos.write(content.getBytes("UTF-8"));
+        zos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         zos.closeEntry();
     }
 

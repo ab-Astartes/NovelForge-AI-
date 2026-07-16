@@ -30,8 +30,10 @@ public class TimelineState {
     public synchronized void load() {  // fixes #29
         try {
             if (Files.exists(filePath)) {
-                JsonNode root = mapper.readTree(Files.newInputStream(filePath));
-                this.data = root.isObject() ? (ObjectNode) root : mapper.createObjectNode();
+                try (java.io.InputStream is = Files.newInputStream(filePath)) {
+                    JsonNode root = mapper.readTree(is);
+                    this.data = root.isObject() ? (ObjectNode) root : mapper.createObjectNode();
+                }
             } else {
                 this.data = mapper.createObjectNode();
                 this.data.putArray("events");
@@ -47,7 +49,9 @@ public class TimelineState {
     public synchronized void save() {  // fixes #29
         try {
             Files.createDirectories(filePath.getParent());
-            mapper.writerWithDefaultPrettyPrinter().writeValue(Files.newOutputStream(filePath), data);
+            try (java.io.OutputStream os = Files.newOutputStream(filePath)) {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(os, data);
+            }
         } catch (Exception e) {
             log.error("Failed to save timeline.json", e);
             throw new RuntimeException("Failed to save timeline.json: " + e.getMessage(), e);
