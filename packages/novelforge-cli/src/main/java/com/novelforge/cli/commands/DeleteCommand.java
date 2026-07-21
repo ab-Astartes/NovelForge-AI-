@@ -18,6 +18,11 @@ import java.util.Scanner;
  */
 public class DeleteCommand {
 
+    /**
+     * Shared Scanner for System.in — never closed to avoid breaking stdin.
+     */
+    private static final Scanner SHARED_SCANNER = new Scanner(System.in);
+
     public void execute(String[] args) {
         if (args.length < 2) {
             System.err.println("Usage: novelforge delete <project|chapter> <name|number> --book <path>");
@@ -54,8 +59,9 @@ public class DeleteCommand {
         System.out.println("   This will remove ALL chapters, states, and configurations.");
         System.out.print("   Type 'yes' to confirm: ");
 
-        Scanner scanner = new Scanner(System.in);
-        String confirmation = scanner.nextLine().trim();
+        // Use shared scanner — never close System.in
+
+        String confirmation = SHARED_SCANNER.nextLine().trim();
 
         if (!confirmation.equals("yes")) {
             System.out.println("Deletion cancelled.");
@@ -102,8 +108,9 @@ public class DeleteCommand {
                     targetChapter.getDraftText().length() : 0)) + " chars");
             System.out.print("   Type 'yes' to confirm: ");
 
-            Scanner scanner = new Scanner(System.in);
-            String confirmation = scanner.nextLine().trim();
+            // Use shared scanner — never close System.in
+
+            String confirmation = SHARED_SCANNER.nextLine().trim();
 
             if (!confirmation.equals("yes")) {
                 System.out.println("Deletion cancelled.");

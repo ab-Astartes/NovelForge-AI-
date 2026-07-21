@@ -60,7 +60,7 @@ public class AnthropicClient implements LlmClient {
 
     @Override
     public String chatComplete(List<Map<String, String>> messages, String model, double temperature, int maxTokens) {
-        return withRetry(() -> chatCompleteOnce(messages, model, temperature, maxTokens), 3);
+        return withRetry(() -> chatCompleteOnce(messages, model, temperature, maxTokens), 4);  // 1 initial + 3 retries
     }
 
     /** Single Anthropic API call (no retry) */
@@ -139,8 +139,8 @@ public class AnthropicClient implements LlmClient {
     }
 
     /** Retry wrapper: retry on 429/5xx/timeout, exponential backoff */
-    private String withRetry(java.util.function.Supplier<String> action, int maxRetries) {
-        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+    private String withRetry(java.util.function.Supplier<String> action, int maxAttempts) {
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {  // maxAttempts = total tries (1 initial + retries)
             try {
                 return action.get();
             } catch (LlmException e) {
@@ -149,10 +149,10 @@ public class AnthropicClient implements LlmClient {
                      e.getMessage().contains("502") || e.getMessage().contains("503") ||
                      e.getMessage().contains("overload") || e.getMessage().contains("timeout") ||
                      e.getMessage().contains("connect"));
-                if (!retryable || attempt == maxRetries) throw e;
+                if (!retryable || attempt >= maxAttempts - 1) throw e;
                 long delayMs = (long) Math.pow(2, attempt) * 1000;
                 log.warn("Anthropic call failed (attempt {}), retrying in {}ms: {}", attempt + 1, delayMs, e.getMessage());
-                try { Thread.sleep(delayMs); } catch (InterruptedException ie) { throw e; }
+                try { Thread.sleep(delayMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw e; }
             }
         }
         throw new LlmException("Max retries exhausted");

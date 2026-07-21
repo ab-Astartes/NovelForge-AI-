@@ -31,7 +31,7 @@ public class TruthState {
     }
 
     /** Load all state files from disk (creates defaults if missing) */
-    public void loadAll() {
+    public synchronized void loadAll() {
         Path truthDir = bookDir.resolve("truth");
         this.characters = new CharacterState(truthDir.resolve("characters.json"), mapper);
         this.world = new WorldState(truthDir.resolve("world.json"), mapper);
@@ -40,7 +40,7 @@ public class TruthState {
     }
 
     /** Save all state files to disk */
-    public void saveAll() {
+    public synchronized void saveAll() {
         characters.save();
         world.save();
         timeline.save();

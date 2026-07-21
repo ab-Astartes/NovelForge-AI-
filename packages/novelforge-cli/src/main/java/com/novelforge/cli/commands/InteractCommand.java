@@ -26,6 +26,11 @@ import java.util.stream.Collectors;
  */
 public class InteractCommand {
 
+    /**
+     * Shared Scanner for System.in — never closed to avoid breaking stdin.
+     */
+    private static final Scanner SHARED_SCANNER = new Scanner(System.in);
+
     private List<String> conversationHistory = new ArrayList<>();
 
     public void execute(String[] args) {
@@ -60,11 +65,12 @@ public class InteractCommand {
             System.out.println("📖 Interactive mode for '" + book.getTitle() + "' (genre: " + book.getGenre() + ")");
             System.out.println("   Type your questions/suggestions. Commands: /status, /characters, /world, /hooks, /quit");
 
-            Scanner scanner = new Scanner(System.in);
+            // Use shared scanner — never close System.in
+
 
             while (true) {
                 System.out.print("\n> ");
-                String input = scanner.nextLine().trim();
+                String input = SHARED_SCANNER.nextLine().trim();
 
                 if (input.isEmpty()) continue;
                 if (input.equals("/quit") || input.equals("/exit")) {
