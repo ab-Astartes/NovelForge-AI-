@@ -63,11 +63,15 @@ public class PipelineRunner {
         return result;
     }
 
-    /** Run partial pipeline (e.g. audit-only on existing chapter) */
+    /** Run partial pipeline (e.g. audit-only on existing chapter) using instance config */
     public PipelineResult runAuditOnly(Book book, TruthState truthState, String chapterText) {
-        PipelineContext context = new PipelineContext(book, truthState, config);
+        return runAuditOnly(book, truthState, chapterText, this.config);
+    }
+
+    /** Run partial pipeline with explicit project-level config override */
+    public PipelineResult runAuditOnly(Book book, TruthState truthState, String chapterText, PipelineConfig projectConfig) {
+        PipelineContext context = new PipelineContext(book, truthState, projectConfig);
         context.setCurrentChapterDraft(chapterText);
-        // Run only Auditor + Reviser
         return pipeline.runPartialByName(context, "Auditor", "Reviser");
     }
 

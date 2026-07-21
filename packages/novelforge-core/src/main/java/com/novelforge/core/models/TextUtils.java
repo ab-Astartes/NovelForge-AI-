@@ -43,28 +43,29 @@ public final class TextUtils {
         int depth = 0;
         int jsonEnd = -1;
         boolean inString = false;
-        char prev = '\0';
+        boolean escaping = false;  // true when previous char was unescaped backslash
 
         for (int i = jsonStart; i < text.length(); i++) {
             char c = text.charAt(i);
 
-            // Handle string escaping: only count escapes inside strings
             if (inString) {
-                if (prev == '\\') {
-                    prev = c; // skip escaped char
+                if (escaping) {
+                    escaping = false;  // current char is escaped — skip it
+                    continue;
+                }
+                if (c == '\\') {
+                    escaping = true;   // next char will be escaped
                     continue;
                 }
                 if (c == '"') {
                     inString = false;
                 }
-                prev = c;
                 continue;
             }
 
             // Not inside a string
             if (c == '"') {
                 inString = true;
-                prev = c;
                 continue;
             }
 
@@ -77,7 +78,6 @@ public final class TextUtils {
                     break; // found the matching closing bracket
                 }
             }
-            prev = c;
         }
 
         if (jsonEnd >= 0) return text.substring(jsonStart, jsonEnd + 1);
@@ -88,19 +88,18 @@ public final class TextUtils {
     private static boolean bracketMatched(String s) {
         int depth = 0;
         boolean inString = false;
-        char prev = '\0';
+        boolean escaping = false;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (inString) {
-                if (prev == '\\') { prev = c; continue; }
+                if (escaping) { escaping = false; continue; }
+                if (c == '\\') { escaping = true; continue; }
                 if (c == '"') inString = false;
-                prev = c;
                 continue;
             }
-            if (c == '"') { inString = true; prev = c; continue; }
+            if (c == '"') { inString = true; continue; }
             if (c == '{' || c == '[') depth++;
             else if (c == '}' || c == ']') depth--;
-            prev = c;
         }
         return depth == 0;
     }
