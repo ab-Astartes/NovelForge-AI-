@@ -89,7 +89,12 @@ public class AgentPipeline {
                     log.error("Agent {} hard failure: {}", agent.name(), result.errorMessage());
                     return result; // Stop pipeline immediately
                 }
-                current = result.updatedContext();
+                PipelineContext updatedCtx = result.updatedContext();
+                if (updatedCtx != null) {
+                    current = updatedCtx;
+                } else {
+                    log.warn("Agent {} returned null context — preserving previous context", agent.name());
+                }
                 log.info("Agent {} completed successfully", agent.name());
             } catch (Exception e) {
                 log.error("Agent {} failed: {}", agent.name(), e.getMessage(), e);
@@ -140,7 +145,12 @@ public class AgentPipeline {
                     log.error("Agent {} hard failure in partial pipeline", agent.name());
                     return result;
                 }
-                current = result.updatedContext();
+                PipelineContext updatedCtx = result.updatedContext();
+                if (updatedCtx != null) {
+                    current = updatedCtx;
+                } else {
+                    log.warn("Agent {} returned null context — preserving previous context", agent.name());
+                }
             } catch (Exception e) {
                 log.error("Agent {} failed", agent.name(), e);
                 return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage());

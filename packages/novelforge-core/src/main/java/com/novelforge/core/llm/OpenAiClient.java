@@ -192,12 +192,17 @@ public class OpenAiClient implements LlmClient {
                     if (line.startsWith("data: ") && !line.contains("[DONE]")) {
                         String data = line.substring(6).trim();
                         if (data.isEmpty()) continue;
-                        JsonNode chunk = mapper.readTree(data);
-                        JsonNode delta = chunk.at("/choices/0/delta/content");
-                        if (!delta.isMissingNode() && !delta.isNull()) {
-                            String text = delta.asText();
-                            fullText.append(text);
-                            handler.onChunk(text);
+                        try {
+                            JsonNode chunk = mapper.readTree(data);
+                            JsonNode delta = chunk.at("/choices/0/delta/content");
+                            if (!delta.isMissingNode() && !delta.isNull()) {
+                                String text = delta.asText();
+                                fullText.append(text);
+                                handler.onChunk(text);
+                            }
+                        } catch (Exception parseEx) {
+                            // Skip malformed SSE chunks — AnthropicClient does the same
+                            log.warn("Skipping malformed SSE chunk: {}", TextUtils.truncate(data, 200));
                         }
                     }
                 }

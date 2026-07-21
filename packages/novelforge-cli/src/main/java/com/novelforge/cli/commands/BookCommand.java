@@ -73,16 +73,18 @@ public class BookCommand {
             return;
         }
 
-        try {
+        try (java.nio.file.DirectoryStream<Path> ds = Files.newDirectoryStream(booksDir)) {
             boolean found = false;
-            for (Path p : Files.newDirectoryStream(booksDir)) {
+            for (Path p : ds) {
                 if (Files.exists(p.resolve("book.json"))) {
-                    JsonNode bookJson = mapper.readTree(Files.newInputStream(p.resolve("book.json")));
-                    String title = bookJson.get("title").asText();
-                    String genre = bookJson.get("genre").asText();
-                    int chapters = bookJson.has("chapters") ? bookJson.get("chapters").size() : 0;
-                    System.out.printf("  %-20s  genre=%-8s  chapters=%d  path=%s%n", title, genre, chapters, p);
-                    found = true;
+                    try (java.io.InputStream is = Files.newInputStream(p.resolve("book.json"))) {
+                        JsonNode bookJson = mapper.readTree(is);
+                        String title = bookJson.get("title").asText();
+                        String genre = bookJson.get("genre").asText();
+                        int chapters = bookJson.has("chapters") ? bookJson.get("chapters").size() : 0;
+                        System.out.printf("  %-20s  genre=%-8s  chapters=%d  path=%s%n", title, genre, chapters, p);
+                        found = true;
+                    }
                 }
             }
             if (!found) System.out.println("No book projects found.");

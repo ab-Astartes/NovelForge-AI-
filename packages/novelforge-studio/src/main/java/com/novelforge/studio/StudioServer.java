@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -231,7 +232,7 @@ public class StudioServer {
 
         String query = exchange.getRequestURI().getQuery();
         String bookPath = getQueryParam(query, "path");
-        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path parameter required\"}"); return; }
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path parameter required and must be within books directory\"}"); return; }
 
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -309,10 +310,8 @@ public class StudioServer {
         String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
         String mode = body.has("mode") ? body.get("mode").asText() : "next";
 
-        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
         if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
-
-        // Create async job
         String jobId = "job-" + jobIdCounter.incrementAndGet();
         WriteJob job = new WriteJob(jobId);
         writeJobs.put(jobId, job);
@@ -403,7 +402,7 @@ public class StudioServer {
         String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
         String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
 
-        if (bookPath == null || apiKey == null) { sendJson(exchange, 400, "{\"error\":\"path and apiKey required\"}"); return; }
+        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return; }
 
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -451,7 +450,7 @@ public class StudioServer {
         String bookPath = getQueryParam(query, "path");
         String type = getQueryParam(query, "type"); // characters, world, hooks, timeline
 
-        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
         try {
             TruthState state = new TruthState(Paths.get(bookPath));
@@ -483,7 +482,7 @@ public class StudioServer {
         String format = body.has("format") ? body.get("format").asText() : "txt";
         String coverPath = body.has("cover") ? body.get("cover").asText() : null;
 
-        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -538,7 +537,7 @@ public class StudioServer {
 
         String query = exchange.getRequestURI().getQuery();
         String bookPath = getQueryParam(query, "path");
-        if (bookPath == null) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -555,27 +554,32 @@ public class StudioServer {
         }
     }
 
-    /** Sanitize string for safe embedding in JSON — escapes quotes, backslashes, and control chars */
+    /** Sanitize string for safe embedding in JSON — uses ObjectMapper for correctness */
     private String sanitizeForJson(String s) {
         if (s == null) return "null";
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"'  -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n'  -> sb.append("\\n");
-                case '\r'  -> sb.append("\\r");
-                case '\t'  -> sb.append("\\t");
-                case '\b'  -> sb.append("\\b");
-                case '\f'  -> sb.append("\\f");
-                default   -> {
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
+        try {
+            return mapper.writeValueAsString(s);
+        } catch (Exception e) {
+            // fallback: manual escape including \u2028/\u2029
+            StringBuilder sb = new StringBuilder(s.length());
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                switch (c) {
+                    case '"'  -> sb.append("\\\"");
+                    case '\\' -> sb.append("\\\\");
+                    case '\n'  -> sb.append("\\n");
+                    case '\r'  -> sb.append("\\r");
+                    case '\t'  -> sb.append("\\t");
+                    case '\b'  -> sb.append("\\b");
+                    case '\f'  -> sb.append("\\f");
+                    default   -> {
+                        if (c < 0x20 || c == '\u2028' || c == '\u2029') sb.append(String.format("\\u%04x", (int) c));
+                        else sb.append(c);
+                    }
                 }
             }
+            return sb.toString();
         }
-        return sb.toString();
     }
 
     // --- Helpers ---
@@ -613,12 +617,13 @@ public class StudioServer {
         os.close();
     }
 
-    /** 🟡-1: Generate a random 16-char token for local API authentication */
+    /** 🟡-1: Generate a random 16-char token using SecureRandom for local API authentication */
     private String generateToken() {
+        SecureRandom rng = new SecureRandom();
+        byte[] bytes = new byte[16];
+        rng.nextBytes(bytes);
         StringBuilder sb = new StringBuilder(16);
-        for (int i = 0; i < 16; i++) {
-            sb.append((char) ('A' + (int) (Math.random() * 26)));
-        }
+        for (byte b : bytes) sb.append((char) ('A' + ((b & 0xFF) % 26)));
         return sb.toString();
     }
 
@@ -637,6 +642,20 @@ public class StudioServer {
         }
         // Static resources and OPTIONS don't need auth
         return false;
+    }
+
+    /** 🔴-2: Validate path is within booksRoot — prevents path traversal */
+    private boolean isPathWithinBooksRoot(String rawPath) {
+        if (rawPath == null) return false;
+        Path path = Paths.get(rawPath).normalize();
+        return path.startsWith(booksRoot.normalize());
+    }
+
+    /** 🔴-3: Escape HTML special characters to prevent XSS */
+    private String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#x27;");
     }
 
     /** 🟡-1: Send 401 Unauthorized */

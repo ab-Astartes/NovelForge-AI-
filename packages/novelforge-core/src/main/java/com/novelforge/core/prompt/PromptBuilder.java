@@ -214,25 +214,22 @@ public class PromptBuilder {
                 styleRules.append("- 参考样例: ").append(truncateShort(style.getReferenceSample(), 300)).append("\n");
         }
 
-        String system = """
-            你是小说写手。根据组装好的上下文包，创作本章内容。
-            
-            创作要求：
-            1. 字数范围: %d - %d 字
-            2. 严格遵守 hook agenda（必须推进指定悬念）
-            3. 角色言行必须与状态文件一致
-            4. 遵守题材规则和风格要求
-            5. 章节结尾必须有悬念或转折，让读者想继续看
-            
-            写作原则：
-            - 先写冲突，再写解决
-            - 每个场景要有画面感和动作
-            - 对话要有角色个性，不要流水账
-            - 避免过度描写心理活动，用行动展现
-            %s%s
-            """;
+        String system = "你是小说写手。根据组装好的上下文包，创作本章内容。\n" +
+            "\n创作要求：\n" +
+            "1. 字数范围: " + config.getChapterWordsMin() + " - " + config.getChapterWordsMax() + " 字\n" +
+            "2. 严格遵守 hook agenda（必须推进指定悬念）\n" +
+            "3. 角色言行必须与状态文件一致\n" +
+            "4. 遵守题材规则和风格要求\n" +
+            "5. 章节结尾必须有悬念或转折，让读者想继续看\n" +
+            "\n写作原则：\n" +
+            "- 先写冲突，再写解决\n" +
+            "- 每个场景要有画面感和动作\n" +
+            "- 对话要有角色个性，不要流水账\n" +
+            "- 避免过度描写心理活动，用行动展现\n" +
+            genreRules.toString() +
+            styleRules.toString();
 
-        String formattedSystem = String.format(system, config.getChapterWordsMin(), config.getChapterWordsMax(), genreRules.toString(), styleRules.toString());
+        String formattedSystem = system;
 
         String user = String.format("""
             ## 写作上下文包

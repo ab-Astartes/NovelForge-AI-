@@ -121,7 +121,10 @@ public class AuditEngine {
                 if (scoresNode != null) {
                     scoresNode.fields().forEachRemaining(e -> {
                         if (DIMENSIONS.containsKey(e.getKey())) {
-                            scores.put(e.getKey(), Math.min(10.0, Math.max(0.0, e.getValue().asDouble())));
+                            double val = e.getValue().asDouble();
+                            // Guard against NaN/Infinity from malformed LLM output
+                            if (!Double.isFinite(val)) val = 7.0;
+                            scores.put(e.getKey(), Math.min(10.0, Math.max(0.0, val)));
                         }
                     });
                 }
@@ -147,10 +150,12 @@ public class AuditEngine {
         for (Map.Entry<String, Double> e : DIMENSIONS.entrySet()) {
             double weight = e.getValue();
             double score = scores.getOrDefault(e.getKey(), 7.0);
+            if (!Double.isFinite(score)) score = 7.0;
             totalScore += score * weight;
             totalWeight += weight;
         }
         double overallScore = totalWeight > 0 ? totalScore / totalWeight : 7.0;
+        if (!Double.isFinite(overallScore)) overallScore = 7.0;
 
         // 5. Flag critical issues (score < 5.0)
         List<String> criticalIssues = new ArrayList<>();
@@ -169,6 +174,7 @@ public class AuditEngine {
         result.setCriticalIssues(criticalIssues);
         result.setWarnings(warnings);
         result.setPass(criticalIssues.isEmpty() && overallScore >= 7.0);
+        // 🔴-6 fix: guard NaN/Infinity
 
         log.info("AuditEngine: overall={}/10, critical={}, warnings={}",
                 String.format("%.1f", overallScore), criticalIssues.size(), warnings.size());
@@ -191,7 +197,9 @@ public class AuditEngine {
         // Weighted overall
         double totalWeight = 0, totalScore = 0;
         for (Map.Entry<String, Double> e : DIMENSIONS.entrySet()) {
-            totalScore += scores.getOrDefault(e.getKey(), 7.0) * e.getValue();
+            double s = scores.getOrDefault(e.getKey(), 7.0);
+            if (!Double.isFinite(s)) s = 7.0;
+            totalScore += s * e.getValue();
             totalWeight += e.getValue();
         }
 
@@ -204,10 +212,12 @@ public class AuditEngine {
 
         AuditResult result = new AuditResult();
         result.setDimensionScores(scores);
-        result.setOverallScore(totalWeight > 0 ? totalScore / totalWeight : 7.0);
+        double oScore = totalWeight > 0 ? totalScore / totalWeight : 7.0;
+        if (!Double.isFinite(oScore)) oScore = 7.0;
+        result.setOverallScore(oScore);
         result.setCriticalIssues(criticalIssues);
         result.setWarnings(warnings);
-        result.setPass(criticalIssues.isEmpty());
+        result.setPass(criticalIssues.isEmpty() && oScore >= 7.0);  // 🔴-6 + 🟡-3: add overallScore check
         return result;
     }
 

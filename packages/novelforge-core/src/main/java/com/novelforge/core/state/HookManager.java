@@ -78,10 +78,11 @@ public class HookManager {
                     // Find existing or add new
                     boolean found = false;
                     for (int i = 0; i < hooks.size(); i++) {
-                        if (hooks.get(i).get("id").asText().equals(op.getHookId())) {
-                            ((ObjectNode) hooks.get(i)).put("description", op.getDescription());
-                            ((ObjectNode) hooks.get(i)).put("priority", op.getPriority());
-                            ((ObjectNode) hooks.get(i)).put("mentionCount", op.getMentionCount());
+                        JsonNode hookNode = hooks.get(i);
+                        if (hookNode.has("id") && hookNode.get("id").asText().equals(op.getHookId())) {
+                            ((ObjectNode) hookNode).put("description", op.getDescription());
+                            ((ObjectNode) hookNode).put("priority", op.getPriority());
+                            ((ObjectNode) hookNode).put("mentionCount", op.getMentionCount());
                             found = true;
                             break;
                         }
@@ -98,9 +99,10 @@ public class HookManager {
                 }
                 case MENTION -> {
                     for (int i = 0; i < hooks.size(); i++) {
-                        if (hooks.get(i).get("id").asText().equals(op.getHookId())) {
-                            ((ObjectNode) hooks.get(i)).put("mentionCount",
-                                    hooks.get(i).get("mentionCount").asInt() + 1);
+                        JsonNode hookNode = hooks.get(i);
+                        if (hookNode.has("id") && hookNode.get("id").asText().equals(op.getHookId())) {
+                            ((ObjectNode) hookNode).put("mentionCount",
+                                    hookNode.get("mentionCount").asInt() + 1);
                             break;
                         }
                     }
@@ -108,18 +110,19 @@ public class HookManager {
                 case RESOLVE -> {
                     // Remove from active hooks
                     for (int i = 0; i < hooks.size(); i++) {
-                        if (hooks.get(i).get("id").asText().equals(op.getHookId())) {
+                        JsonNode hookNode = hooks.get(i);
+                        if (hookNode.has("id") && hookNode.get("id").asText().equals(op.getHookId())) {
                             hooks.remove(i);
                             break;
                         }
                     }
                 }
                 case DEFER -> {
-                    // Mark as stale (move to staleDebt)
                     for (int i = 0; i < hooks.size(); i++) {
-                        if (hooks.get(i).get("id").asText().equals(op.getHookId())) {
+                        JsonNode hookNode = hooks.get(i);
+                        if (hookNode.has("id") && hookNode.get("id").asText().equals(op.getHookId())) {
                             ArrayNode stale = (ArrayNode) data.get("staleDebt");
-                            stale.add(hooks.get(i));
+                            stale.add(hookNode);
                             hooks.remove(i);
                             break;
                         }
