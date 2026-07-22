@@ -81,9 +81,13 @@ public final class BookExporter {
                 "</container>");
 
             // 3. OEBPS/content.opf
-            int dotIdx = coverImagePath.lastIndexOf(".");
-            String coverExt = dotIdx >= 0 ? coverImagePath.substring(dotIdx + 1).toLowerCase() : "png";
-            String coverMediaType = coverImagePath != null ? guessMediaType(coverImagePath) : "image/png";
+            String coverExt = "png";
+            String coverMediaType = "image/png";
+            if (coverImagePath != null) {
+                int dotIdx = coverImagePath.lastIndexOf(".");
+                coverExt = dotIdx >= 0 ? coverImagePath.substring(dotIdx + 1).toLowerCase() : "png";
+                coverMediaType = guessMediaType(coverImagePath);
+            }
 
             StringBuilder opf = new StringBuilder();
             opf.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
