@@ -210,21 +210,9 @@ public class WriteCommand {
                     Chapter lastChapter = book.getChapters().get(book.getChapters().size() - 1);
                     System.out.println("✏️ Continuing from chapter " + lastChapter.getNumber() + " → writing chapter " + book.nextChapterNumber() + "...");
 
-                    // Disable Architect for continuation (outline already exists)
-                    PipelineConfig contConfig = new PipelineConfig();
-                    contConfig.setChapterWordsMin(config.getChapterWordsMin());
-                    contConfig.setChapterWordsMax(config.getChapterWordsMax());
-                    contConfig.setAuditPassThreshold(config.getAuditPassThreshold());
-                    contConfig.setMaxRevisionPasses(config.getMaxRevisionPasses());
-                    contConfig.setRunArchitect(false);  // skip outline rebuild
-                    contConfig.setRunPlanner(true);
-                    contConfig.setRunComposer(true);
-                    contConfig.setRunWriter(true);
-                    contConfig.setRunObserver(true);
-                    contConfig.setRunReflector(true);
-                    contConfig.setRunNormalizer(true);
-                    contConfig.setRunAuditor(true);
-                    contConfig.setRunReviser(true);
+                    // Clone project config and disable Architect for continuation
+                    PipelineConfig contConfig = config.clone();
+                    contConfig.setRunArchitect(false);  // skip outline rebuild — outline already exists
 
                     PipelineRunner contRunner = new PipelineRunner(contConfig, router);
                     PipelineResult result = contRunner.writeNextChapter(book, truthState);

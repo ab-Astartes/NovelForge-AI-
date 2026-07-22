@@ -90,6 +90,25 @@ public class PipelineConfig {
     public int getMaxRevisionPasses() { return maxRevisionPasses; }
     public synchronized void setMaxRevisionPasses(int v) { this.maxRevisionPasses = v; }
 
+    /** Create a copy of this config (for "continue" mode — skip Architect while preserving all other settings) */
+    public PipelineConfig clone() {
+        PipelineConfig copy = new PipelineConfig();
+        copy.runArchitect = this.runArchitect;
+        copy.runPlanner = this.runPlanner;
+        copy.runComposer = this.runComposer;
+        copy.runWriter = this.runWriter;
+        copy.runObserver = this.runObserver;
+        copy.runReflector = this.runReflector;
+        copy.runNormalizer = this.runNormalizer;
+        copy.runAuditor = this.runAuditor;
+        copy.runReviser = this.runReviser;
+        copy.chapterWordsMin = this.chapterWordsMin;
+        copy.chapterWordsMax = this.chapterWordsMax;
+        copy.auditPassThreshold = this.auditPassThreshold;
+        copy.maxRevisionPasses = this.maxRevisionPasses;
+        return copy;
+    }
+
     /** Hot-reload config from a JSON file (fixes #28: configuration hot-update).
      *  Reads the file and updates all fields, preserving any that are missing in the JSON.
      *  Also fixes InputStream leak in original implementation. */
