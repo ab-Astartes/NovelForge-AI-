@@ -55,9 +55,8 @@ public class PipelineRunner {
                     chapter.getNumber(), book.getTitle(), finalText.length(),
                     writerDraft != null ? writerDraft.length() : 0);
 
-            // Save truth state after full pipeline (🟡-7: was missing)
-            truthState.saveAll();
-            log.info("Truth state saved for book '{}' after write pipeline", book.getTitle());
+            // Truth state is saved by AgentPipeline.runFull() after all agents complete
+            // No redundant saveAll() here
         }
 
         return result;
@@ -100,9 +99,8 @@ public class PipelineRunner {
             log.info("Draft chapter {} added to book '{}' ({} chars)",
                     chapter.getNumber(), book.getTitle(), finalText.length());
 
-            // Save truth state after draft pipeline (fixes #9: draft mode not saving state)
-            truthState.saveAll();
-            log.info("Truth state saved for book '{}' after draft pipeline", book.getTitle());
+            // Truth state is saved by AgentPipeline.runFull() after all agents complete
+            // No redundant saveAll() here
         }
 
         return result;

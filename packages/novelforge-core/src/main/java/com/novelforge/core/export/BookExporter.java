@@ -33,7 +33,7 @@ public final class BookExporter {
             sb.append("\n\n").append("-".repeat(40)).append("\n\n");
         }
 
-        Files.writeString(outputPath, sb.toString());
+        Files.writeString(outputPath, sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /** Export book as Markdown */
@@ -52,7 +52,7 @@ public final class BookExporter {
             sb.append("\n\n");
         }
 
-        Files.writeString(outputPath, sb.toString());
+        Files.writeString(outputPath, sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /** Export book as EPUB 3 with optional cover image */

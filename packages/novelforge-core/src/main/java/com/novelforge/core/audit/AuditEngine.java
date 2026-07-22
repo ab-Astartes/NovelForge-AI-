@@ -278,6 +278,11 @@ public class AuditEngine {
 
     /** Build LLM audit prompt */
     private String buildAuditPrompt(String text, String intent, String genreRules) {
+        // Escape % characters to prevent String.format crashes (same fix as PromptBuilder)
+        String safeIntent = (intent != null ? intent : "（未指定）").replace("%", "%%");
+        String safeGenreRules = (genreRules != null ? genreRules : "（未指定）").replace("%", "%%");
+        String safeText = text.length() > 6000 ? text.substring(0, 6000) : text;
+
         return String.format("""
             请对以下章节文本进行质量评分。每个维度0-10分。
             
@@ -289,9 +294,7 @@ public class AuditEngine {
             
             输出JSON: { "scores": { "dimension.name": score }, "criticalIssues": [...], "warnings": [...] }
             """,
-                intent != null ? intent : "（未指定）",
-                genreRules != null ? genreRules : "（未指定）",
-                text.length() > 6000 ? text.substring(0, 6000) : text
+                safeIntent, safeGenreRules, safeText
         );
     }
 

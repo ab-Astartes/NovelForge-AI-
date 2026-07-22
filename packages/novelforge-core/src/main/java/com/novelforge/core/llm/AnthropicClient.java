@@ -241,8 +241,9 @@ public class AnthropicClient implements LlmClient {
                                     // Stream complete
                                 }
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception parseEx) {
                             // Malformed SSE line, skip
+                            log.warn("Skipping malformed Anthropic SSE chunk: {}", TextUtils.truncate(data, 200));
                         }
                     }
                 }
