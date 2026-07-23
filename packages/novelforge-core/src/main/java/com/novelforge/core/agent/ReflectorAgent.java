@@ -62,7 +62,8 @@ public class ReflectorAgent implements Agent {
             }
 
             // Parse hookOps + state patches + timeline events from single parsed JSON
-            List<HookOp> hookOps = parseHookOps(root);
+            int chapterNum = context.getBook().nextChapterNumber();
+            List<HookOp> hookOps = parseHookOps(root, chapterNum);
             context.getTruthState().applyHookOps(hookOps);
 
             // Apply character and world deltas from the response
@@ -83,7 +84,7 @@ public class ReflectorAgent implements Agent {
     }
 
     /** Parse hookOps from pre-parsed JSON tree */
-    private List<HookOp> parseHookOps(com.fasterxml.jackson.databind.JsonNode root) {
+    private List<HookOp> parseHookOps(com.fasterxml.jackson.databind.JsonNode root, int chapterNum) {
         List<HookOp> ops = new ArrayList<>();
         if (root == null) return ops;
         try {
@@ -104,9 +105,11 @@ public class ReflectorAgent implements Agent {
                 op.setType(type);
                 op.setHookId(opNode.has("hookId") ? opNode.get("hookId").asText() : "hook-auto-" + ops.size());
                 op.setDescription(opNode.has("description") ? opNode.get("description").asText() : "");
-                op.setChapterOrigin(opNode.has("chapterOrigin") ? opNode.get("chapterOrigin").asInt() : 0);
+                op.setChapterOrigin(opNode.has("chapterOrigin") ? opNode.get("chapterOrigin").asInt() : chapterNum);
                 op.setMentionCount(opNode.has("mentionCount") ? opNode.get("mentionCount").asInt() : 1);
-                op.setPriority(opNode.has("priority") ? opNode.get("priority").asText() : "medium");
+                // Normalize priority: accept numeric (1-10→low-high) or string (high/medium/low)
+                String priorityStr = opNode.has("priority") ? opNode.get("priority").asText() : "medium";
+                op.setPriority(normalizePriority(priorityStr));
                 ops.add(op);
             }
         } catch (Exception e) {
@@ -163,13 +166,51 @@ public class ReflectorAgent implements Agent {
             if (timelineDelta != null && timelineDelta.isArray()) {
                 int chapterNum = context.getBook().nextChapterNumber();
                 for (JsonNode event : timelineDelta) {
-                    String desc = event.has("description") ? event.get("description").asText() : event.asText();
-                    context.getTruthState().timeline().addEvent(chapterNum, desc);
+                    // Robust description extraction: try multiple field names, skip empty
+                    String desc = extractEventDescription(event);
+                    if (desc == null || desc.trim().isEmpty()) {
+                        log.warn("Reflector: skipping timeline event with empty description: {}", event);
+                        continue;
+                    }
+                    context.getTruthState().timeline().addEvent(chapterNum, desc.trim());
                 }
             }
         } catch (Exception e) {
             log.warn("Failed to apply timeline events from Reflector output", e);
         }
+    }
+
+    /** Normalize priority value: numeric 1-10 maps to low/medium/high, string values normalized. */
+    private String normalizePriority(String p) {
+        if (p == null || p.trim().isEmpty()) return "medium";
+        try {
+            int num = Integer.parseInt(p.trim());
+            if (num <= 3) return "low";
+            if (num <= 6) return "medium";
+            return "high";
+        } catch (NumberFormatException e) {
+            // String value: normalize to standard labels
+            String lower = p.trim().toLowerCase();
+            if (lower.startsWith("h") || lower.equals("urgent") || lower.equals("critical")) return "high";
+            if (lower.startsWith("l") || lower.equals("minor")) return "low";
+            return "medium";
+        }
+    }
+
+    /** Extract description from a timeline event JSON node.
+     *  LLM output may use different field names: description, event, text, summary, or just a string value. */
+    private String extractEventDescription(JsonNode event) {
+        // Try known field names in order of preference
+        for (String field : new String[]{"description", "event", "text", "summary"}) {
+            if (event.has(field) && !event.get(field).isNull() && !event.get(field).asText().trim().isEmpty()) {
+                return event.get(field).asText();
+            }
+        }
+        // Fallback: if the node itself is a text value
+        if (event.isTextual() && !event.asText().trim().isEmpty()) {
+            return event.asText();
+        }
+        return null;
     }
 
     // extractJson moved to TextUtils.extractJsonBlock

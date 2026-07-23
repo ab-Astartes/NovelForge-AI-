@@ -36,25 +36,31 @@ public class WriteCommand {
             return;
         }
 
-        // API key: from argument, env var, or fail
-        if (apiKey == null) {
-            apiKey = System.getenv("OPENAI_API_KEY");
-        }
-        if (apiKey == null || apiKey.isEmpty()) {
-            apiKey = System.getenv("LLM_API_KEY");
-        }
-        if (apiKey == null || apiKey.isEmpty()) {
-            System.err.println("Error: No API key provided. Use --api-key or set OPENAI_API_KEY env var");
-            return;
-        }
+        // Subcommands that don't need LLM: progress, (future: status, list)
+        String subCmd = args[0];
+        boolean needsLlm = !"progress".equals(subCmd);
 
-        if (baseUrl == null) {
-            baseUrl = System.getenv("LLM_BASE_URL");
-            if (baseUrl == null) baseUrl = "https://api.openai.com/v1";
-        }
+        // API key: resolve only when needed
+        if (needsLlm) {
+            if (apiKey == null) {
+                apiKey = System.getenv("OPENAI_API_KEY");
+            }
+            if (apiKey == null || apiKey.isEmpty()) {
+                apiKey = System.getenv("LLM_API_KEY");
+            }
+            if (apiKey == null || apiKey.isEmpty()) {
+                System.err.println("Error: No API key provided. Use --api-key or set OPENAI_API_KEY env var");
+                return;
+            }
 
-        if (modelId == null) {
-            modelId = "gpt-4o";
+            if (baseUrl == null) {
+                baseUrl = System.getenv("LLM_BASE_URL");
+                if (baseUrl == null) baseUrl = "https://api.openai.com/v1";
+            }
+
+            if (modelId == null) {
+                modelId = "gpt-4o";
+            }
         }
 
         Path bookDir = Paths.get(bookPath);
