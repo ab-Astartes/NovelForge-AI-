@@ -250,7 +250,7 @@ async function writeChapter() {
 
     // 🟡-2: Handle async job response
     if (data.jobId) {
-      pollWriteJob(data.jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
+      streamWriteJob(data.jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
       return;
     }
 
@@ -574,54 +574,143 @@ async function saveConfig() {
   }
 }
 
-// ========== 🟡-2: Async Write Job Polling ==========
+// ========== 🟡-2: SSE Write Streaming + Polling Fallback ==========
+function streamWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath) {
+  const completedAgents = new Set();
+
+  // Try SSE first — real-time agent progress
+  try {
+    const evtSource = new EventSource(authUrl(API + `/api/write/stream?jobId=${jobId}`));
+
+    evtSource.addEventListener('pipeline_start', (e) => {
+      progressDiv.innerHTML = '<span class="spinner"></span> 流水线启动…';
+    });
+
+    evtSource.addEventListener('agent_start', (e) => {
+      const data = JSON.parse(e.data);
+      const agent = data.agent;
+      // Complete all agents before this one that aren't yet marked
+      for (const a of agents) {
+        if (completedAgents.has(a)) continue;
+        if (a === agent) break;
+        markStepCompleted(a);
+        completedAgents.add(a);
+      }
+      markStepRunning(agent);
+      progressDiv.innerHTML = `<span class="spinner"></span> ${agent} 炼章中 (${data.step + 1}/${data.total})…`;
+    });
+
+    evtSource.addEventListener('agent_complete', (e) => {
+      const data = JSON.parse(e.data);
+      markStepCompleted(data.agent);
+      completedAgents.add(data.agent);
+      progressDiv.innerHTML = `<span style="color:var(--success)">✓ ${data.agent}</span> · ${(data.elapsed / 1000).toFixed(1)}s`;
+    });
+
+    evtSource.addEventListener('agent_skip', (e) => {
+      const data = JSON.parse(e.data);
+      completedAgents.add(data.agent);
+      progressDiv.innerHTML = `<span style="color:var(--paper-dark)">— ${data.agent} 已跳过</span>`;
+    });
+
+    evtSource.addEventListener('agent_fail', (e) => {
+      const data = JSON.parse(e.data);
+      progressDiv.innerHTML = `<span style="color:var(--cinnabar-light)">✗ ${data.agent} 失败</span>`;
+    });
+
+    evtSource.addEventListener('pipeline_complete', (e) => {
+      const data = JSON.parse(e.data);
+      for (const a of agents) {
+        if (!completedAgents.has(a)) { markStepCompleted(a); completedAgents.add(a); }
+      }
+      const scoreColor = data.score >= 7 ? 'var(--success)' : data.score >= 5 ? 'var(--warning)' : 'var(--cinnabar-light)';
+      progressDiv.innerHTML = `✦ 完成 · ${data.chapters} 章 · <span style="color:${scoreColor}">${data.score.toFixed(1)}</span>/10`;
+    });
+
+    evtSource.addEventListener('pipeline_fail', (e) => {
+      const data = JSON.parse(e.data);
+      resetPipelineSteps();
+      showResult(resultDiv, '✗ 流水线失败: ' + data.error, true);
+    });
+
+    evtSource.addEventListener('done', (e) => {
+      evtSource.close();
+      btnWrite.disabled = false;
+      btnWrite.textContent = '落笔！';
+      const data = JSON.parse(e.data);
+      if (data.status === 'completed') {
+        showResult(resultDiv, '✦ 章已成！', false);
+        showChapterPreview(bookPath);
+      } else {
+        showResult(resultDiv, '✗ 写作失败', true);
+      }
+    });
+
+    evtSource.onerror = () => {
+      evtSource.close();
+      // SSE failed → fallback to polling
+      pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
+    };
+  } catch (e) {
+    // EventSource not supported → polling fallback
+    pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
+  }
+}
+
+// Polling fallback (used when SSE is unavailable)
 async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath) {
   let stepIndex = 0;
-  const completedAgents = [];
 
   const poll = async () => {
     try {
       const res = await fetch(authUrl(API + `/api/write/status?jobId=${jobId}`), { headers: authHeaders() });
       const data = await res.json();
 
-      // Update step animation based on progress
-      const progressStep = Math.floor(data.progress / 100 * agents.length);
-      while (stepIndex < progressStep && stepIndex < agents.length) {
-        if (stepIndex > 0) markStepCompleted(agents[stepIndex - 1]);
-        markStepRunning(agents[stepIndex]);
-        stepIndex++;
+      // Use events array if available for better step tracking
+      if (data.events && data.events.length > 0) {
+        for (const evt of data.events) {
+          // Parse SSE-formatted events
+          const lines = evt.split('\n');
+          const eventType = lines.find(l => l.startsWith('event:'))?.replace('event: ', '');
+          const dataLine = lines.find(l => l.startsWith('data:'))?.replace('data: ', '');
+          if (!eventType || !dataLine) continue;
+          const evtData = JSON.parse(dataLine);
+
+          if (eventType === 'agent_start') markStepRunning(evtData.agent);
+          if (eventType === 'agent_complete') { markStepCompleted(evtData.agent); stepIndex++; }
+          if (eventType === 'agent_skip') stepIndex++;
+        }
+      } else {
+        // Fallback: estimate step from progress percentage
+        const progressStep = Math.floor(data.progress / 100 * agents.length);
+        while (stepIndex < progressStep && stepIndex < agents.length) {
+          if (stepIndex > 0) markStepCompleted(agents[stepIndex - 1]);
+          markStepRunning(agents[stepIndex]);
+          stepIndex++;
+        }
       }
 
       progressDiv.innerHTML = `<span class="spinner"></span> 进度 ${data.progress}% · ${data.elapsedSeconds}s`;
 
       if (data.status === 'completed') {
-        // Mark all steps completed
         agents.forEach(a => markStepCompleted(a));
         progressDiv.textContent = '';
-
-        let resultData;
-        try { resultData = JSON.parse(data.result || '{}'); } catch { resultData = {}; }
-
-        let msg = '✦ 章已成！';
-        if (resultData.warning) msg += ` · ⚠ ${resultData.warning}`;
-        showResult(resultDiv, msg, false);
-
-        // Auto-cleanup job reference
+        showResult(resultDiv, '✦ 章已成！', false);
         btnWrite.disabled = false;
         btnWrite.textContent = '落笔！';
+        showChapterPreview(bookPath);
         return;
       }
 
       if (data.status === 'failed') {
         resetPipelineSteps();
-        progressDiv.textContent = '';  
+        progressDiv.textContent = '';
         showResult(resultDiv, '✗ ' + (data.error || '写作失败'), true);
         btnWrite.disabled = false;
         btnWrite.textContent = '落笔！';
         return;
       }
 
-      // Still running — poll again in 3s
       setTimeout(poll, 3000);
     } catch (e) {
       resetPipelineSteps();
