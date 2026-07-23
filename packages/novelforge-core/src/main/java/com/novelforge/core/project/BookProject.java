@@ -175,7 +175,7 @@ public class BookProject {
 
                             book.getChapters().add(ch);
                         } catch (NumberFormatException e) {
-                            log.warn("Skipping non-standard chapter file: {}", name);
+                            log.debug("Skipping non-standard chapter file: {}", name);
                         } catch (java.io.IOException e) {
                             log.warn("Failed to read chapter file: {}", name, e);
                         }
