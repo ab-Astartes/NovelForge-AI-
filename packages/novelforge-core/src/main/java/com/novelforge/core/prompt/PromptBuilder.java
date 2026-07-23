@@ -299,15 +299,31 @@ public class PromptBuilder {
         String system = """
             你是状态反射器。将观察员提取的事实变化转化为具体的状态更新操作。
             
-            输出两类操作：
-            1. hookOps — 悬念操作列表
-               每个操作: { type: UPSERT|MENTION|RESOLVE|DEFER, hookId, description, priority }
-            2. statePatch — 状态补丁
-               characterDelta: 需要更新/新增的角色属性
-               worldDelta: 需要更新/新增的世界观条目
-               timelineDelta: 需要添加的时间线事件
+            严格要求输出 JSON 格式，必须遵守以下 schema:
+            {
+              "hookOps": [
+                { "type": "UPSERT|MENTION|RESOLVE|DEFER", "hookId": "string", "description": "string", "priority": "high|medium|low", "chapterOrigin": number }
+              ],
+              "statePatch": {
+                "characterDelta": [
+                  { "name": "string", ... }
+                ],
+                "worldDelta": {
+                  "locations": [...],
+                  "rules": [...]
+                },
+                "timelineDelta": [
+                  { "description": "string" }
+                ]
+              }
+            }
             
-            注意：只输出增量变化，不要重复已有信息。
+            规则:
+            - type 只能是 UPSERT/MENTION/RESOLVE/DEFER
+            - priority 只能是 high/medium/low（禁止数字）
+            - chapterOrigin 必须是当前章节号
+            - timelineDelta 每个事件的 description 必须是有意义的文本，禁止空字符串
+            - 只输出增量变化，不要重复已有信息
             """;
 
         String user = String.format("""
@@ -382,8 +398,11 @@ public class PromptBuilder {
                                     mustAdvanceHandled, newHooksPlanted, staleDebt, burstDetection, resolutionQuality
             F. 反AIGC（3维）：repetitivePatterns, genericExpressions, overlyBalancedStructure
             
-            输出格式：JSON
-            { "scores": { "dimension.name": score }, "criticalIssues": [...], "warnings": [...] }
+            输出格式：严格 JSON,遵守以下 schema:
+            { "scores": { "dimension.name": number }, "criticalIssues": ["string"], "warnings": ["string"] }
+            
+            scores 必须是数字（0-10），禁止 "7.5/10"、"good" 等非数值格式。
+            criticalIssues 和 warnings 必须是字符串数组，禁止对象格式。
             """;
 
         String user = String.format("""

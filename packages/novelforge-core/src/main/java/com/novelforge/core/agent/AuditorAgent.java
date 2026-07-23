@@ -93,21 +93,37 @@ public class AuditorAgent implements Agent {
 
                 if (root.has("scores")) {
                     java.util.Map<String, Double> scores = new java.util.LinkedHashMap<>();
-                    root.get("scores").fields().forEachRemaining(entry ->
-                            scores.put(entry.getKey(), entry.getValue().asDouble()));
+                    root.get("scores").fields().forEachRemaining(entry -> {
+                        try {
+                            double val = parseScoreValue(entry.getValue());
+                            scores.put(entry.getKey(), val);
+                        } catch (Exception e) {
+                            log.warn("Skipping invalid dimension score: {} = {}", entry.getKey(), entry.getValue());
+                        }
+                    });
                     result.setDimensionScores(scores);
                 }
 
                 if (root.has("criticalIssues")) {
                     java.util.List<String> issues = new java.util.ArrayList<>();
-                    root.get("criticalIssues").forEach(node -> issues.add(node.asText()));
+                    root.get("criticalIssues").forEach(node -> {
+                        if (node.isTextual()) issues.add(node.asText());
+                        else if (node.has("issue")) issues.add(node.get("issue").asText());
+                        else if (node.has("description")) issues.add(node.get("description").asText());
+                        else issues.add(node.toString());
+                    });
                     result.setCriticalIssues(issues);
                     result.setPass(issues.isEmpty());
                 }
 
                 if (root.has("warnings")) {
                     java.util.List<String> warnings = new java.util.ArrayList<>();
-                    root.get("warnings").forEach(node -> warnings.add(node.asText()));
+                    root.get("warnings").forEach(node -> {
+                        if (node.isTextual()) warnings.add(node.asText());
+                        else if (node.has("warning")) warnings.add(node.get("warning").asText());
+                        else if (node.has("description")) warnings.add(node.get("description").asText());
+                        else warnings.add(node.toString());
+                    });
                     result.setWarnings(warnings);
                 }
             }
@@ -159,6 +175,32 @@ public class AuditorAgent implements Agent {
         }
 
         return result;
+    }
+
+    /** Parse a score value from LLM output that may be numeric (7.5), ratio ("7.5/10"), or qualitative ("good"→7).
+     *  Returns 7.0 as fallback for unparseable values. */
+    private double parseScoreValue(com.fasterxml.jackson.databind.JsonNode value) {
+        if (value == null || value.isNull()) return 7.0;
+        if (value.isNumber()) return value.asDouble();
+        // String value: try to extract a number
+        String text = value.asText().trim();
+        // "7.5/10" or "75%" patterns
+        if (text.contains("/")) {
+            String[] parts = text.split("/");
+            try { return Double.parseDouble(parts[0].trim()); } catch (NumberFormatException e) { return 7.0; }
+        }
+        if (text.endsWith("%")) {
+            try { return Double.parseDouble(text.replace("%", "")) / 10.0; } catch (NumberFormatException e) { return 7.0; }
+        }
+        // Qualitative mapping
+        String lower = text.toLowerCase();
+        if (lower.startsWith("exc") || lower.startsWith("out") || lower.equals("great") || lower.equals("a")) return 9.0;
+        if (lower.startsWith("good") || lower.equals("b") || lower.startsWith("above")) return 7.5;
+        if (lower.startsWith("avg") || lower.equals("c") || lower.startsWith("fair") || lower.startsWith("ok")) return 6.0;
+        if (lower.startsWith("poor") || lower.equals("d") || lower.startsWith("below") || lower.startsWith("weak")) return 4.0;
+        if (lower.startsWith("bad") || lower.equals("f") || lower.startsWith("fail") || lower.startsWith("terri")) return 2.0;
+        // Plain number parse
+        try { return Double.parseDouble(text); } catch (NumberFormatException e) { return 7.0; }
     }
 
     // extractJson moved to TextUtils.extractJsonBlock
