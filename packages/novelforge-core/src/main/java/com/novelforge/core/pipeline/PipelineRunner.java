@@ -26,6 +26,11 @@ public class PipelineRunner {
         this.pipeline = new AgentPipeline(router);
     }
 
+    /** Set progress listener on the underlying pipeline */
+    public void setProgressListener(ProgressListener listener) {
+        pipeline.setProgressListener(listener);
+    }
+
     /** Run the "write next chapter" pipeline */
     public PipelineResult writeNextChapter(Book book, TruthState truthState) {
         log.info("Starting pipeline for book '{}', chapter {}", book.getTitle(), book.nextChapterNumber());

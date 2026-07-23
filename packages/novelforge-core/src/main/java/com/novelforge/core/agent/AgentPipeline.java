@@ -29,6 +29,12 @@ public class AgentPipeline {
     private static final Logger log = LoggerFactory.getLogger(AgentPipeline.class);
 
     private final List<Agent> agents;
+    private com.novelforge.core.pipeline.ProgressListener progressListener;
+
+    /** Set a progress listener to receive real-time pipeline events */
+    public void setProgressListener(com.novelforge.core.pipeline.ProgressListener listener) {
+        this.progressListener = listener;
+    }
 
     public AgentPipeline(ModelRouter router) {
         this.agents = List.of(
@@ -60,6 +66,8 @@ public class AgentPipeline {
         PipelineContext current = context;
         PipelineResult result = null;
         PipelineConfig config = context.getConfig();
+        int totalSteps = agents.size();
+        int enabledCount = 0;
 
         // Toggle map: agent name → config boolean field
         Map<String, Boolean> toggles = Map.of(
@@ -74,19 +82,25 @@ public class AgentPipeline {
             "Reviser",     config.isRunReviser()
         );
 
-        for (Agent agent : agents) {
+        for (int i = 0; i < agents.size(); i++) {
+            Agent agent = agents.get(i);
             boolean enabled = toggles.getOrDefault(agent.name(), true);
             if (!enabled) {
                 log.info("=== Skipping disabled agent: {} ===", agent.name());
+                if (progressListener != null) progressListener.onAgentSkip(agent.name(), i, totalSteps);
                 continue;
             }
             log.info("=== Running agent: {} ===", agent.name());
+            if (progressListener != null) progressListener.onAgentStart(agent.name(), i, totalSteps);
+            long startTime = System.currentTimeMillis();
             try {
                 result = agent.execute(current);
+                long elapsed = System.currentTimeMillis() - startTime;
                 // 🟡-5 fix: Check for hard failure — updatedContext() returns null on error,
                 // which would cause NPE on next agent's execute()
                 if (result.isHardFailure()) {
                     log.error("Agent {} hard failure: {}", agent.name(), result.errorMessage());
+                    if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, result.errorMessage());
                     return result; // Stop pipeline immediately
                 }
                 PipelineContext updatedCtx = result.updatedContext();
@@ -96,8 +110,12 @@ public class AgentPipeline {
                     log.warn("Agent {} returned null context — preserving previous context", agent.name());
                 }
                 log.info("Agent {} completed successfully", agent.name());
+                enabledCount++;
+                String summary = String.format("%d chars, %d ms", result.generatedText() != null ? result.generatedText().length() : 0, elapsed);
+                if (progressListener != null) progressListener.onAgentComplete(agent.name(), i, totalSteps, elapsed, summary);
             } catch (Exception e) {
                 log.error("Agent {} failed: {}", agent.name(), e.getMessage(), e);
+                if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, e.getMessage());
                 return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage());
             }
         }
@@ -114,6 +132,18 @@ public class AgentPipeline {
             log.info("Truth state saved after pipeline completion");
         } catch (Exception e) {
             log.warn("Failed to save truth state", e);
+        }
+
+        // Pipeline complete notification
+        if (progressListener != null) {
+            int chapters = current.getBook().getChapters().size();
+            int words = 0;
+            for (var ch : current.getBook().getChapters()) {
+                String txt = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+                if (txt != null) words += com.novelforge.core.models.TextUtils.estimateChineseWordCount(txt);
+            }
+            double auditScore = current.getAuditResult() != null ? current.getAuditResult().getOverallScore() : 0;
+            progressListener.onPipelineComplete(chapters, words, auditScore);
         }
 
         return result;

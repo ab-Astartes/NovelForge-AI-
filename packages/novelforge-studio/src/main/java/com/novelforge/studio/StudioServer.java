@@ -73,6 +73,8 @@ public class StudioServer {
         volatile String error = null;
         volatile int progress = 0; // 0-100
         volatile long startTime = System.currentTimeMillis();
+        // SSE progress events stored for both streaming and polling clients
+        final java.util.List<String> events = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         WriteJob(String jobId) { this.jobId = jobId; }
     }
 
@@ -103,6 +105,7 @@ public class StudioServer {
         server.createContext("/api/state", this::corsThenStateApi);
         server.createContext("/api/export", this::corsThenExportApi);
         server.createContext("/api/config", this::corsThenConfigApi);
+        server.createContext("/api/write/stream", this::corsThenWriteStreamApi);
         server.createContext("/api/progress", this::corsThenProgressApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
@@ -320,12 +323,38 @@ public class StudioServer {
         writeExecutor.submit(() -> {
             job.status = "running";
             job.progress = 10;
+            job.events.add("event: pipeline_start\ndata: {\"jobId\":\"" + jobId + "\"}\n\n");
             try {
                 Book book = BookProject.loadBook(Paths.get(bookPath));
                 TruthState state = new TruthState(Paths.get(bookPath));
                 PipelineConfig config = loadConfig(Paths.get(bookPath));
                 ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
                 PipelineRunner runner = new PipelineRunner(config, router);
+
+                // Attach progress listener to push SSE events into WriteJob
+                final int totalAgents = 9;
+                runner.setProgressListener(new com.novelforge.core.pipeline.ProgressListener() {
+                    @Override public void onAgentStart(String name, int step, int total) {
+                        job.events.add("event: agent_start\ndata: {\"agent\":\"" + name + "\",\"step\":" + step + ",\"total\":" + total + "}\n\n");
+                        job.progress = 10 + (int)((step / (float)total) * 70);
+                    }
+                    @Override public void onAgentComplete(String name, int step, int total, long elapsedMs, String summary) {
+                        job.events.add("event: agent_complete\ndata: {\"agent\":\"" + name + "\",\"step\":" + step + ",\"total\":" + total + ",\"elapsed\":" + elapsedMs + ",\"summary\":\"" + sanitizeForJson(summary) + "\"}\n\n");
+                        job.progress = 10 + (int)(((step + 1) / (float)total) * 70);
+                    }
+                    @Override public void onAgentSkip(String name, int step, int total) {
+                        job.events.add("event: agent_skip\ndata: {\"agent\":\"" + name + "\",\"step\":" + step + "}\n\n");
+                    }
+                    @Override public void onAgentFail(String name, int step, int total, String error) {
+                        job.events.add("event: agent_fail\ndata: {\"agent\":\"" + name + "\",\"error\":\"" + sanitizeForJson(error) + "\"}\n\n");
+                    }
+                    @Override public void onPipelineComplete(int chapters, int words, double score) {
+                        job.events.add("event: pipeline_complete\ndata: {\"chapters\":" + chapters + ",\"words\":" + words + ",\"score\":" + score + "}\n\n");
+                    }
+                    @Override public void onPipelineFail(String error) {
+                        job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(error) + "\"}\n\n");
+                    }
+                });
 
                 job.progress = 30;
                 PipelineResult result;
@@ -351,10 +380,12 @@ public class StudioServer {
                 } else {
                     job.error = result.errorMessage();
                     job.status = "failed";
+                    job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(result.errorMessage()) + "\"}\n\n");
                 }
             } catch (Exception e) {
                 job.error = e.getMessage();
                 job.status = "failed";
+                job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}\n\n");
             }
         });
 
@@ -363,6 +394,55 @@ public class StudioServer {
         response.put("jobId", jobId);
         response.put("status", "pending");
         sendJson(exchange, 200, mapper.writeValueAsString(response));
+    }
+
+    // --- API: Write SSE stream (real-time progress) ---
+    private void handleWriteStreamApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+
+        String query = exchange.getRequestURI().getQuery();
+        String jobId = getQueryParam(query, "jobId");
+        if (jobId == null) { sendJson(exchange, 400, "{\"error\":\"jobId required\"}"); return; }
+
+        WriteJob job = writeJobs.get(jobId);
+        if (job == null) { sendJson(exchange, 404, "{\"error\":\"job not found\"}"); return; }
+
+        // SSE response headers
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        addCorsHeaders(exchange);
+        exchange.sendResponseHeaders(200, 0); // 0 = chunked/streaming
+
+        OutputStream os = exchange.getResponseBody();
+        int eventIndex = 0;
+
+        try {
+            // Stream events until job completes/fails
+            while (job.status.equals("pending") || job.status.equals("running")) {
+                // Drain buffered events since last check
+                while (eventIndex < job.events.size()) {
+                    String evt = job.events.get(eventIndex++);
+                    os.write(evt.getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+                Thread.sleep(500); // poll interval
+            }
+            // Final drain: send remaining events + terminal event
+            while (eventIndex < job.events.size()) {
+                String evt = job.events.get(eventIndex++);
+                os.write(evt.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+            // Send terminal SSE event
+            String terminal = "event: done\ndata: {\"jobId\":\"" + jobId + "\",\"status\":\"" + job.status + "\"}\n\n";
+            os.write(terminal.getBytes(StandardCharsets.UTF_8));
+            os.flush();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
     }
 
     // --- API: Write job status polling (🟡-2) ---
@@ -383,6 +463,19 @@ public class StudioServer {
         response.put("elapsedSeconds", (System.currentTimeMillis() - job.startTime) / 1000);
         if (job.result != null) response.put("result", job.result);
         if (job.error != null) response.put("error", sanitizeForJson(job.error));
+        // Include recent SSE events for polling clients (last 20 events max)
+        if (!job.events.isEmpty()) {
+            ArrayNode evtArr = mapper.createArrayNode();
+            synchronized (job.events) {
+                int start = Math.max(0, job.events.size() - 20);
+                for (int i = start; i < job.events.size(); i++) {
+                    // Extract data portion from SSE formatted string
+                    String evt = job.events.get(i);
+                    evtArr.add(evt);
+                }
+            }
+            response.set("events", evtArr);
+        }
         // Auto-cleanup completed/failed jobs after 5 minutes
         if (job.status.equals("completed") || job.status.equals("failed")) {
             long elapsed = System.currentTimeMillis() - job.startTime;
@@ -760,6 +853,11 @@ public class StudioServer {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
         if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleProgressApi(ex);
+    }
+    private void corsThenWriteStreamApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleWriteStreamApi(ex);
     }
     private void corsThenWriteStatusApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
