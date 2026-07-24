@@ -196,6 +196,7 @@ function markStepCompleted(agentName) {
 async function writeChapter() {
   const bookPath = document.getElementById('write-book').value;
   const mode = document.getElementById('write-mode').value;
+  const batchCount = mode === 'batch' ? parseInt(document.getElementById('write-batch-count')?.value || '3') : 0;
   // 🟢-1: Read from shared config fields (write panel)
   const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
   const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
@@ -242,7 +243,7 @@ async function writeChapter() {
     const res = await fetch(authUrl(API + '/api/write'), {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ path: bookPath, mode, apiKey, baseUrl, model: modelId })
+      body: JSON.stringify({ path: bookPath, mode, apiKey, baseUrl, model: modelId, count: batchCount })
     });
     const data = await res.json();
 
@@ -756,3 +757,8 @@ loadBooks();
 populateBookSelects();
 loadConfig();
 resetPipelineSteps();
+
+// Mode change: show/hide batch count field
+document.getElementById('write-mode').addEventListener('change', function() {
+  document.getElementById('batch-count-group').style.display = this.value === 'batch' ? '' : 'none';
+});

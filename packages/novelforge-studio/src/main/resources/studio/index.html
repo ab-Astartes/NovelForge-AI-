@@ -209,7 +209,12 @@
         <select id="write-mode" class="input-field">
           <option value="next">完整九重炼章</option>
           <option value="draft">草稿速写（4 Agent）</option>
+          <option value="batch">批量炼章（多章节）</option>
         </select>
+      </div>
+      <div class="form-group" id="batch-count-group" style="display:none">
+        <label class="form-label">章数</label>
+        <input type="number" id="write-batch-count" class="input-field" value="3" min="1" max="20">
       </div>
       <div class="form-group">
         <label class="form-label">API Key</label>
