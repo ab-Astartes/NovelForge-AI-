@@ -107,6 +107,7 @@ public class StudioServer {
         server.createContext("/api/config", this::corsThenConfigApi);
         server.createContext("/api/write/stream", this::corsThenWriteStreamApi);
         server.createContext("/api/progress", this::corsThenProgressApi);
+        server.createContext("/api/diff", this::corsThenDiffApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
     }
@@ -708,6 +709,87 @@ public class StudioServer {
         }
     }
 
+    /** Handle diff API — paragraph-level comparison of draft vs final text for a chapter */
+    private void handleDiffApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        int chapterNum = getQueryParam(query, "chapter") != null ? Integer.parseInt(getQueryParam(query, "chapter")) : -1;
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath) || chapterNum < 1) {
+            sendJson(exchange, 400, "{\"error\":\"path and chapter (>=1) required\"}");
+            return;
+        }
+
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            if (chapterNum > book.getChapters().size()) {
+                sendJson(exchange, 404, "{\"error\":\"Chapter " + chapterNum + " not found\"}");
+                return;
+            }
+            Chapter chapter = book.getChapters().get(chapterNum - 1);
+            String draft = chapter.getDraftText() != null ? chapter.getDraftText() : "";
+            String final_ = chapter.getFinalText() != null ? chapter.getFinalText() : "";
+
+            // Split into paragraphs (by double newline or single newline for Chinese text)
+            String[] draftParas = draft.split("\\n\\n|\\n");
+            String[] finalParas = final_.split("\\n\\n|\\n");
+
+            // Simple paragraph-level diff using LCS-like matching
+            ArrayNode diffResult = computeParagraphDiff(draftParas, finalParas);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("chapterNumber", chapterNum);
+            response.put("draftParagraphs", draftParas.length);
+            response.put("finalParagraphs", finalParas.length);
+            response.set("diff", diffResult);
+            sendJson(exchange, 200, mapper.writeValueAsString(response));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** Compute paragraph-level diff between draft and final paragraphs */
+    private ArrayNode computeParagraphDiff(String[] draftParas, String[] finalParas) {
+        ArrayNode result = mapper.createArrayNode();
+        // Simple approach: match paragraphs by content, track additions/removes
+        java.util.Set<String> draftSet = new java.util.HashSet<>();
+        for (String p : draftParas) { draftSet.add(p.trim()); }
+        java.util.Set<String> finalSet = new java.util.HashSet<>();
+        for (String p : finalParas) { finalSet.add(p.trim()); }
+
+        // Walk through final paragraphs — if in draft, it's "kept"; if not, it's "added"
+        int di = 0;
+        for (int fi = 0; fi < finalParas.length; fi++) {
+            String fp = finalParas[fi].trim();
+            if (fp.isEmpty()) continue;
+            ObjectNode node = mapper.createObjectNode();
+            node.put("index", fi);
+            node.put("text", finalParas[fi]);
+            if (di < draftParas.length && draftParas[di].trim().equals(fp)) {
+                node.put("type", "kept");
+                di++;
+            } else if (draftSet.contains(fp)) {
+                node.put("type", "moved");
+            } else {
+                node.put("type", "added");
+            }
+            result.add(node);
+        }
+        // Remaining draft paragraphs that weren't matched = "removed"
+        while (di < draftParas.length) {
+            String dp = draftParas[di].trim();
+            if (!dp.isEmpty()) {
+                ObjectNode node = mapper.createObjectNode();
+                node.put("index", di);
+                node.put("text", draftParas[di]);
+                node.put("type", "removed");
+                result.add(node);
+            }
+            di++;
+        }
+        return result;
+    }
+
     /** Sanitize string for safe embedding in JSON — uses ObjectMapper for correctness */
     private String sanitizeForJson(String s) {
         if (s == null) return "null";
@@ -914,6 +996,11 @@ public class StudioServer {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
         if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleProgressApi(ex);
+    }
+    private void corsThenDiffApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleDiffApi(ex);
     }
     private void corsThenWriteStreamApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }

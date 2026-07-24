@@ -752,6 +752,57 @@ async function loadConfig() {
   }
 }
 
+// ========== Diff Modal ==========
+async function showDiff(chapterNum) {
+  const bookPath = document.getElementById('progress-book').value;
+  if (!bookPath) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/diff?path=' + encodeURIComponent(bookPath) + '&chapter=' + chapterNum), { headers: authHeaders() });
+    const data = await res.json();
+    document.getElementById('diff-title').textContent = '第 ' + chapterNum + ' 章 Diff';
+    const container = document.getElementById('diff-content');
+    container.innerHTML = ''; // clear
+    if (data.diff && data.diff.length > 0) {
+      data.diff.forEach(item => {
+        const div = document.createElement('div');
+        div.style.padding = '8px 12px';
+        div.style.borderRadius = '6px';
+        div.style.marginBottom = '6px';
+        if (item.type === 'kept') {
+          div.style.background = 'rgba(46,204,113,0.08)';
+          div.style.borderLeft = '3px solid #2ecc71';
+          div.innerHTML = '<span style="color:#2ecc71;font-size:11px">✓ 保留</span><br>' + escapeHtml(item.text);
+        } else if (item.type === 'added') {
+          div.style.background = 'rgba(192,57,43,0.12)';
+          div.style.borderLeft = '3px solid #c0392b';
+          div.innerHTML = '<span style="color:#c0392b;font-size:11px">+ 新增</span><br>' + escapeHtml(item.text);
+        } else if (item.type === 'moved') {
+          div.style.background = 'rgba(241,196,15,0.08)';
+          div.style.borderLeft = '3px solid #f1c40f';
+          div.innerHTML = '<span style="color:#f1c40f;font-size:11px">↹ 移动</span><br>' + escapeHtml(item.text);
+        } else if (item.type === 'removed') {
+          div.style.background = 'rgba(149,165,166,0.12)';
+          div.style.borderLeft = '3px solid #95a5a6';
+          div.innerHTML = '<span style="color:#95a5a6;font-size:11px">- 删除</span><br>' + escapeHtml(item.text);
+        }
+        container.appendChild(div);
+      });
+    } else {
+      container.innerHTML = '<p style="color:#8b7355;text-align:center">暂无 diff 数据</p>'; 
+    }
+    document.getElementById('diff-modal').style.display = ''; // show
+  } catch (e) {
+    console.error('showDiff error:', e);
+  }
+}
+function closeDiffModal() {
+  document.getElementById('diff-modal').style.display = 'none';
+}
+function escapeHtml(text) {
+  if (!text) return '';  
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ========== Progress Panel ==========
 async function loadProgress() {
   const bookPath = document.getElementById('progress-book').value;
@@ -778,7 +829,8 @@ async function loadProgress() {
           <td style="padding:6px;text-align:right">${ch.wordCount.toLocaleString()}</td>
           <td style="padding:6px;text-align:center">${ch.audited ? (ch.passed ? '✅' : '⚠️') : '—'}</td>
           <td style="padding:6px;text-align:right">${ch.auditScore.toFixed(1)}</td>
-          <td style="padding:6px;text-align:right">${cs > 60 ? Math.floor(cs/60)+'m'+(cs%60)+'s' : cs+'s'}</td>`;
+          <td style="padding:6px;text-align:right">${cs > 60 ? Math.floor(cs/60)+'m'+(cs%60)+'s' : cs+'s'}</td>
+          <td style="padding:6px;text-align:center"><button onclick="showDiff(${ch.chapterNumber})" style="background:none;border:1px solid #c0392b;color:#c0392b;padding:2px 8px;border-radius:4px;font-size:12px">Diff</button></td>`;
         tbody.appendChild(tr);
       });
     } else {
