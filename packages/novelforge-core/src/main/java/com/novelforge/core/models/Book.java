@@ -18,6 +18,7 @@ public class Book {
     private List<Chapter> chapters = new ArrayList<>();
     private String outline;      // book outline text or JSON
     private String authorIntent; // free-form author intent description
+    private WritingProgress progress; // stored progress with per-chapter details
 
     // --- Getters/Setters ---
     public String getId() { return id; }
@@ -41,8 +42,15 @@ public class Book {
         return chapters.size() + 1;
     }
 
+    public WritingProgress getStoredProgress() { return progress; }
+    public void setProgress(WritingProgress progress) { this.progress = progress; }
+
     /** Calculate writing progress statistics (fixes #G6: null-safe text handling) */
     public WritingProgress getProgress() {
+        if (progress != null && progress.getChapterProgresses() != null && !progress.getChapterProgresses().isEmpty()) {
+            progress.computeFromChapters();
+            return progress;
+        }
         WritingProgress progress = new WritingProgress();
         progress.setTotalChapters(chapters.size());
         progress.setTotalWords(0);

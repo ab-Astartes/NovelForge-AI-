@@ -42,6 +42,9 @@
     <button onclick="showPanel('state')" class="nav-tab" id="nav-state">
       <span class="nav-icon">🌐</span> 世界
     </button>
+    <button onclick="showPanel('progress')" class="nav-tab" id="nav-progress">
+      <span class="nav-icon">📊</span> 进度
+    </button>
     <button onclick="showPanel('config')" class="nav-tab" id="nav-config">
       <span class="nav-icon">⚙</span> 炼炉
     </button>
@@ -328,6 +331,38 @@
     </div>
 
     <pre id="state-content" class="state-scroll"></pre>
+  </section>
+
+  <!-- ========== 进度：写作统计 ========== -->
+  <section id="panel-progress" class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">炼章纪事</h2>
+      <p class="panel-desc">写作进度与质量统计</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">选择项目</label>
+      <select id="progress-book" class="input-field"></select>
+    </div>
+    <div id="progress-summary" style="display:none">
+      <div style="display:flex;gap:16px;margin-bottom:16px">
+        <div class="stat-card" id="stat-chapters"><div class="stat-value">0</div><div class="stat-label">章节</div></div>
+        <div class="stat-card" id="stat-words"><div class="stat-value">0</div><div class="stat-label">字数</div></div>
+        <div class="stat-card" id="stat-score"><div class="stat-value">0</div><div class="stat-label">平均分</div></div>
+        <div class="stat-card" id="stat-time"><div class="stat-value">0s</div><div class="stat-label">总耗时</div></div>
+      </div>
+      <table id="progress-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:2px solid #c0392b">
+          <th style="padding:6px;text-align:left">章号</th>
+          <th style="padding:6px;text-align:left">标题</th>
+          <th style="padding:6px;text-align:right">字数</th>
+          <th style="padding:6px;text-align:center">审计</th>
+          <th style="padding:6px;text-align:right">分数</th>
+          <th style="padding:6px;text-align:right">耗时</th>
+        </tr></thead>
+        <tbody id="progress-tbody"></tbody>
+      </table>
+    </div>
+    <button onclick="loadProgress()" class="btn btn-primary" style="margin-top:12px">刷新进度</button>
   </section>
 
   <!-- ========== 炼炉：配置 ========== -->

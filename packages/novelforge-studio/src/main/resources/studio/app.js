@@ -146,7 +146,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -749,6 +749,44 @@ async function loadConfig() {
     updatePipelineStepVisibility();
   } catch (e) {
     // Use defaults
+  }
+}
+
+// ========== Progress Panel ==========
+async function loadProgress() {
+  const bookPath = document.getElementById('progress-book').value;
+  if (!bookPath) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/progress?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    const data = await res.json();
+    document.getElementById('progress-summary').style.display = '';
+    document.getElementById('stat-chapters').querySelector('.stat-value').textContent = data.totalChapters || 0;
+    document.getElementById('stat-words').querySelector('.stat-value').textContent = (data.totalWords || 0).toLocaleString();
+    document.getElementById('stat-score').querySelector('.stat-value').textContent = (data.averageAuditScore || 0).toFixed(1);
+    const secs = Math.round((data.totalPipelineTimeMs || 0) / 1000);
+    document.getElementById('stat-time').querySelector('.stat-value').textContent = secs > 60 ? Math.floor(secs/60) + 'm' + (secs%60) + 's' : secs + 's';
+
+    const tbody = document.getElementById('progress-tbody');
+    tbody.innerHTML = '';
+    if (data.chapters && data.chapters.length > 0) {
+      data.chapters.forEach(ch => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(192,57,43,0.15)';
+        const cs = Math.round(ch.pipelineTimeMs / 1000);
+        tr.innerHTML = `<td style="padding:6px">${ch.chapterNumber}</td>
+          <td style="padding:6px">${ch.chapterTitle || ''}</td>
+          <td style="padding:6px;text-align:right">${ch.wordCount.toLocaleString()}</td>
+          <td style="padding:6px;text-align:center">${ch.audited ? (ch.passed ? '✅' : '⚠️') : '—'}</td>
+          <td style="padding:6px;text-align:right">${ch.auditScore.toFixed(1)}</td>
+          <td style="padding:6px;text-align:right">${cs > 60 ? Math.floor(cs/60)+'m'+(cs%60)+'s' : cs+'s'}</td>`;
+        tbody.appendChild(tr);
+      });
+    } else {
+      // No stored progress — show basic stats from chapters count
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#8b7355;text-align:center">暂无详细进度数据（需要通过写作功能生成）</td></tr>';
+    }
+  } catch (e) {
+    console.error('loadProgress error:', e);
   }
 }
 

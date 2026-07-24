@@ -785,6 +785,27 @@ body {
   margin-bottom: 12px;
 }
 
+/* --- Progress Stats --- */
+.stat-card {
+  background: rgba(192,57,43,0.08);
+  border: 1px solid rgba(192,57,43,0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  text-align: center;
+  min-width: 80px;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--cinnabar);
+  font-family: 'Noto Serif SC', serif;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--paper-dark);
+  margin-top: 4px;
+}
+
 /* --- Export Section --- */
 .export-section {
   margin-top: 24px;

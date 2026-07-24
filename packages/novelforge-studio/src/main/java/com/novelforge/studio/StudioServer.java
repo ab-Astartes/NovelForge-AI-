@@ -675,6 +675,33 @@ public class StudioServer {
             result.put("averageWordsPerChapter", progress.getAverageWordsPerChapter());
             result.put("auditedChapters", progress.getAuditedChapters());
             result.put("passedChapters", progress.getPassedChapters());
+            result.put("averageAuditScore", progress.getAverageAuditScore());
+            result.put("totalPipelineTimeMs", progress.getTotalPipelineTimeMs());
+
+            // Per-chapter progress data
+            ArrayNode chapters = mapper.createArrayNode();
+            for (com.novelforge.core.models.WritingProgress.ChapterProgress cp : progress.getChapterProgresses()) {
+                ObjectNode cpNode = mapper.createObjectNode();
+                cpNode.put("chapterNumber", cp.getChapterNumber());
+                cpNode.put("chapterTitle", cp.getChapterTitle());
+                cpNode.put("wordCount", cp.getWordCount());
+                cpNode.put("audited", cp.isAudited());
+                cpNode.put("passed", cp.isPassed());
+                cpNode.put("auditScore", cp.getAuditScore());
+                cpNode.put("pipelineTimeMs", cp.getPipelineTimeMs());
+                ArrayNode timings = mapper.createArrayNode();
+                for (com.novelforge.core.models.WritingProgress.AgentTiming at : cp.getAgentTimings()) {
+                    ObjectNode atNode = mapper.createObjectNode();
+                    atNode.put("agentName", at.getAgentName());
+                    atNode.put("durationMs", at.getDurationMs());
+                    atNode.put("outputChars", at.getOutputChars());
+                    timings.add(atNode);
+                }
+                cpNode.set("agentTimings", timings);
+                chapters.add(cpNode);
+            }
+            result.set("chapters", chapters);
+
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
