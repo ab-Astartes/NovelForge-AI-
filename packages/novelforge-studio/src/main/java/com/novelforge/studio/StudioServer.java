@@ -357,15 +357,46 @@ public class StudioServer {
                 });
 
                 job.progress = 30;
-                PipelineResult result;
-                if (mode.equals("draft")) {
+                PipelineResult result = null;
+                int batchCount = body.has("count") ? body.get("count").asInt() : 0;
+
+                if (mode.equals("batch") && batchCount > 0) {
+                    // Batch: write N chapters sequentially
+                    int successCount = 0;
+                    for (int i = 0; i < batchCount && i < 20; i++) {
+                        PipelineConfig batchConfig = config.clone();
+                        if (i > 0) batchConfig.setRunArchitect(false); // outline already built
+                        PipelineRunner batchRunner = new PipelineRunner(batchConfig, router);
+                        result = batchRunner.writeNextChapter(book, state);
+                        if (result.success()) {
+                            Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                            BookProject.saveChapter(Paths.get(bookPath), chapter);
+                            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                            state.saveAll();
+                            successCount++;
+                        } else {
+                            job.error = "Chapter " + (i + 1) + " failed: " + result.errorMessage();
+                            job.status = "failed";
+                            job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(job.error) + "\"}\n\n");
+                            break;
+                        }
+                    }
+                    if (job.status == null || !job.status.equals("failed")) {
+                        job.result = "{\"status\":\"ok\",\"chaptersWritten\":\"" + successCount + "\"}";
+                        job.progress = 100;
+                        job.status = "completed";
+                    }
+                } else if (mode.equals("draft")) {
                     result = runner.runDraftOnly(book, state);
                 } else {
                     result = runner.writeNextChapter(book, state);
                 }
 
                 job.progress = 80;
-                if (result.success()) {
+                if (mode.equals("batch")) {
+                    // Batch already handled save/status in loop; skip single-chapter logic
+                    // done event will be sent at end of method
+                } else if (result != null && result.success()) {
                     Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
                     Path bookDir = Paths.get(bookPath);
                     BookProject.saveChapter(bookDir, chapter);
@@ -377,10 +408,13 @@ public class StudioServer {
                     }
                     job.progress = 100;
                     job.status = "completed";
-                } else {
+                } else if (result != null) {
                     job.error = result.errorMessage();
                     job.status = "failed";
                     job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(result.errorMessage()) + "\"}\n\n");
+                } else {
+                    job.error = "Unknown pipeline error";
+                    job.status = "failed";
                 }
             } catch (Exception e) {
                 job.error = e.getMessage();

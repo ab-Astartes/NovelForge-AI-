@@ -22,7 +22,7 @@ public class WriteCommand {
 
     public void execute(String[] args) {
         if (args.length == 0) {
-            System.err.println("Usage: novelforge write <next|draft> --book <path> [--api-key <key>] [--model <id>]");
+            System.err.println("Usage: novelforge write <next|draft|audit|continue|batch|progress> --book <path> [--api-key <key>] [--model <id>] [--count <n>]");
             return;
         }
 
@@ -238,6 +238,59 @@ public class WriteCommand {
                         System.err.println("❌ Continue failed: " + result.errorMessage());
                     }
                 }
+                case "batch" -> {
+                    // Batch writing: write N chapters sequentially, updating TruthState between each
+                    String countArg = findOption(args, "--count");
+                    int count = countArg != null ? Integer.parseInt(countArg) : 3;
+                    if (count <= 0 || count > 20) {
+                        System.err.println("❌ Invalid count. Must be 1-20.");
+                        return;
+                    }
+
+                    System.out.println("📚 Batch writing " + count + " chapters for '" + book.getTitle() + "'...");
+                    System.out.println("   Starting from chapter " + book.nextChapterNumber());
+                    System.out.println("   Model: " + modelId + " @ " + baseUrl);
+
+                    int successCount = 0;
+                    int failCount = 0;
+
+                    for (int i = 0; i < count; i++) {
+                        int chapterNum = book.nextChapterNumber();
+                        System.out.println();
+                        System.out.println("━━━ Chapter " + chapterNum + " (" + (i + 1) + "/" + count + ") ━━━");
+
+                        // Use cloned config: skip Architect after first chapter (outline already built)
+                        PipelineConfig batchConfig = config.clone();
+                        if (i > 0) batchConfig.setRunArchitect(false);
+
+                        PipelineRunner batchRunner = new PipelineRunner(batchConfig, router);
+                        PipelineResult result = batchRunner.writeNextChapter(book, truthState);
+
+                        if (result.success()) {
+                            Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                            BookProject.saveChapter(bookDir, chapter);
+                            BookProject.saveBookMetadata(bookDir, book);
+                            truthState.saveAll();
+
+                            successCount++;
+                            System.out.println("✅ Chapter " + chapterNum + " done! " + chapter.getFinalText().length() + " chars");
+                            if (chapter.getAuditResult() != null) {
+                                System.out.printf("   Audit: %.1f/10%n", chapter.getAuditResult().getOverallScore());
+                            }
+                        } else {
+                            failCount++;
+                            System.err.println("❌ Chapter " + chapterNum + " failed: " + result.errorMessage());
+                            System.err.println("   Stopping batch. " + successCount + " chapters completed.");
+                            break; // stop on failure — don't continue with stale context
+                        }
+                    }
+
+                    System.out.println();
+                    System.out.println("━━━ Batch Complete ━━━");
+                    System.out.println("   Success: " + successCount + " / " + count);
+                    if (failCount > 0) System.out.println("   Failed: " + failCount);
+                    System.out.println("   Total chapters now: " + book.getChapters().size());
+                }
                 case "progress" -> {
                     com.novelforge.core.models.WritingProgress progress = book.getProgress();
                     System.out.println("📊 Writing Progress for '" + book.getTitle() + "':");
@@ -248,7 +301,7 @@ public class WriteCommand {
                     System.out.println("   Passed chapters: " + progress.getPassedChapters() + "/" + progress.getTotalChapters());
                 }
                 default -> System.err.println("Unknown subcommand: write " + args[0] +
-                    "\nValid: next, draft, audit, continue, progress");
+                    "\nValid: next, draft, audit, continue, batch, progress");
             }
         } catch (Exception e) {
             System.err.println("❌ Error: " + e.getMessage());
