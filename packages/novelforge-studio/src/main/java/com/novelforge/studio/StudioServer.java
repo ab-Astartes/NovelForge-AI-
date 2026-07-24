@@ -29,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -108,6 +109,7 @@ public class StudioServer {
         server.createContext("/api/write/stream", this::corsThenWriteStreamApi);
         server.createContext("/api/progress", this::corsThenProgressApi);
         server.createContext("/api/diff", this::corsThenDiffApi);
+        server.createContext("/api/rollback", this::corsThenRollbackApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
     }
@@ -790,6 +792,52 @@ public class StudioServer {
         return result;
     }
 
+    /** Handle rollback API — list backups or rollback truth state */
+    private void handleRollbackApi(HttpExchange exchange) throws IOException {
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        String action = getQueryParam(query, "action"); // "list" or "rollback"
+        String timestamp = getQueryParam(query, "timestamp");
+
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required\"}");
+            return;
+        }
+
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState truthState = new TruthState(Paths.get(bookPath));
+
+            if ("list".equals(action)) {
+                List<Long> versions = truthState.getBackupVersions();
+                ArrayNode arr = mapper.createArrayNode();
+                for (Long ts : versions) {
+                    ObjectNode node = mapper.createObjectNode();
+                    node.put("timestamp", ts);
+                    node.put("display", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(ts)));
+                    arr.add(node);
+                }
+                ObjectNode response = mapper.createObjectNode();
+                response.set("backups", arr);
+                sendJson(exchange, 200, mapper.writeValueAsString(response));
+            } else if ("rollback".equals(action)) {
+                boolean success;
+                if (timestamp != null) {
+                    success = truthState.rollbackTo(Long.parseLong(timestamp));
+                } else {
+                    success = truthState.rollback();
+                }
+                // Reload book after rollback
+                book = BookProject.loadBook(Paths.get(bookPath));
+                sendJson(exchange, 200, "{\"success\":\"" + success + "\"}");
+            } else {
+                sendJson(exchange, 400, "{\"error\":\"action must be 'list' or 'rollback'\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
     /** Sanitize string for safe embedding in JSON — uses ObjectMapper for correctness */
     private String sanitizeForJson(String s) {
         if (s == null) return "null";
@@ -1001,6 +1049,11 @@ public class StudioServer {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
         if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleDiffApi(ex);
+    }
+    private void corsThenRollbackApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleRollbackApi(ex);
     }
     private void corsThenWriteStreamApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
