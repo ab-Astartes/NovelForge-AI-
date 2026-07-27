@@ -281,6 +281,18 @@ body {
   transform: none;
 }
 
+.btn-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn-secondary {
+  background: var(--gold);
+  color: #000;
+  box-shadow: 0 2px 8px rgba(212,175,55,0.3);
+}
+
 /* 🟢-4: Danger button for delete */
 .btn-danger {
   background: #8b0000;

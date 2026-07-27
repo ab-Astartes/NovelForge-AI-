@@ -236,7 +236,10 @@
       </div>
     </div>
 
-    <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
+    <div class="btn-row">
+      <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
+      <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
+    </div>
     <div id="write-progress" class="progress-indicator"></div>
     <div id="write-result" class="result-box"></div>
 

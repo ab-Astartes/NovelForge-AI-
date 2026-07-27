@@ -286,6 +286,63 @@ async function writeChapter() {
   }
 }
 
+async function resumeChapter() {
+  const bookPath = document.getElementById('write-book').value;
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
+
+  const progressDiv = document.getElementById('write-progress');
+  const resultDiv = document.getElementById('write-result');
+  const btnResume = document.getElementById('btn-resume');
+  const btnWrite = document.getElementById('btn-write');
+
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+
+  clearResult(resultDiv);
+  btnResume.disabled = true;
+  btnWrite.disabled = true;
+  btnResume.textContent = '续炼中…';
+  progressDiv.innerHTML = '<span class="spinner"></span> 从中断处续炼…';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/write/resume'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, apiKey, baseUrl, model: modelId })
+    });
+    const data = await res.json();
+
+    if (data.jobId) {
+      const agents = AGENT_ORDER;
+      streamWriteJob(data.jobId, agents, progressDiv, resultDiv, btnResume, bookPath);
+      return;
+    }
+
+    progressDiv.textContent = '';
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✦ 续炼完成！从 ${data.resumedFrom} 继续`, false);
+    } else if (data.error === 'No checkpoint found') {
+      showResult(resultDiv, '✗ 未找到中断点，请先正常炼章', true);
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '续炼失败'), true);
+    }
+  } catch (e) {
+    progressDiv.textContent = '';
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    btnResume.disabled = false;
+    btnResume.textContent = '续笔';
+    btnWrite.disabled = false;
+  }
+}
+
 async function showChapterPreview(bookPath, chapterNum) {
   const preview = document.getElementById('chapter-preview');
   const textDiv = document.getElementById('chapter-text');
