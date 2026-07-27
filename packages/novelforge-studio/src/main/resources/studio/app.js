@@ -51,6 +51,7 @@ function showPanel(name) {
   // Auto-refresh relevant panels
   if (name === 'books') loadBooks();
   if (name === 'state' || name === 'write') populateBookSelects();
+  if (name === 'style') { populateBookSelects(); loadStyle(); }
 }
 
 // ========== Result Display ==========
@@ -146,7 +147,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -801,6 +802,58 @@ function closeDiffModal() {
 function escapeHtml(text) {
   if (!text) return '';  
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ========== Style Panel ==========
+async function loadStyle() {
+  const bookPath = document.getElementById('style-book').value;
+  if (!bookPath) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/style?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    const data = await res.json();
+    document.getElementById('style-name').value = data.name || '';
+    document.getElementById('style-desc').value = data.description || '';
+    document.getElementById('style-vocabulary').value = data.vocabularyPattern || '';
+    document.getElementById('style-sentence').value = data.sentenceStructure || '';
+    document.getElementById('style-pacing').value = data.pacingPattern || '';
+    document.getElementById('style-dialogue').value = data.dialogueStyle || '';
+    document.getElementById('style-description').value = data.descriptionStyle || '';
+    document.getElementById('style-sample').value = data.referenceSample || '';
+  } catch (e) {
+    console.error('loadStyle error:', e);
+  }
+}
+async function saveStyle() {
+  const bookPath = document.getElementById('style-book').value;
+  const resultDiv = document.getElementById('style-result');
+  if (!bookPath) {
+    showResult(resultDiv, '请先选择项目', true);
+    return;
+  }
+  const body = {
+    name: document.getElementById('style-name').value,
+    description: document.getElementById('style-desc').value,
+    vocabularyPattern: document.getElementById('style-vocabulary').value,
+    sentenceStructure: document.getElementById('style-sentence').value,
+    pacingPattern: document.getElementById('style-pacing').value,
+    dialogueStyle: document.getElementById('style-dialogue').value,
+    descriptionStyle: document.getElementById('style-description').value,
+    referenceSample: document.getElementById('style-sample').value
+  };  
+  try {
+    const res = await fetch(authUrl(API + '/api/style?path=' + encodeURIComponent(bookPath)), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showResult(resultDiv, '✓ 风格保存成功，将在下次写作时生效', false);
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '保存失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
 }
 
 // ========== Progress Panel ==========

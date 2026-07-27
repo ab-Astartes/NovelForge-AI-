@@ -11,6 +11,7 @@ import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
 import com.novelforge.core.models.AuditResult;
+import com.novelforge.core.models.WritingStyle;
 import com.novelforge.core.models.PipelineResult;
 import com.novelforge.core.project.BookProject;
 import com.novelforge.core.state.TruthState;
@@ -110,6 +111,7 @@ public class StudioServer {
         server.createContext("/api/progress", this::corsThenProgressApi);
         server.createContext("/api/diff", this::corsThenDiffApi);
         server.createContext("/api/rollback", this::corsThenRollbackApi);
+        server.createContext("/api/style", this::corsThenStyleApi);
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
     }
@@ -838,6 +840,59 @@ public class StudioServer {
         }
     }
 
+    /** Handle style API — GET current style, POST set/update style */
+    private void handleStyleApi(HttpExchange exchange) throws IOException {
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required\"}");
+            return;
+        }
+
+        try {
+            if (exchange.getRequestMethod().equals("GET")) {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                WritingStyle style = book.getStyle();
+                ObjectNode response = mapper.createObjectNode();
+                if (style != null) {
+                    response.put("name", style.getName() != null ? style.getName() : "");
+                    response.put("description", style.getDescription() != null ? style.getDescription() : "");
+                    response.put("vocabularyPattern", style.getVocabularyPattern() != null ? style.getVocabularyPattern() : "");
+                    response.put("sentenceStructure", style.getSentenceStructure() != null ? style.getSentenceStructure() : "");
+                    response.put("pacingPattern", style.getPacingPattern() != null ? style.getPacingPattern() : "");
+                    response.put("dialogueStyle", style.getDialogueStyle() != null ? style.getDialogueStyle() : "");
+                    response.put("descriptionStyle", style.getDescriptionStyle() != null ? style.getDescriptionStyle() : "");
+                    response.put("referenceSample", style.getReferenceSample() != null ? style.getReferenceSample() : "");
+                    response.put("hasStyle", true);
+                } else {
+                    response.put("hasStyle", false);
+                }
+                sendJson(exchange, 200, mapper.writeValueAsString(response));
+            } else if (exchange.getRequestMethod().equals("POST")) {
+                JsonNode json = readBody(exchange);
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                WritingStyle style = book.getStyle();
+                if (style == null) style = new WritingStyle();
+                if (json.has("name")) style.setName(json.get("name").asText());
+                if (json.has("description")) style.setDescription(json.get("description").asText());
+                if (json.has("vocabularyPattern")) style.setVocabularyPattern(json.get("vocabularyPattern").asText());
+                if (json.has("sentenceStructure")) style.setSentenceStructure(json.get("sentenceStructure").asText());
+                if (json.has("pacingPattern")) style.setPacingPattern(json.get("pacingPattern").asText());
+                if (json.has("dialogueStyle")) style.setDialogueStyle(json.get("dialogueStyle").asText());
+                if (json.has("descriptionStyle")) style.setDescriptionStyle(json.get("descriptionStyle").asText());
+                if (json.has("referenceSample")) style.setReferenceSample(json.get("referenceSample").asText());
+                book.setStyle(style);
+                BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                sendJson(exchange, 200, "{\"success\":true}");
+            } else {
+                sendJson(exchange, 405, "{\"error\":\"GET or POST only\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
     /** Sanitize string for safe embedding in JSON — uses ObjectMapper for correctness */
     private String sanitizeForJson(String s) {
         if (s == null) return "null";
@@ -1054,6 +1109,11 @@ public class StudioServer {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
         if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
         handleRollbackApi(ex);
+    }
+    private void corsThenStyleApi(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+        handleStyleApi(ex);
     }
     private void corsThenWriteStreamApi(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }

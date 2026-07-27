@@ -3,6 +3,7 @@ package com.novelforge.core.project;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
 import com.novelforge.core.models.TextUtils;
+import com.novelforge.core.models.WritingStyle;
 import com.novelforge.core.state.TruthState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -138,6 +139,21 @@ public class BookProject {
             book.setTitle(root.has("title") ? root.get("title").asText() : "Unknown Title");
             book.setGenre(root.has("genre") ? root.get("genre").asText() : "general");
             book.setAuthor(root.has("author") ? root.get("author").asText() : "");
+
+            // Load WritingStyle from book.json
+            if (root.has("style")) {
+                JsonNode styleNode = root.get("style");
+                WritingStyle style = new WritingStyle();
+                if (styleNode.has("name")) style.setName(styleNode.get("name").asText());
+                if (styleNode.has("description")) style.setDescription(styleNode.get("description").asText());
+                if (styleNode.has("vocabularyPattern")) style.setVocabularyPattern(styleNode.get("vocabularyPattern").asText());
+                if (styleNode.has("sentenceStructure")) style.setSentenceStructure(styleNode.get("sentenceStructure").asText());
+                if (styleNode.has("pacingPattern")) style.setPacingPattern(styleNode.get("pacingPattern").asText());
+                if (styleNode.has("dialogueStyle")) style.setDialogueStyle(styleNode.get("dialogueStyle").asText());
+                if (styleNode.has("descriptionStyle")) style.setDescriptionStyle(styleNode.get("descriptionStyle").asText());
+                if (styleNode.has("referenceSample")) style.setReferenceSample(styleNode.get("referenceSample").asText());
+                book.setStyle(style);
+            }
         }
 
         // Load outline
@@ -221,6 +237,25 @@ public class BookProject {
         bookJson.put("genre", book.getGenre());
         bookJson.put("author", book.getAuthor() != null ? book.getAuthor() : "");
         bookJson.put("createdAt", java.time.Instant.now().toString());
+
+        // Store outline and authorIntent
+        if (book.getOutline() != null) bookJson.put("outline", book.getOutline());
+        if (book.getAuthorIntent() != null) bookJson.put("authorIntent", book.getAuthorIntent());
+
+        // Store WritingStyle if present
+        if (book.getStyle() != null) {
+            WritingStyle style = book.getStyle();
+            ObjectNode styleNode = mapper.createObjectNode();
+            if (style.getName() != null) styleNode.put("name", style.getName());
+            if (style.getDescription() != null) styleNode.put("description", style.getDescription());
+            if (style.getVocabularyPattern() != null) styleNode.put("vocabularyPattern", style.getVocabularyPattern());
+            if (style.getSentenceStructure() != null) styleNode.put("sentenceStructure", style.getSentenceStructure());
+            if (style.getPacingPattern() != null) styleNode.put("pacingPattern", style.getPacingPattern());
+            if (style.getDialogueStyle() != null) styleNode.put("dialogueStyle", style.getDialogueStyle());
+            if (style.getDescriptionStyle() != null) styleNode.put("descriptionStyle", style.getDescriptionStyle());
+            if (style.getReferenceSample() != null) styleNode.put("referenceSample", style.getReferenceSample());
+            bookJson.set("style", styleNode);
+        }
 
         // Store chapter metadata (number + title only, not full text)
         ArrayNode chaptersArr = bookJson.putArray("chapters");
