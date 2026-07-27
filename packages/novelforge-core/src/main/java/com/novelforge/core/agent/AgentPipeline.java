@@ -101,7 +101,7 @@ public class AgentPipeline {
                 if (result.isHardFailure()) {
                     log.error("Agent {} hard failure: {}", agent.name(), result.errorMessage());
                     if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, result.errorMessage());
-                    return result; // Stop pipeline immediately
+                    return new PipelineResult(agent.name(), result.errorMessage(), current); // Pass checkpoint context
                 }
                 PipelineContext updatedCtx = result.updatedContext();
                 if (updatedCtx != null) {
@@ -111,13 +111,17 @@ public class AgentPipeline {
                 }
                 log.info("Agent {} completed successfully", agent.name());
                 enabledCount++;
+                // Update checkpoint so we can resume from here if pipeline fails later
+                current.updateCheckpoint(i, agent.name());
                 String summary = String.format("%d chars, %d ms", result.generatedText() != null ? result.generatedText().length() : 0, elapsed);
                 if (progressListener != null) progressListener.onAgentComplete(agent.name(), i, totalSteps, elapsed, summary);
             } catch (Exception e) {
                 log.error("Agent {} failed: {}", agent.name(), e.getMessage(), e);
                 if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, e.getMessage());
-                return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage());
+                return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage(), current);
             }
+
+            log.info("All agents skipped or completed");
         }
 
         // All agents skipped → return error result instead of null
@@ -181,10 +185,100 @@ public class AgentPipeline {
                 } else {
                     log.warn("Agent {} returned null context — preserving previous context", agent.name());
                 }
+                current.updateCheckpoint(i, agent.name());
             } catch (Exception e) {
                 log.error("Agent {} failed", agent.name(), e);
-                return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage());
+                return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage(), current);
             }
+        }
+
+        return result;
+    }
+
+    /** Resume pipeline from checkpoint — skip agents that already completed */
+    public PipelineResult runFromCheckpoint(PipelineContext context) {
+        int startFrom = context.getCheckpointAgentIndex() + 1;
+        String checkpointName = context.getCheckpointAgentName();
+        log.info("=== Resuming pipeline from agent index {} (after checkpoint: {}) ===", startFrom, checkpointName);
+        if (startFrom >= agents.size()) {
+            log.warn("Checkpoint already at the end — pipeline is complete");
+            return new PipelineResult("Pipeline", "Already complete — checkpoint at end");
+        }
+        // Run from the next agent after checkpoint to end (full 9-step)
+        return runFullFromIndex(context, startFrom);
+    }
+
+    /** Run full pipeline starting from a specific agent index */
+    private PipelineResult runFullFromIndex(PipelineContext context, int startFrom) {
+        PipelineContext current = context;
+        PipelineResult result = null;
+        PipelineConfig config = context.getConfig();
+        int totalSteps = agents.size();
+
+        Map<String, Boolean> toggles = Map.of(
+            "Architect",   config.isRunArchitect(),
+            "Planner",     config.isRunPlanner(),
+            "Composer",    config.isRunComposer(),
+            "Writer",      config.isRunWriter(),
+            "Observer",    config.isRunObserver(),
+            "Reflector",   config.isRunReflector(),
+            "Normalizer",  config.isRunNormalizer(),
+            "Auditor",     config.isRunAuditor(),
+            "Reviser",     config.isRunReviser()
+        );
+
+        for (int i = startFrom; i < agents.size(); i++) {
+            Agent agent = agents.get(i);
+            boolean enabled = toggles.getOrDefault(agent.name(), true);
+            if (!enabled) {
+                log.info("=== Skipping disabled agent: {} ===", agent.name());
+                if (progressListener != null) progressListener.onAgentSkip(agent.name(), i, totalSteps);
+                continue;
+            }
+            log.info("=== Running agent: {} (resumed) ===", agent.name());
+            if (progressListener != null) progressListener.onAgentStart(agent.name(), i, totalSteps);
+            long startTime = System.currentTimeMillis();
+            try {
+                result = agent.execute(current);
+                long elapsed = System.currentTimeMillis() - startTime;
+                if (result.isHardFailure()) {
+                    log.error("Agent {} hard failure during resume", agent.name(), result.errorMessage());
+                    if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, result.errorMessage());
+                    return new PipelineResult(agent.name(), result.errorMessage(), current);
+                }
+                PipelineContext updatedCtx = result.updatedContext();
+                if (updatedCtx != null) {
+                    current = updatedCtx;
+                } else {
+                    log.warn("Agent {} returned null context — preserving previous context", agent.name());
+                }
+                current.updateCheckpoint(i, agent.name());
+                String summary = String.format("%d chars, %d ms", result.generatedText() != null ? result.generatedText().length() : 0, elapsed);
+                if (progressListener != null) progressListener.onAgentComplete(agent.name(), i, totalSteps, elapsed, summary);
+            } catch (Exception e) {
+                log.error("Agent {} failed during resume", agent.name(), e);
+                if (progressListener != null) progressListener.onAgentFail(agent.name(), i, totalSteps, e.getMessage());
+                return new PipelineResult(agent.name(), "Agent failed: " + e.getMessage(), current);
+            }
+        }
+
+        // Final: save truth state
+        try {
+            current.getTruthState().saveAllWithBackup();
+            log.info("Truth state saved after resumed pipeline completion");
+        } catch (Exception e) {
+            log.warn("Failed to save truth state", e);
+        }
+
+        if (progressListener != null) {
+            int chapters = current.getBook().getChapters().size();
+            int words = 0;
+            for (var ch : current.getBook().getChapters()) {
+                String txt = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+                if (txt != null) words += com.novelforge.core.models.TextUtils.estimateChineseWordCount(txt);
+            }
+            double auditScore = current.getAuditResult() != null ? current.getAuditResult().getOverallScore() : 0;
+            progressListener.onPipelineComplete(chapters, words, auditScore);
         }
 
         return result;

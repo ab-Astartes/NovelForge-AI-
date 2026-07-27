@@ -173,4 +173,32 @@ public class PipelineRunner {
 
         return result;
     }
+
+    /** Resume a failed pipeline from checkpoint — reuses existing context with completed agent outputs */
+    public PipelineResult resumeChapter(Book book, TruthState truthState, PipelineContext savedContext) {
+        log.info("Resuming pipeline for book '{}', from checkpoint: {} (index {})",
+                book.getTitle(), savedContext.getCheckpointAgentName(), savedContext.getCheckpointAgentIndex());
+        resetTimings();
+
+        PipelineResult result = pipeline.runFromCheckpoint(savedContext);
+
+        if (result.success()) {
+            PipelineContext finalContext = result.updatedContext();
+            String finalText = finalContext.getCurrentChapterDraft();
+            String writerDraft = finalContext.getWriterDraft();
+
+            Chapter chapter = new Chapter();
+            chapter.setNumber(book.nextChapterNumber());
+            chapter.setDraftText(writerDraft != null ? writerDraft : finalText);
+            chapter.setFinalText(finalText);
+            chapter.setAuditResult(finalContext.getAuditResult());
+            book.getChapters().add(chapter);
+            log.info("Resumed chapter {} added to book '{}' ({} chars)",
+                    chapter.getNumber(), book.getTitle(), finalText.length());
+
+            updateBookProgress(book, chapter, finalContext);
+        }
+
+        return result;
+    }
 }

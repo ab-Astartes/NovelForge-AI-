@@ -22,6 +22,10 @@ public class PipelineContext {
     private AuditResult auditResult;
     private PipelineConfig config;
 
+    // Checkpoint: which agent completed last (for resume from failure)
+    private int checkpointAgentIndex = -1;  // -1 = no checkpoint, 0 = Architect done, etc.
+    private String checkpointAgentName = null;
+
     public PipelineContext(Book book, TruthState truthState, PipelineConfig config) {
         this.book = book;
         this.truthState = truthState;
@@ -41,6 +45,8 @@ public class PipelineContext {
     public String getNormalizerOutput() { return normalizerOutput; }
     public AuditResult getAuditResult() { return auditResult; }
     public PipelineConfig getConfig() { return config; }
+    public int getCheckpointAgentIndex() { return checkpointAgentIndex; }
+    public String getCheckpointAgentName() { return checkpointAgentName; }
 
     // --- Setters (each agent writes its own dedicated field) ---
     public void setCurrentChapterDraft(String draft) { this.currentChapterDraft = draft; }
@@ -52,4 +58,15 @@ public class PipelineContext {
     public void setReflectorOutput(String output) { this.reflectorOutput = output; }
     public void setNormalizerOutput(String output) { this.normalizerOutput = output; }
     public void setAuditResult(AuditResult result) { this.auditResult = result; }
+
+    /** Update checkpoint after an agent completes successfully */
+    public void updateCheckpoint(int agentIndex, String agentName) {
+        this.checkpointAgentIndex = agentIndex;
+        this.checkpointAgentName = agentName;
+    }
+
+    /** Check if we can resume from a checkpoint (i.e., some agents already completed) */
+    public boolean hasCheckpoint() {
+        return checkpointAgentIndex >= 0;
+    }
 }

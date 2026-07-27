@@ -19,6 +19,7 @@ public class PipelineResult {
     private String agentName;
     private boolean success;
     private String errorMessage;
+    private PipelineContext checkpointContext;  // context at point of failure (for resume)
 
     /** Success result: agent completed, context updated */
     public PipelineResult(PipelineContext context, String text, String agent) {
@@ -29,13 +30,28 @@ public class PipelineResult {
         this.errorMessage = null;
     }
 
-    /** Error result: agent failed, no context — pipeline should stop or skip */
+    /** Error result: agent failed, no context — pipeline should stop or skip
+     *  @param agent agent name
+     *  @param error error message
+     *  @param checkpointContext the context state at the point of failure (for resume support)
+     */
     public PipelineResult(String agent, String error) {
         this.agentName = agent;
         this.success = false;
         this.errorMessage = error;
         this.generatedText = null;
         this.updatedContext = null;
+        this.checkpointContext = null;
+    }
+
+    /** Error result with checkpoint context for resume */
+    public PipelineResult(String agent, String error, PipelineContext checkpointContext) {
+        this.agentName = agent;
+        this.success = false;
+        this.errorMessage = error;
+        this.generatedText = null;
+        this.updatedContext = null;
+        this.checkpointContext = checkpointContext;
     }
 
     /** Recovery result: agent hit a non-fatal issue but still produced usable output.
@@ -60,4 +76,6 @@ public class PipelineResult {
 
     /** Is this a hard failure that should stop the pipeline? (success=false) */
     public boolean isHardFailure() { return !success; }
+    /** Get checkpoint context from a failed pipeline (for resume support) */
+    public PipelineContext checkpointContext() { return checkpointContext; }
 }

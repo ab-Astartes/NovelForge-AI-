@@ -5,6 +5,7 @@ import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
 import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.state.TruthState;
 import com.novelforge.core.pipeline.PipelineConfig;
 import com.novelforge.core.pipeline.PipelineRunner;
@@ -22,7 +23,7 @@ public class WriteCommand {
 
     public void execute(String[] args) {
         if (args.length == 0) {
-            System.err.println("Usage: novelforge write <next|draft|audit|continue|batch|progress> --book <path> [--api-key <key>] [--model <id>] [--count <n>]");
+            System.err.println("Usage: novelforge write <next|draft|audit|continue|batch|progress|resume> --book <path> [--api-key <key>] [--model <id>] [--count <n>]");
             return;
         }
 
@@ -122,6 +123,29 @@ public class WriteCommand {
                         }
                     } else {
                         System.err.println("❌ Pipeline failed: " + result.errorMessage());
+                        // Save checkpoint for resume
+                        try {
+                            com.fasterxml.jackson.databind.ObjectMapper cpMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            com.fasterxml.jackson.databind.node.ObjectNode cpNode = cpMapper.createObjectNode();
+                            PipelineContext ctx = result.checkpointContext();
+                            if (ctx != null && ctx.hasCheckpoint()) {
+                                cpNode.put("lastAgent", ctx.getCheckpointAgentName());
+                                cpNode.put("lastIndex", ctx.getCheckpointAgentIndex());
+                                if (ctx.getArchitectOutput() != null) cpNode.put("architectOutput", ctx.getArchitectOutput());
+                                if (ctx.getPlannerOutput() != null) cpNode.put("plannerOutput", ctx.getPlannerOutput());
+                                if (ctx.getComposerOutput() != null) cpNode.put("composerOutput", ctx.getComposerOutput());
+                                if (ctx.getWriterDraft() != null) cpNode.put("writerDraft", ctx.getWriterDraft());
+                                if (ctx.getObserverOutput() != null) cpNode.put("observerOutput", ctx.getObserverOutput());
+                                if (ctx.getReflectorOutput() != null) cpNode.put("reflectorOutput", ctx.getReflectorOutput());
+                                if (ctx.getNormalizerOutput() != null) cpNode.put("normalizerOutput", ctx.getNormalizerOutput());
+                                Files.writeString(bookDir.resolve("checkpoint.json"), cpMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cpNode));
+                                System.err.println("   Checkpoint saved. Use 'write resume --book " + bookPath + "' to continue from " + ctx.getCheckpointAgentName());
+                            } else {
+                                System.err.println("   No checkpoint available - pipeline failed before any agent completed.");
+                            }
+                        } catch (Exception cpEx) {
+                            System.err.println("   ⚠️ Failed to save checkpoint: " + cpEx.getMessage());
+                        }
                     }
                 }
                 case "draft" -> {
@@ -300,8 +324,53 @@ public class WriteCommand {
                     System.out.println("   Audited chapters: " + progress.getAuditedChapters() + "/" + progress.getTotalChapters());
                     System.out.println("   Passed chapters: " + progress.getPassedChapters() + "/" + progress.getTotalChapters());
                 }
+                case "resume" -> {
+                    // Resume from checkpoint: load checkpoint file, continue from last completed agent
+                    Path checkpointFile = bookDir.resolve("checkpoint.json");
+                    if (!Files.exists(checkpointFile)) {
+                        System.err.println("❌ No checkpoint file found. Run 'write next' first — checkpoint is auto-created on failure.");
+                        return;
+                    }
+
+                    System.out.println("🔄 Resuming pipeline from checkpoint...");
+
+                    // Load checkpoint data
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode checkpointData = mapper.readTree(Files.readString(checkpointFile));
+                    String lastAgent = checkpointData.has("lastAgent") ? checkpointData.get("lastAgent").asText() : null;
+                    int lastIndex = checkpointData.has("lastIndex") ? checkpointData.get("lastIndex").asInt() : -1;
+                    System.out.println("   Last completed agent: " + lastAgent + " (index " + lastIndex + ")");
+
+                    // Reconstruct context from checkpoint
+                    com.novelforge.core.models.PipelineContext context = new com.novelforge.core.models.PipelineContext(book, truthState, config);
+                    if (checkpointData.has("architectOutput")) context.setArchitectOutput(checkpointData.get("architectOutput").asText());
+                    if (checkpointData.has("plannerOutput")) context.setPlannerOutput(checkpointData.get("plannerOutput").asText());
+                    if (checkpointData.has("composerOutput")) context.setComposerOutput(checkpointData.get("composerOutput").asText());
+                    if (checkpointData.has("writerDraft")) {
+                        context.setWriterDraft(checkpointData.get("writerDraft").asText());
+                        context.setCurrentChapterDraft(checkpointData.get("writerDraft").asText());
+                    }
+                    if (checkpointData.has("observerOutput")) context.setObserverOutput(checkpointData.get("observerOutput").asText());
+                    if (checkpointData.has("reflectorOutput")) context.setReflectorOutput(checkpointData.get("reflectorOutput").asText());
+                    if (checkpointData.has("normalizerOutput")) context.setNormalizerOutput(checkpointData.get("normalizerOutput").asText());
+                    context.updateCheckpoint(lastIndex, lastAgent);
+
+                    PipelineResult result = runner.resumeChapter(book, truthState, context);
+
+                    if (result.success()) {
+                        Chapter chapter = book.getChapters().get(book.getChapters().size() - 1);
+                        BookProject.saveChapter(bookDir, chapter);
+                        BookProject.saveBookMetadata(bookDir, book);
+                        // Delete checkpoint file after successful resume
+                        Files.deleteIfExists(checkpointFile);
+                        System.out.println("✅ Pipeline resumed and completed successfully!");
+                        System.out.println("   Length: " + chapter.getFinalText().length() + " chars");
+                    } else {
+                        System.err.println("❌ Resume failed: " + result.errorMessage());
+                    }
+                }
                 default -> System.err.println("Unknown subcommand: write " + args[0] +
-                    "\nValid: next, draft, audit, continue, batch, progress");
+                    "\nValid: next, draft, audit, continue, batch, progress, resume");
             }
         } catch (Exception e) {
             System.err.println("❌ Error: " + e.getMessage());
