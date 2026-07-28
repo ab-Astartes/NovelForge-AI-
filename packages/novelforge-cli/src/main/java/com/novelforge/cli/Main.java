@@ -29,6 +29,7 @@ public class Main {
             case "interact" -> handleInteract(subArgs);
             case "style"    -> handleStyle(subArgs);
             case "rollback" -> handleRollback(subArgs);
+            case "progress" -> handleProgress(subArgs);
             case "delete"   -> handleDelete(subArgs);
             case "help"     -> printHelp();
             default         -> { System.err.println("Unknown command: " + command); printHelp(); }
@@ -70,6 +71,11 @@ public class Main {
         cmd.execute(args);
     }
 
+    private static void handleProgress(String[] args) {
+        ProgressCommand cmd = new ProgressCommand();
+        cmd.execute(args);
+    }
+
     private static void handleDelete(String[] args) {
         DeleteCommand cmd = new DeleteCommand();
         cmd.execute(args);
@@ -93,6 +99,7 @@ public class Main {
               interact      Start interactive dialogue mode
               style clone   Clone writing style from reference text
               rollback     List backups or rollback truth state
+              progress     Show writing progress and statistics
               delete        Delete project or chapter
               help          Show this help message
             
