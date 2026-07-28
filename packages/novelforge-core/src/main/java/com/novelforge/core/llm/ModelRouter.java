@@ -47,6 +47,11 @@ public class ModelRouter {
         return clients.computeIfAbsent(clientKey, k -> createClient(config));
     }
 
+    /** Register an external LLM client (for testing or custom provider injection) */
+    public void registerClient(String providerAndUrl, LlmClient client) {
+        clients.put(providerAndUrl, client);
+    }
+
     /** Get model ID for an agent */
     public String getModelForAgent(String agentName) {
         ModelConfig config = agentModels.getOrDefault(agentName, globalDefault);
