@@ -51,6 +51,9 @@
     <button onclick="showPanel('style')" class="nav-tab" id="nav-style">
       <span class="nav-icon">✒</span> 風格
     </button>
+    <button onclick="showPanel('rollback')" class="nav-tab" id="nav-rollback">
+      <span class="nav-icon">↩</span> 回溯
+    </button>
   </nav>
 
   <!-- ========== 开卷：创建新书 ========== -->
@@ -322,6 +325,7 @@
           <option value="characters">角色</option>
           <option value="world">世界观</option>
           <option value="hooks">悬念</option>
+          <option value="timeline">时间线</option>
         </select>
       </div>
     </div>
@@ -497,10 +501,28 @@
     <div id="style-result" class="result-box"></div>
   </section>
 
+  <!-- ========== 回溯：状态备份回滚 ========== -->
+  <section id="panel-rollback" class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">回溯寻真</h2>
+      <p class="panel-desc">TruthState 增量备份与回滚，安全守护世界观一致性</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">选择项目</label>
+      <select id="rollback-book" class="input-field"></select>
+    </div>
+    <div class="btn-row">
+      <button onclick="listBackups()" class="btn-ink btn-sm">列出备份</button>
+      <button onclick="rollbackState()" class="btn-ink btn-secondary btn-sm">回滚</button>
+    </div>
+    <div id="rollback-list" style="margin-top:12px"></div>
+    <div id="rollback-result" class="result-box"></div>
+  </section>
+
   <!-- Footer -->
   <footer class="footer">
     <div class="footer-ink-line"></div>
-    <p class="footer-text">墨阁 NovelForge v0.3.27 · 九重炼章 · 三十三维审计 · 十流派</p>
+    <p class="footer-text">墨阁 NovelForge v0.3.32 · 九重炼章 · 三十三维审计 · 十流派</p>
   </footer>
 </div>
 

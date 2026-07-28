@@ -147,7 +147,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -962,3 +962,50 @@ resetPipelineSteps();
 document.getElementById('write-mode').addEventListener('change', function() {
   document.getElementById('batch-count-group').style.display = this.value === 'batch' ? '' : 'none';
 });
+
+// ========== Rollback ==========
+async function listBackups() {
+  const bookPath = document.getElementById('rollback-book').value;
+  if (!bookPath) { showResult(document.getElementById('rollback-result'), '请选择项目', true); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/rollback?path=' + encodeURIComponent(bookPath) + '&action=list'), { headers: authHeaders() });
+    const data = await res.json();
+    const listDiv = document.getElementById('rollback-list');
+    if (data.backups && data.backups.length > 0) {
+      let html = '<div style="margin-bottom:8px;color:#8b7355;font-size:13px">共 ' + data.backups.length + ' 个备份版本：</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      data.backups.forEach(b => {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(192,57,43,0.06);border-radius:6px">';
+        html += '<span style="color:#c0392b;font-family:monospace;font-size:12px">' + b.display + '</span>';
+        html += '<button onclick="rollbackState(' + b.timestamp + ')" style="background:none;border:1px solid #c0392b;color:#c0392b;padding:2px 8px;border-radius:4px;font-size:12px;margin-left:auto">回滚至此</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+      listDiv.innerHTML = html;
+    } else {
+      listDiv.innerHTML = '<div style="color:#8b7355;padding:12px;text-align:center">暂无备份</div>';
+    }
+    clearResult(document.getElementById('rollback-result'));
+  } catch (e) {
+    showResult(document.getElementById('rollback-result'), '获取备份失败: ' + e.message, true);
+  }
+}
+
+async function rollbackState(timestamp) {
+  const bookPath = document.getElementById('rollback-book').value;
+  if (!bookPath) { showResult(document.getElementById('rollback-result'), '请选择项目', true); return; }
+  let url = API + '/api/rollback?path=' + encodeURIComponent(bookPath) + '&action=rollback';
+  if (timestamp) url += '&timestamp=' + timestamp;
+  try {
+    const res = await fetch(authUrl(url), { headers: authHeaders() });
+    const data = await res.json();
+    if (data.success === 'true' || data.success === true) {
+      showResult(document.getElementById('rollback-result'), '回滚成功！世界观已恢复到备份版本', false);
+      listBackups(); // refresh backup list
+    } else {
+      showResult(document.getElementById('rollback-result'), '回滚失败', true);
+    }
+  } catch (e) {
+    showResult(document.getElementById('rollback-result'), '回滚失败: ' + e.message, true);
+  }
+}
