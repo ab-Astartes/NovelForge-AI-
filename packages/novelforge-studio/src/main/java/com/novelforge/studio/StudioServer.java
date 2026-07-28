@@ -198,37 +198,37 @@ public class StudioServer {
 
         // API endpoints with CORS + auth
 
-        server.createContext("/api/books", this::corsThenBooksApi);
+        server.createContext("/api/books", corsWrap(this::handleBooksApi));
 
-        server.createContext("/api/book/create", this::corsThenBookCreate);
+        server.createContext("/api/book/create", corsWrap(this::handleBookCreate));
 
-        server.createContext("/api/book/delete", this::corsThenBookDeleteApi);  // 🟢-4
+        server.createContext("/api/book/delete", corsWrap(this::handleBookDeleteApi));  // 🟢-4
 
-        server.createContext("/api/book/info", this::corsThenBookInfo);
+        server.createContext("/api/book/info", corsWrap(this::handleBookInfo));
 
-        server.createContext("/api/write", this::corsThenWriteApi);
+        server.createContext("/api/write", corsWrap(this::handleWriteApi));
 
-        server.createContext("/api/write/status", this::corsThenWriteStatusApi);  // 🟡-2: job status polling
+        server.createContext("/api/write/status", corsWrap(this::handleWriteStatusApi));  // 🟡-2: job status polling
 
-        server.createContext("/api/audit", this::corsThenAuditApi);
+        server.createContext("/api/audit", corsWrap(this::handleAuditApi));
 
-        server.createContext("/api/state", this::corsThenStateApi);
+        server.createContext("/api/state", corsWrap(this::handleStateApi));
 
-        server.createContext("/api/export", this::corsThenExportApi);
+        server.createContext("/api/export", corsWrap(this::handleExportApi));
 
-        server.createContext("/api/config", this::corsThenConfigApi);
+        server.createContext("/api/config", corsWrap(this::handleConfigApi));
 
-        server.createContext("/api/write/stream", this::corsThenWriteStreamApi);
+        server.createContext("/api/write/stream", corsWrap(this::handleWriteStreamApi));
 
-        server.createContext("/api/progress", this::corsThenProgressApi);
+        server.createContext("/api/progress", corsWrap(this::handleProgressApi));
 
-        server.createContext("/api/diff", this::corsThenDiffApi);
+        server.createContext("/api/diff", corsWrap(this::handleDiffApi));
 
-        server.createContext("/api/write/resume", this::corsThenWriteResumeApi);
+        server.createContext("/api/write/resume", corsWrap(this::handleWriteResumeApi));
 
-        server.createContext("/api/rollback", this::corsThenRollbackApi);
+        server.createContext("/api/rollback", corsWrap(this::handleRollbackApi));
 
-        server.createContext("/api/style", this::corsThenStyleApi);
+        server.createContext("/api/style", corsWrap(this::handleStyleApi));
 
 
 
@@ -2313,169 +2313,14 @@ public class StudioServer {
 
 
 
-    // --- CORS wrappers: handle OPTIONS preflight, then dispatch to real handler ---
-
-    private void corsThenBooksApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleBooksApi(ex);
-
+    // --- CORS wrapper: generic lambda handles OPTIONS preflight + auth check ---
+    private HttpHandler corsWrap(HttpHandler handler) {
+        return ex -> {
+            if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
+            if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
+            try { handler.handle(ex); } catch (IOException e) { throw e; }
+        };
     }
-
-    private void corsThenBookCreate(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleBookCreate(ex);
-
-    }
-
-    private void corsThenBookDeleteApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleBookDeleteApi(ex);
-
-    }
-
-    private void corsThenBookInfo(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleBookInfo(ex);
-
-    }
-
-    private void corsThenWriteApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleWriteApi(ex);
-
-    }
-
-    private void corsThenAuditApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleAuditApi(ex);
-
-    }
-
-    private void corsThenStateApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleStateApi(ex);
-
-    }
-
-    private void corsThenExportApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleExportApi(ex);
-
-    }
-
-    private void corsThenConfigApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleConfigApi(ex);
-
-    }
-
-    private void corsThenProgressApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleProgressApi(ex);
-
-    }
-
-    private void corsThenDiffApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleDiffApi(ex);
-
-    }
-
-    private void corsThenRollbackApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleRollbackApi(ex);
-
-    }
-
-    private void corsThenWriteResumeApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleWriteResumeApi(ex);
-
-    }
-
-    private void corsThenStyleApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleStyleApi(ex);
-
-    }
-
-    private void corsThenWriteStreamApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleWriteStreamApi(ex);
-
-    }
-
-    private void corsThenWriteStatusApi(HttpExchange ex) throws IOException {
-
-        if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
-
-        if (!validateAuth(ex)) { sendUnauthorized(ex); return; }
-
-        handleWriteStatusApi(ex);
-
-    }
-
-
 
     /** Main entry for Studio standalone launch */
 
