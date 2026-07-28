@@ -28,6 +28,7 @@ public class Main {
             case "export"   -> handleExport(subArgs);
             case "interact" -> handleInteract(subArgs);
             case "style"    -> handleStyle(subArgs);
+            case "rollback" -> handleRollback(subArgs);
             case "delete"   -> handleDelete(subArgs);
             case "help"     -> printHelp();
             default         -> { System.err.println("Unknown command: " + command); printHelp(); }
@@ -64,6 +65,11 @@ public class Main {
         cmd.execute(args);
     }
 
+    private static void handleRollback(String[] args) {
+        RollbackCommand cmd = new RollbackCommand();
+        cmd.execute(args);
+    }
+
     private static void handleDelete(String[] args) {
         DeleteCommand cmd = new DeleteCommand();
         cmd.execute(args);
@@ -86,6 +92,7 @@ public class Main {
               export        Export book (EPUB/TXT/MD)
               interact      Start interactive dialogue mode
               style clone   Clone writing style from reference text
+              rollback     List backups or rollback truth state
               delete        Delete project or chapter
               help          Show this help message
             
