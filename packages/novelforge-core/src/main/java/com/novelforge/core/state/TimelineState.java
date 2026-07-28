@@ -69,6 +69,19 @@ public class TimelineState {
         ((com.fasterxml.jackson.databind.node.ArrayNode) events).add(event);
     }
 
+    /** Get summary of all timeline events */
+    public synchronized String getSummary() {
+        JsonNode events = data.get("events");
+        if (events == null || events.isEmpty()) return "(空时间线)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < events.size(); i++) {
+            JsonNode e = events.get(i);
+            sb.append("第").append(e.has("chapter") ? e.get("chapter").asInt() : i + 1).append("章: ")
+              .append(e.has("description") ? e.get("description").asText() : "(无描述)").append("\n");
+        }
+        return sb.toString();
+    }
+
     /** Get recent events for context (fixes #29: synchronized) */
     public synchronized String getRecentEvents(int lastN) {
         JsonNode events = data.get("events");

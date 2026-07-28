@@ -1187,11 +1187,15 @@ public class StudioServer {
 
                 case "hooks" -> summary = state.hooks().getSummary();
 
+                case "timeline" -> summary = state.timeline().getSummary();
+
                 default -> summary = "角色:\n" + state.characters().getSummary() +
 
                         "\n世界:\n" + state.world().getSummary() +
 
-                        "\n悬念:\n" + state.hooks().getSummary();
+                        "\n悬念:\n" + state.hooks().getSummary() +
+
+                        "\n时间线:\n" + state.timeline().getSummary();
 
             }
 
