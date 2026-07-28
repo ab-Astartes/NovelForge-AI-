@@ -963,6 +963,16 @@ document.getElementById('write-mode').addEventListener('change', function() {
   document.getElementById('batch-count-group').style.display = this.value === 'batch' ? '' : 'none';
 });
 
+// Auto-sync shared config on any input change
+document.querySelectorAll('.shared-api-key, .shared-base-url, .shared-model-id').forEach(el => {
+  el.addEventListener('input', () => {
+    if (el.classList.contains('shared-api-key')) sharedConfig.apiKey = el.value.trim();
+    if (el.classList.contains('shared-base-url')) sharedConfig.baseUrl = el.value.trim();
+    if (el.classList.contains('shared-model-id')) sharedConfig.modelId = el.value.trim();
+    syncConfigToUI();
+  });
+});
+
 // ========== Rollback ==========
 async function listBackups() {
   const bookPath = document.getElementById('rollback-book').value;
