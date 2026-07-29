@@ -205,6 +205,7 @@ public class StudioServer {
         server.createContext("/api/book/delete", corsWrap(this::handleBookDeleteApi));  // 🟢-4
 
         server.createContext("/api/book/info", corsWrap(this::handleBookInfo));
+        server.createContext("/api/book/chapter", corsWrap(this::handleBookChapterApi));
 
         server.createContext("/api/write", corsWrap(this::handleWriteApi));
 
@@ -539,6 +540,39 @@ public class StudioServer {
 
     }
 
+    // --- API: Get chapter content ---
+    private void handleBookChapterApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        String chapterNum = getQueryParam(query, "chapter");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
+        if (chapterNum == null) { sendJson(exchange, 400, "{\"error\":\"chapter parameter required\"}"); return; }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            int num = Integer.parseInt(chapterNum);
+            Chapter ch = book.getChapters().stream()
+                .filter(c -> c.getNumber() == num)
+                .findFirst()
+                .orElse(null);
+            if (ch == null) { sendJson(exchange, 404, "{\"error\":\"Chapter " + num + " not found\"}"); return; }
+            ObjectNode result = mapper.createObjectNode();
+            result.put("number", ch.getNumber());
+            result.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
+            result.put("wordCount", ch.getWordCount());
+            result.put("draftText", ch.getDraftText() != null ? ch.getDraftText() : "");
+            result.put("finalText", ch.getFinalText() != null ? ch.getFinalText() : "");
+            if (ch.getAuditResult() != null) {
+                ObjectNode audit = mapper.createObjectNode();
+                audit.put("overallScore", ch.getAuditResult().getOverallScore());
+                audit.put("passed", ch.getAuditResult().getOverallScore() >= 6.0);
+                result.set("audit", audit);
+            }
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
 
     // --- API: Delete book/project (🟢-4) ---

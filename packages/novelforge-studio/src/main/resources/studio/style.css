@@ -548,6 +548,15 @@ body {
   color: var(--paper);
 }
 
+.chapter-row.clickable {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.chapter-row.clickable:hover {
+  background: var(--ink-dark);
+}
+
 .chapter-meta {
   display: flex;
   gap: 16px;

@@ -364,7 +364,7 @@ async function showChapterPreview(bookPath, chapterNum) {
         const scoreColor = ch.auditScore >= 7 ? 'var(--success)' : ch.auditScore >= 5 ? 'var(--warning)' : 'var(--cinnabar-light)';
         const scoreDisplay = ch.auditScore != null ? `<span style="color:${scoreColor}">${ch.auditScore.toFixed(1)}</span>/10` : '—';
         const statusIcon = ch.passed ? '✅' : ch.auditScore != null ? '⚠️' : '—';
-        chapterHtml += `<tr><td>${ch.number}</td><td>${ch.title}</td><td>${ch.wordCount}</td><td>${statusIcon} ${scoreDisplay}</td></tr>`;
+        chapterHtml += `<tr onclick="showChapterContent('${bookPath}', ${ch.number})" class="chapter-row clickable"><td>${ch.number}</td><td>${ch.title}</td><td>${ch.wordCount}</td><td>${statusIcon} ${scoreDisplay}</td></tr>`;
       }
       chapterHtml += '</table>';
     }
@@ -378,6 +378,27 @@ async function showChapterPreview(bookPath, chapterNum) {
     `;
   } catch (e) {
     preview.style.display = 'none';
+  }
+}
+
+// Show chapter content from API
+async function showChapterContent(bookPath, chapterNum) {
+  const textDiv = document.getElementById('chapter-text');
+  try {
+    const res = await fetch(authUrl(API + `/api/book/chapter?path=${encodeURIComponent(bookPath)}&chapter=${chapterNum}`), {
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      textDiv.textContent = `加载第 ${chapterNum} 章失败 (${res.status})`;
+      return;
+    }
+    const data = await res.json();
+    const content = data.finalText || data.draftText || '(无内容)';
+    let header = `<strong>第 ${data.number} 章 · ${data.title}</strong> · ${data.wordCount} 字`;
+    if (data.audit) header += ` · 审阅: ${data.audit.overallScore.toFixed(1)}/10 ${data.audit.passed ? '✅' : '⚠️'}`;
+    textDiv.innerHTML = header + '<hr style="border-color:var(--ink-border);margin:8px 0"><div style="white-space:pre-wrap;line-height:1.8">' + content.replace(/</g, '&lt;') + '</div>';
+  } catch (e) {
+    textDiv.textContent = '加载失败: ' + e.message;
   }
 }
 
