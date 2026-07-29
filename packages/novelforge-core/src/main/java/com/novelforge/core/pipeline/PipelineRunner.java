@@ -125,6 +125,7 @@ public class PipelineRunner {
                     writerDraft != null ? writerDraft.length() : 0);
 
             updateBookProgress(book, chapter, finalContext);
+            truthState.saveAllWithBackup();  // Backup truth state before next write
         }
 
         return result;
@@ -169,6 +170,7 @@ public class PipelineRunner {
                     chapter.getNumber(), book.getTitle(), finalText.length());
 
             updateBookProgress(book, chapter, finalContext);
+            truthState.saveAllWithBackup();  // Backup truth state after draft
         }
 
         return result;
@@ -197,6 +199,7 @@ public class PipelineRunner {
                     chapter.getNumber(), book.getTitle(), finalText.length());
 
             updateBookProgress(book, chapter, finalContext);
+            truthState.saveAllWithBackup();  // Backup truth state after resume
         }
 
         return result;
