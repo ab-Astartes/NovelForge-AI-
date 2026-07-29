@@ -92,8 +92,9 @@ public class PipelineRunner {
 
         progress.getChapterProgresses().add(cp);
         progress.computeFromChapters();
-        log.info("Progress updated: {} chapters, {} words, avg score {:.1f}",
-                progress.getTotalChapters(), progress.getTotalWords(), progress.getAverageAuditScore());
+        log.info("Progress updated: {} chapters, {} words, avg score {}",
+                progress.getTotalChapters(), progress.getTotalWords(),
+                String.format("%.1f", progress.getAverageAuditScore()));
     }
 
     /** Run the "write next chapter" pipeline */
