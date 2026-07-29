@@ -527,6 +527,27 @@ body {
   color: var(--paper);
 }
 
+.chapter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.chapter-table th {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 2px solid var(--ink-border);
+  color: var(--cinnabar);
+  font-weight: 600;
+}
+
+.chapter-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--ink-border);
+  color: var(--paper);
+}
+
 .chapter-meta {
   display: flex;
   gap: 16px;

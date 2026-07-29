@@ -354,14 +354,25 @@ async function showChapterPreview(bookPath, chapterNum) {
     });
     const info = await infoRes.json();
 
-    // Load the chapter from books list
-    const booksRes = await fetch(authUrl(API + '/api/books'), { headers: authHeaders() });
-    const books = await booksRes.json();
-
     preview.style.display = 'block';
-    textDiv.textContent = `第 ${chapterNum} 章已完成，请通过 CLI 或书库查看完整内容。`;
+
+    // Build chapter details table from chapterDetails array
+    let chapterHtml = '';
+    if (info.chapterDetails && info.chapterDetails.length > 0) {
+      chapterHtml = '<table class="chapter-table"><tr><th>#</th><th>章节</th><th>字数</th><th>审阅分</th></tr>';
+      for (const ch of info.chapterDetails) {
+        const scoreColor = ch.auditScore >= 7 ? 'var(--success)' : ch.auditScore >= 5 ? 'var(--warning)' : 'var(--cinnabar-light)';
+        const scoreDisplay = ch.auditScore != null ? `<span style="color:${scoreColor}">${ch.auditScore.toFixed(1)}</span>/10` : '—';
+        const statusIcon = ch.passed ? '✅' : ch.auditScore != null ? '⚠️' : '—';
+        chapterHtml += `<tr><td>${ch.number}</td><td>${ch.title}</td><td>${ch.wordCount}</td><td>${statusIcon} ${scoreDisplay}</td></tr>`;
+      }
+      chapterHtml += '</table>';
+    }
+
+    textDiv.innerHTML = chapterHtml || `第 ${chapterNum || info.nextChapter - 1} 章已完成。`;
     statsDiv.innerHTML = `
-      <span>章节: ${info.chapters}</span>
+      <span>总章数: ${info.chapters}</span>
+      <span>下一章: ${info.nextChapter}</span>
       <span>角色数: ${(info.characters || '').split('\n').length}</span>
       <span>悬念: ${(info.hooks || '').split('\n').length}</span>
     `;

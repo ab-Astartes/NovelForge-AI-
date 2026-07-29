@@ -514,6 +514,21 @@ public class StudioServer {
 
             result.put("hooks", state.hooks().getSummary());
 
+            // Chapter details: number, title, word count, audit score
+            ArrayNode chaptersNode = mapper.createArrayNode();
+            for (Chapter ch : book.getChapters()) {
+                ObjectNode chNode = mapper.createObjectNode();
+                chNode.put("number", ch.getNumber());
+                chNode.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
+                chNode.put("wordCount", ch.getWordCount());
+                if (ch.getAuditResult() != null) {
+                    chNode.put("auditScore", ch.getAuditResult().getOverallScore());
+                    chNode.put("passed", ch.getAuditResult().getOverallScore() >= 6.0);
+                }
+                chaptersNode.add(chNode);
+            }
+            result.set("chapterDetails", chaptersNode);
+
             sendJson(exchange, 200, mapper.writeValueAsString(result));
 
         } catch (Exception e) {
