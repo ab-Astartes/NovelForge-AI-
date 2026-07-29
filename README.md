@@ -17,7 +17,7 @@ NovelForge/
 
 ### 9-Agent 写作流水线
 
-| Agent | 职责 | 温度 |
+| Agent | 職责 | 温度 |
 |-------|------|------|
 | Architect | 理解意图，构建大纲 | 0.5 |
 | Planner | 章节规划，hook agenda | 0.4 |
@@ -31,11 +31,11 @@ NovelForge/
 
 ### Truth State 系统
 
-结构化状态文件（`characters.json`、`world.json`、`timeline.json`、`hooks.json`），每个 Agent 只读+增量写入，保证叙事一致性。
+结构化状态文件（`characters.json`、`world.json`、`timeline.json`、`hooks.json`），每个 Agent 只读+增量写入，保证叙事一致性。支持增量备份与回滚（保留最近 10 版本）。
 
 ### LLM 路由
 
-支持 OpenAI、Anthropic、自定义 OpenAI-compatible endpoint。每个 Agent 可配置不同模型/provider。
+支持 OpenAI、Anthropic、自定义 OpenAI-compatible endpoint。每个 Agent 可配置不同模型/provider。指数退避重试，SSE 畸形行容错。
 
 ## 使用
 
@@ -51,25 +51,43 @@ novelforge write next --book ./my-book
 # 写草稿（仅 Architect→Writer）
 novelforge write draft --book ./my-book
 
+# 批量写作（连续写多章）
+novelforge write batch 5 --book ./my-book
+
+# 从中断恢复（流水线失败后自动保存 checkpoint）
+novelforge write resume --book ./my-book
+
 # 审计
 novelforge audit --book ./my-book --chapter 5
 
-# 导出
+# 导出 EPUB
 novelforge export --book ./my-book --format epub
 
-# 风格克隆
+# 导出 EPUB（带封面）
+novelforge export --book ./my-book --format epub --cover ./cover.png
+
+# 风格导入
 novelforge style clone --reference ./sample.txt
 
 # 交互模式
 novelforge interact --book ./my-book
 ```
 
-### Studio
+### Studio (Web UI)
 
 ```bash
 novelforge studio          # 启动 Web UI (localhost:8964)
 novelforge studio 3000     # 自定义端口
 ```
+
+Studio 功能：
+- **写作面板** — 单章写作、批量写作、续笔恢复
+- **SSE 实时进度** — Agent 执行进度实时推送，失败自动降级轮询
+- **审计评分** — 33 维规则引擎 + LLM 双轨评分（60/40 权重）
+- **风格面板** — 导入参考文本写作风格
+- **状态管理** — 角色/世界观/时间线查看与回滚
+- **段落级 Diff** — 对比 draft 与 final 文本差异
+- **Agent Toggle** — 启用/禁用特定 Agent，热重载配置
 
 ## 内置 Genre Profiles
 
@@ -82,11 +100,18 @@ novelforge studio 3000     # 自定义端口
 1. **Java 实现** — 纯 Java，不依赖 Node.js，跨平台
 2. **本地优先** — 所有数据在项目目录内，无遥测
 3. **网文专精** — 深度适配中文网文写作习惯
-4. **风格克隆** — 分析参考文本一键导入
+4. **风格克隆** — 分析参考文本一键导入写作风格
 5. **反 AIGC 检测** — 11 条规则 + LLM 验证
 6. **33 维审计** — 覆盖节奏、对话、世界观、大纲、风格、hook、反AI
-7. **封面生成** — DALL-E / Stable Diffusion 提示词生成
-8. **EPUB/TXT/MD 导出**
+7. **流水线中断恢复** — checkpoint 自动保存，失败后可从断点续笔
+8. **批量写作** — CLI `write batch` 或 Studio 一键写多章
+9. **SSE 实时进度** — Studio 端实时推送 Agent 执行状态
+10. **EPUB/TXT/MD 导出** — 支持封面图片
+11. **增量备份回滚** — TruthState 保留最近 10 版本，一键回滚
+
+## 测试
+
+270 个单元测试 + 8 个集成测试，全部通过。覆盖：Agent 独立测试、Pipeline checkpoint/resume、AuditEngine、TextUtils、WorldState、TimelineState、TruthState 备份回滚、StudioServer HTTP 端点。
 
 ## 构建
 
