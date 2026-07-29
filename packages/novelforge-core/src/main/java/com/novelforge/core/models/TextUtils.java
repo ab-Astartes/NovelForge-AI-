@@ -130,6 +130,7 @@ public final class TextUtils {
      */
     public static String truncate(String text, int maxLen) {
         if (text == null) return "（空）";
+        if (maxLen <= 0) return "（空）";
         if (text.length() <= maxLen) return text;
 
         // Try newline within last 20% of maxLen
