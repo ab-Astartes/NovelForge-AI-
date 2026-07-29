@@ -130,14 +130,6 @@ public class AgentPipeline {
             return new PipelineResult("Pipeline", "All agents disabled — no work was done");
         }
 
-        // Final: save truth state (with backup for rollback)
-        try {
-            current.getTruthState().saveAllWithBackup();
-            log.info("Truth state saved (backup created) after pipeline completion");
-        } catch (Exception e) {
-            log.warn("Failed to save truth state", e);
-        }
-
         // Pipeline complete notification
         if (progressListener != null) {
             int chapters = current.getBook().getChapters().size();
@@ -262,14 +254,7 @@ public class AgentPipeline {
             }
         }
 
-        // Final: save truth state
-        try {
-            current.getTruthState().saveAllWithBackup();
-            log.info("Truth state saved after resumed pipeline completion");
-        } catch (Exception e) {
-            log.warn("Failed to save truth state", e);
-        }
-
+        // Pipeline complete notification (resume)
         if (progressListener != null) {
             int chapters = current.getBook().getChapters().size();
             int words = 0;
