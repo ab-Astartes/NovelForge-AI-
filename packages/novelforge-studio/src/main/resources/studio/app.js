@@ -985,6 +985,20 @@ async function loadProgress() {
 }
 
 // ========== Init ==========
+
+async function fetchVersion() {
+  try {
+    const resp = await fetch(authUrl(API + '/api/version'), { headers: authHeaders() });
+    if (resp.ok) {
+      const data = await resp.json();
+      const label = document.getElementById('version-label');
+      if (label) label.textContent = data.full || data.version;
+    }
+  } catch (e) { /* silent */ }
+}
+
+// Init on page load
+fetchVersion();
 loadBooks();
 populateBookSelects();
 loadConfig();

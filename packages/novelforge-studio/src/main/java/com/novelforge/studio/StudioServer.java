@@ -76,6 +76,7 @@ import java.util.concurrent.TimeUnit;
 import java.security.SecureRandom;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Map;
 
 
 
@@ -231,6 +232,7 @@ public class StudioServer {
         server.createContext("/api/rollback", corsWrap(this::handleRollbackApi));
 
         server.createContext("/api/style", corsWrap(this::handleStyleApi));
+        server.createContext("/api/version", corsWrap(this::handleVersionApi));
 
 
 
@@ -2050,6 +2052,24 @@ public class StudioServer {
     }
 
 
+
+
+    private void handleVersionApi(HttpExchange exchange) throws IOException {
+        try {
+            if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                String json = mapper.writeValueAsString(Map.of(
+                    "version", Version.VERSION,
+                    "name", Version.NAME,
+                    "full", Version.full()
+                ));
+                sendJson(exchange, 200, json);
+            } else {
+                sendJson(exchange, 405, "{\"error\":\"GET only\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
     /** Sanitize string for safe embedding in JSON — uses ObjectMapper for correctness */
 
