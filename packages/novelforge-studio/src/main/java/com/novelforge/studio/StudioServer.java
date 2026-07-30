@@ -238,6 +238,11 @@ public class StudioServer {
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
         server.createContext("/api/volume/synopsis", corsWrap(this::handleVolumeSynopsisApi));
         server.createContext("/api/ai-trace", corsWrap(this::handleAiTraceApi));
+        server.createContext("/api/outline/generate", corsWrap(this::handleOutlineGenerateApi));
+        server.createContext("/api/volume/generate", corsWrap(this::handleVolumeGenerateApi));
+        server.createContext("/api/chapter/revise", corsWrap(this::handleChapterReviseApi));
+        server.createContext("/api/characters", corsWrap(this::handleCharactersApi));
+        server.createContext("/api/hooks", corsWrap(this::handleHooksApi));
 
 
 
@@ -2163,6 +2168,206 @@ public class StudioServer {
         }
     }
 
+    // --- API: Outline Generate (from prompt + genre) ---
+    private void handleOutlineGenerateApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (prompt == null || apiKey == null) {
+            sendJson(exchange, 400, "{\"error\":\"prompt and apiKey required\"}"); return;
+        }
+        if (bookPath != null && !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return;
+        }
+        try {
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre);
+            String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.6, 8000);
+            // Optionally save to book if path provided
+            if (bookPath != null) {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                book.setOutline(result);
+                BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            }
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("outline", result);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Volume Outline Generate (from outline + prompt + genre) ---
+    private void handleVolumeGenerateApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String outline = body.has("outline") ? body.get("outline").asText() : null;
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (apiKey == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        // Outline can come from body or from book
+        if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
+            try {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                outline = book.getOutline();
+            } catch (Exception e) { outline = ""; }
+        }
+        if (outline == null || outline.isEmpty()) {
+            sendJson(exchange, 400, "{\"error\":\"outline required (provide in body or select a book with existing outline)\"}"); return;
+        }
+        try {
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outline, prompt, genre);
+            String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.5, 8000);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("volumeOutline", result);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Chapter Revise (from outline/volume + prompt) ---
+    private void handleChapterReviseApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
+        String source = body.has("source") ? body.get("source").asText() : "outline";
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (bookPath == null || apiKey == null || prompt == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path, apiKey, and prompt required; path must be within books directory\"}"); return;
+        }
+        if (chapterNum < 1) {
+            sendJson(exchange, 400, "{\"error\":\"chapter number required (>=1)\"}"); return;
+        }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState state = new TruthState(Paths.get(bookPath));
+            if (chapterNum > book.getChapters().size()) {
+                sendJson(exchange, 400, "{\"error\":\"Chapter " + chapterNum + " not found (book has " + book.getChapters().size() + " chapters)\"}"); return;
+            }
+            // Get source content (outline or volume outline)
+            String sourceContent;
+            if ("volume".equals(source)) {
+                // Try to use volume outline if available, fallback to outline
+                sourceContent = book.getOutline() != null ? book.getOutline() : "";
+            } else {
+                sourceContent = book.getOutline() != null ? book.getOutline() : "";
+            }
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Reviser");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildChapterRevisionPrompt(book, state, chapterNum, prompt, sourceContent);
+            String result = client.chatComplete(messages, router.getModelForAgent("Reviser"), 0.4, 8000);
+            // Save revised chapter text
+            Chapter ch = book.getChapters().get(chapterNum - 1);
+            ch.setFinalText(result);
+            BookProject.saveChapter(Paths.get(bookPath), ch);
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("chapter", chapterNum);
+            response.put("revisedText", result);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Characters CRUD ---
+    private void handleCharactersApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return;
+        }
+        try {
+            TruthState state = new TruthState(Paths.get(bookPath));
+            switch (method) {
+                case "GET" -> {
+                    JsonNode chars = state.characters().listAll();
+                    sendJson(exchange, 200, mapper.writeValueAsString(chars));
+                }
+                case "PUT" -> {
+                    JsonNode body = readBody(exchange);
+                    String name = body.has("name") ? body.get("name").asText() : null;
+                    if (name == null) { sendJson(exchange, 400, "{\"error\":\"name required\"}"); return; }
+                    state.characters().upsertCharacter(name, body);
+                    state.characters().save();
+                    sendJson(exchange, 200, "{\"status\":\"ok\"}");
+                }
+                case "DELETE" -> {
+                    JsonNode body = readBody(exchange);
+                    String name = body.has("name") ? body.get("name").asText() : null;
+                    if (name == null) { sendJson(exchange, 400, "{\"error\":\"name required\"}"); return; }
+                    state.characters().deleteCharacter(name);
+                    sendJson(exchange, 200, "{\"status\":\"ok\"}");
+                }
+                default -> sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Hooks CRUD ---
+    private void handleHooksApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return;
+        }
+        try {
+            TruthState state = new TruthState(Paths.get(bookPath));
+            switch (method) {
+                case "GET" -> {
+                    JsonNode hooks = state.hooks().listAll();
+                    sendJson(exchange, 200, mapper.writeValueAsString(hooks));
+                }
+                case "PUT" -> {
+                    JsonNode body = readBody(exchange);
+                    String hookId = body.has("id") ? body.get("id").asText() : null;
+                    String description = body.has("description") ? body.get("description").asText() : "";
+                    String priority = body.has("priority") ? body.get("priority").asText() : "medium";
+                    if (hookId == null) { sendJson(exchange, 400, "{\"error\":\"id required\"}"); return; }
+                    state.hooks().updateHook(hookId, description, priority);
+                    sendJson(exchange, 200, "{\"status\":\"ok\"}");
+                }
+                case "DELETE" -> {
+                    JsonNode body = readBody(exchange);
+                    String hookId = body.has("id") ? body.get("id").asText() : null;
+                    if (hookId == null) { sendJson(exchange, 400, "{\"error\":\"id required\"}"); return; }
+                    state.hooks().deleteHook(hookId);
+                    sendJson(exchange, 200, "{\"status\":\"ok\"}");
+                }
+                default -> sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
     private void handleVersionApi(HttpExchange exchange) throws IOException {
         try {
             if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -2404,7 +2609,7 @@ public class StudioServer {
 
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
 
-        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
 

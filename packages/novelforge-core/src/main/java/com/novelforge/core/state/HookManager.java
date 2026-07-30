@@ -166,4 +166,38 @@ public class HookManager {
         }
         return sb.toString();
     }
+
+    /** Return full hook list as JsonNode */
+    public synchronized JsonNode listAll() {
+        JsonNode hooks = data.get("hooks");
+        if (hooks == null) return mapper.createArrayNode();
+        return hooks;
+    }
+
+    /** Update a hook by ID */
+    public synchronized void updateHook(String hookId, String description, String priority) {
+        ArrayNode hooks = data.has("hooks") ? (ArrayNode) data.get("hooks") : data.putArray("hooks");
+        for (int i = 0; i < hooks.size(); i++) {
+            JsonNode hookNode = hooks.get(i);
+            if (hookNode.has("id") && hookNode.get("id").asText().equals(hookId)) {
+                ((ObjectNode) hookNode).put("description", description);
+                ((ObjectNode) hookNode).put("priority", priority);
+                save();
+                return;
+            }
+        }
+    }
+
+    /** Delete a hook by ID */
+    public synchronized void deleteHook(String hookId) {
+        ArrayNode hooks = data.has("hooks") ? (ArrayNode) data.get("hooks") : data.putArray("hooks");
+        for (int i = 0; i < hooks.size(); i++) {
+            JsonNode hookNode = hooks.get(i);
+            if (hookNode.has("id") && hookNode.get("id").asText().equals(hookId)) {
+                hooks.remove(i);
+                save();
+                return;
+            }
+        }
+    }
 }

@@ -671,6 +671,145 @@ public class PromptBuilder {
     }
 
     /**
+     * Build prompt for outline generation from a free-form prompt + genre.
+     * Pure prompt-driven: user provides a creative prompt and genre, LLM generates a complete outline.
+     */
+    public List<Map<String, String>> buildOutlineFromPromptPrompt(String prompt, String genre) {
+        String system = """
+            你是小说大纲架构师。根据用户的创意提示和题材，生成完整的小说大纲。
+
+            输出格式要求：
+            1. 全书总纲（整体故事走向、核心冲突、升级体系）
+            2. 分卷梗概（每卷的主题、核心事件、卷末高潮）
+            3. 每卷下的章节梗概（每章的核心事件、冲突点、hook）
+
+            规则：
+            - 每章必须有核心冲突或悬念推进
+            - 大纲必须体现题材的升级体系和套路
+            - 卷末必须有高潮或转折
+            - 章节梗概不超过200字
+            - 充分利用用户提示中的创意元素
+            """;
+
+        String user = String.format("""
+            ## 用户创意提示
+            %s
+
+            ## 题材
+            %s
+
+            请基于以上提示和题材，生成完整的卷纲大纲。
+            """,
+                nullSafe(prompt),
+                nullSafe(genre)
+        );
+
+        return messages(system, user);
+    }
+
+    /**
+     * Build prompt for volume outline generation based on existing outline + prompt.
+     * Takes an existing book outline and a user prompt to generate a detailed volume/chapter structure.
+     */
+    public List<Map<String, String>> buildVolumeOutlinePrompt(String outline, String prompt, String genre) {
+        String system = """
+            你是小说分卷架构师。根据已有的整书大纲和用户的补充提示，生成详细的分卷结构和章节规划。
+
+            输出格式要求：
+            1. 每卷的详细规划（卷名、主题、核心冲突、升级节点）
+            2. 每卷下的详细章节列表（每章标题、核心事件、冲突点、hook agenda）
+            3. 卷间衔接设计（上一卷结尾如何过渡到下一卷开头）
+
+            规则：
+            - 忠实于现有大纲的整体走向
+            - 根据用户补充提示进行细化或调整
+            - 每章梗概不超过200字
+            - 每卷的章节数量应合理（6-12章）
+            - 升级体系在各卷中逐步递进
+            """;
+
+        String user = String.format("""
+            ## 已有大纲
+            %s
+
+            ## 用户补充提示
+            %s
+
+            ## 题材
+            %s
+
+            请基于以上大纲和提示，生成详细的分卷结构和章节规划。
+            """,
+                truncateShort(outline, 6000),
+                nullSafe(prompt),
+                nullSafe(genre)
+        );
+
+        return messages(system, user);
+    }
+
+    /**
+     * Build prompt for chapter revision based on outline/volume and user prompt.
+     * Revises a specific chapter according to outline/volume direction and user instructions.
+     */
+    public List<Map<String, String>> buildChapterRevisionPrompt(Book book, TruthState state,
+                                                                   int chapterNum, String prompt,
+                                                                   String sourceContent) {
+        Chapter chapter = book.getChapters().stream()
+                .filter(c -> c.getNumber() == chapterNum)
+                .findFirst()
+                .orElse(null);
+
+        String chapterText = "（章节不存在）";
+        if (chapter != null) {
+            chapterText = chapter.getFinalText() != null ? chapter.getFinalText() : chapter.getDraftText();
+            if (chapterText == null) chapterText = "（章节内容为空）";
+        }
+
+        String system = """
+            你是小说修订师。根据大纲/卷纲的规划和用户的修改提示，对指定章节进行修订。
+
+            修订原则：
+            1. 忠实于大纲/卷纲的整体方向和节奏规划
+            2. 按照用户提示的具体要求进行修改
+            3. 保持与前后章节的叙事连贯性
+            4. 保留好的部分，只修改需要调整的内容
+            5. 修改后确保角色状态与世界观一致
+            6. 章节结尾仍需保持悬念或转折
+
+            输出：直接输出修订后的完整章节文本（不要加注释或说明）。
+            """;
+
+        String user = String.format("""
+            ## 大纲/卷纲参考
+            %s
+
+            ## 用户修改提示
+            %s
+
+            ## 第 %d 章原文
+            %s
+
+            ## 当前角色状态
+            %s
+
+            ## 题材: %s
+
+            请根据大纲/卷纲的规划和修改提示，修订第 %d 章。
+            """,
+                truncateShort(sourceContent, 4000),
+                nullSafe(prompt),
+                chapterNum,
+                truncateShort(chapterText, 6000),
+                state != null ? state.characters().getSummary() : "无",
+                nullSafe(book.getGenre()),
+                chapterNum
+        );
+
+        return messages(system, user);
+    }
+
+    /**
      * Build prompt for AI trace detection and removal.
      * Detects AI writing patterns and proposes natural revisions.
      */

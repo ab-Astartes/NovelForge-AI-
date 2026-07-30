@@ -107,4 +107,26 @@ public class CharacterState {
         }
         return sb.toString();
     }
+
+    /** Delete a character by name */
+    public synchronized void deleteCharacter(String name) {
+        JsonNode chars = data.get("characters");
+        if (chars == null || !chars.isArray()) return;
+        com.fasterxml.jackson.databind.node.ArrayNode arr = (com.fasterxml.jackson.databind.node.ArrayNode) chars;
+        for (int i = 0; i < arr.size(); i++) {
+            JsonNode c = arr.get(i);
+            if (name.equals(c.get("name").asText())) {
+                arr.remove(i);
+                save();
+                return;
+            }
+        }
+    }
+
+    /** Return full character list as JsonNode */
+    public synchronized JsonNode listAll() {
+        JsonNode chars = data.get("characters");
+        if (chars == null) return mapper.createArrayNode();
+        return chars;
+    }
 }

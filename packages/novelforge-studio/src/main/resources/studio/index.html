@@ -54,6 +54,12 @@
     <button onclick="showPanel('rollback')" class="nav-tab" id="nav-rollback">
       <span class="nav-icon">↩</span> 回溯
     </button>
+    <button onclick="showPanel('characters')" class="nav-tab" id="nav-characters">
+      <span class="nav-icon">👤</span> 人物
+    </button>
+    <button onclick="showPanel('hooks')" class="nav-tab" id="nav-hooks">
+      <span class="nav-icon">🪝</span> 伏笔
+    </button>
   </nav>
 
   <!-- ========== 开卷：创建新书 ========== -->
@@ -246,9 +252,87 @@
       <button onclick="generateVolumeSynopsis()" class="btn-ink btn-secondary" id="btn-volume">卷纲梗概</button>
       <button onclick="detectAiTrace()" class="btn-ink btn-secondary" id="btn-ai-trace">去AI痕</button>
     </div>
-    <div id="write-progress" class="progress-indicator"></div>
-    <div id="write-result" class="result-box"></div>
+
+    <!-- Prompt-driven Outline Generation -->
+    <div class="sub-section">
+      <h3 class="sub-title">提示词生成大纲</h3>
+      <div class="form-grid">
+        <div class="form-group wide">
+          <label class="form-label">创意提示词</label>
+          <textarea id="outline-gen-prompt" class="input-field" rows="3" placeholder="描述你的小说创意，如：一个普通少年在灵气复苏的世界中觉醒独特天赋..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">题材</label>
+          <select id="outline-gen-genre" class="input-field">
+            <option value="xuanhuan">玄幻</option>
+            <option value="xianxia">仙侠</option>
+            <option value="urban">都市</option>
+            <option value="horror">恐怖</option>
+            <option value="romance-zh">言情</option>
+            <option value="fantasy">Fantasy</option>
+            <option value="thriller">Thriller</option>
+            <option value="romance-en">Romance</option>
+            <option value="scifi">Sci-Fi</option>
+            <option value="mystery">Mystery</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="generateOutlineFromPrompt()" class="btn-ink btn-sm" id="btn-outline-gen">✦ 生成大纲</button>
+      <div id="outline-gen-result" class="result-box"></div>
     </div>
+
+    <!-- Volume Outline Generation -->
+    <div class="sub-section">
+      <h3 class="sub-title">卷纲生成</h3>
+      <div class="form-grid">
+        <div class="form-group wide">
+          <label class="form-label">补充提示词（可选）</label>
+          <textarea id="volume-gen-prompt" class="input-field" rows="2" placeholder="对卷纲结构的补充要求，如：每卷10章、升级节奏要快..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">题材</label>
+          <select id="volume-gen-genre" class="input-field">
+            <option value="xuanhuan">玄幻</option>
+            <option value="xianxia">仙侠</option>
+            <option value="urban">都市</option>
+            <option value="horror">恐怖</option>
+            <option value="romance-zh">言情</option>
+            <option value="fantasy">Fantasy</option>
+            <option value="thriller">Thriller</option>
+            <option value="romance-en">Romance</option>
+            <option value="scifi">Sci-Fi</option>
+            <option value="mystery">Mystery</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="generateVolumeOutline()" class="btn-ink btn-sm" id="btn-volume-gen">✦ 生成卷纲</button>
+      <div id="volume-gen-result" class="result-box"></div>
+    </div>
+
+    <!-- Chapter Revision -->
+    <div class="sub-section">
+      <h3 class="sub-title">章节修改</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">章节号</label>
+          <input type="number" id="revise-chapter-num" class="input-field" min="1" placeholder="如：1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">参考来源</label>
+          <select id="revise-source" class="input-field">
+            <option value="outline">大纲</option>
+            <option value="volume">卷纲</option>
+          </select>
+        </div>
+        <div class="form-group wide">
+          <label class="form-label">修改提示词</label>
+          <textarea id="revise-prompt" class="input-field" rows="2" placeholder="描述如何修改该章节，如：增加角色内心挣扎、加快节奏、删减冗余描写..."></textarea>
+        </div>
+      </div>
+      <button onclick="reviseChapter()" class="btn-ink btn-sm" id="btn-revise">✦ 修改章节</button>
+      <div id="revise-result" class="result-box"></div>
+    </div>
+    <div id="write-progress" class="progress-indicator"></div>
     <div id="write-result" class="result-box"></div>
 
     <!-- Chapter Preview -->
@@ -522,6 +606,105 @@
     </div>
     <div id="rollback-list" style="margin-top:12px"></div>
     <div id="rollback-result" class="result-box"></div>
+  </section>
+
+  <!-- ========== 人物台账 ========== -->
+  <section id="panel-characters" class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">人物台账</h2>
+      <p class="panel-desc">角色档案管理 — 查看、编辑、删除角色</p>
+      <button onclick="loadCharacters()" class="btn-ghost btn-sm">刷新 ↻</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">选择项目</label>
+      <select id="characters-book" class="input-field"></select>
+    </div>
+
+    <!-- Character List -->
+    <div id="characters-list" class="ledger-list" style="margin-top:16px">
+      <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载角色列表</p>
+    </div>
+
+    <!-- Character Edit Form -->
+    <div class="sub-section">
+      <h3 class="sub-title">编辑角色</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">角色名</label>
+          <input type="text" id="char-edit-name" class="input-field" placeholder="角色名">
+        </div>
+        <div class="form-group">
+          <label class="form-label">角色类型</label>
+          <select id="char-edit-role" class="input-field">
+            <option value="主角">主角</option>
+            <option value="配角">配角</option>
+            <option value="反派">反派</option>
+            <option value="中立">中立</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">实力等级</label>
+          <input type="text" id="char-edit-power" class="input-field" placeholder="如：筑基中期">
+        </div>
+        <div class="form-group">
+          <label class="form-label">当前位置</label>
+          <input type="text" id="char-edit-location" class="input-field" placeholder="如：天枢城">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button onclick="saveCharacter()" class="btn-ink btn-sm">保存角色</button>
+        <button onclick="deleteCharacter()" class="btn-ink btn-sm btn-danger">删除角色</button>
+      </div>
+      <div id="characters-result" class="result-box"></div>
+    </div>
+  </section>
+
+  <!-- ========== 伏笔台账 ========== -->
+  <section id="panel-hooks" class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">伏笔台账</h2>
+      <p class="panel-desc">悬念/伏笔管理 — 查看、编辑、删除伏笔</p>
+      <button onclick="loadHooks()" class="btn-ghost btn-sm">刷新 ↻</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">选择项目</label>
+      <select id="hooks-book" class="input-field"></select>
+    </div>
+
+    <!-- Hooks List -->
+    <div id="hooks-list" class="ledger-list" style="margin-top:16px">
+      <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载伏笔列表</p>
+    </div>
+
+    <!-- Hook Edit Form -->
+    <div class="sub-section">
+      <h3 class="sub-title">编辑伏笔</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">伏笔ID</label>
+          <input type="text" id="hook-edit-id" class="input-field" placeholder="如：mysterious-sword">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea id="hook-edit-desc" class="input-field" rows="2" placeholder="伏笔描述"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">优先级</label>
+          <select id="hook-edit-priority" class="input-field">
+            <option value="high">高</option>
+            <option value="medium">中</option>
+            <option value="low">低</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button onclick="updateHook()" class="btn-ink btn-sm">更新伏笔</button>
+        <button onclick="deleteHook()" class="btn-ink btn-sm btn-danger">删除伏笔</button>
+      </div>
+      <div id="hooks-result" class="result-box"></div>
+    </div>
   </section>
 
   <!-- Footer -->

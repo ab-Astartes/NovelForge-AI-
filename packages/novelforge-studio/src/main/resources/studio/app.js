@@ -52,6 +52,8 @@ function showPanel(name) {
   if (name === 'books') loadBooks();
   if (name === 'state' || name === 'write') populateBookSelects();
   if (name === 'style') { populateBookSelects(); loadStyle(); }
+  if (name === 'characters') { populateBookSelects(); loadCharacters(); }
+  if (name === 'hooks') { populateBookSelects(); loadHooks(); }
 }
 
 // ========== Result Display ==========
@@ -147,7 +149,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -985,6 +987,354 @@ async function loadProgress() {
 }
 
 // ========== Init ==========
+
+// ========== Prompt-driven Outline Generation ==========
+async function generateOutlineFromPrompt() {
+  const bookPath = document.getElementById('write-book')?.value;
+  const prompt = document.getElementById('outline-gen-prompt')?.value?.trim();
+  const genre = document.getElementById('outline-gen-genre')?.value || 'xuanhuan';
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  const resultDiv = document.getElementById('outline-gen-result');
+
+  if (!prompt) { showResult(resultDiv, '请输入创意提示词', true); return; }
+  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+
+  // Sync config
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
+
+  const btn = document.getElementById('btn-outline-gen');
+  btn.disabled = true; btn.textContent = '生成中...';
+
+  try {
+    const body = { prompt, genre, apiKey, baseUrl, model: modelId };
+    if (bookPath) body.path = bookPath;
+    const res = await fetch(authUrl(API + '/api/outline/generate'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, '✅ 大纲已生成\n\n' + (data.outline || '').substring(0, 2000), false);
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '生成失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '✦ 生成大纲';
+  }
+}
+
+// ========== Volume Outline Generation ==========
+async function generateVolumeOutline() {
+  const bookPath = document.getElementById('write-book')?.value;
+  const prompt = document.getElementById('volume-gen-prompt')?.value?.trim() || ''; // optional
+  const genre = document.getElementById('volume-gen-genre')?.value || 'xuanhuan';
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  const resultDiv = document.getElementById('volume-gen-result');
+
+  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  if (!bookPath) { showResult(resultDiv, '请选择书籍（需有大纲）', true); return; }
+
+  // Sync config
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
+
+  const btn = document.getElementById('btn-volume-gen');
+  btn.disabled = true; btn.textContent = '生成中...';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/volume/generate'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, prompt, genre, apiKey, baseUrl, model: modelId })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, '✅ 卷纲已生成\n\n' + (data.volumeOutline || '').substring(0, 2000), false);
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '生成失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '✦ 生成卷纲';
+  }
+}
+
+// ========== Chapter Revision ==========
+async function reviseChapter() {
+  const bookPath = document.getElementById('write-book')?.value;
+  const chapterNum = parseInt(document.getElementById('revise-chapter-num')?.value || '0');
+  const prompt = document.getElementById('revise-prompt')?.value?.trim();
+  const source = document.getElementById('revise-source')?.value || 'outline';
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  const resultDiv = document.getElementById('revise-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  if (chapterNum < 1) { showResult(resultDiv, '请输入有效章节号（>=1）', true); return; }
+  if (!prompt) { showResult(resultDiv, '请输入修改提示词', true); return; }
+  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+
+  // Sync config
+  sharedConfig.apiKey = apiKey;
+  sharedConfig.baseUrl = baseUrl;
+  sharedConfig.modelId = modelId;
+  syncConfigToUI();
+
+  const btn = document.getElementById('btn-revise');
+  btn.disabled = true; btn.textContent = '修改中...';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/chapter/revise'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, chapter: chapterNum, prompt, source, apiKey, baseUrl, model: modelId })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 第 ${data.chapter} 章已修改完成`, false);
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '修改失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '✦ 修改章节';
+  }
+}
+
+// ========== Characters CRUD ==========
+async function loadCharacters() {
+  const bookPath = document.getElementById('characters-book')?.value;
+  const listDiv = document.getElementById('characters-list');
+  if (!bookPath) {
+    listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">请选择项目</p>'; 
+    return;
+  }
+  try {
+    const res = await fetch(authUrl(API + `/api/characters?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const chars = await res.json();
+    if (!chars || chars.length === 0) {
+      listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">暂无角色数据</p>'; 
+    } else {
+      listDiv.innerHTML = chars.map(c => {
+        const name = c.name || '未命名';
+        const role = c.role || ''; 
+        const power = c.powerLevel || ''; 
+        const loc = c.location || ''; 
+        return `<div class="ledger-item" onclick="editCharacter('${name}')">
+          <div class="ledger-name">${name}</div>
+          <div class="ledger-tags">
+            ${role ? '<span class="ledger-tag">' + role + '</span>' : ''}
+            ${power ? '<span class="ledger-tag">等级: ' + power + '</span>' : ''}
+            ${loc ? '<span class="ledger-tag">位置: ' + loc + '</span>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) {
+    listDiv.innerHTML = '<p style="color:var(--cinnabar-light);text-align:center">加载失败: ' + e.message + '</p>'; 
+  }
+}
+
+function editCharacter(name) {
+  // Fill the edit form with character data
+  document.getElementById('char-edit-name').value = name;
+  // Load current character data from API
+  const bookPath = document.getElementById('characters-book')?.value;
+  if (!bookPath) return;
+  fetch(authUrl(API + `/api/characters?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() })
+    .then(r => r.json())
+    .then(chars => {
+      const char = chars.find(c => c.name === name);
+      if (char) {
+        document.getElementById('char-edit-role').value = char.role || '主角';
+        document.getElementById('char-edit-power').value = char.powerLevel || ''; 
+        document.getElementById('char-edit-location').value = char.location || ''; 
+      }
+    })
+    .catch(() => {});
+}
+
+async function saveCharacter() {
+  const bookPath = document.getElementById('characters-book')?.value;
+  const name = document.getElementById('char-edit-name')?.value?.trim();
+  const role = document.getElementById('char-edit-role')?.value;
+  const powerLevel = document.getElementById('char-edit-power')?.value?.trim(); 
+  const location = document.getElementById('char-edit-location')?.value?.trim(); 
+  const resultDiv = document.getElementById('characters-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择项目', true); return; }
+  if (!name) { showResult(resultDiv, '请输入角色名', true); return; }
+
+  try {
+    const res = await fetch(authUrl(API + `/api/characters?path=${encodeURIComponent(bookPath)}`), {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ name, role, powerLevel, location })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 角色 "${name}" 已保存`, false);
+      loadCharacters();
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '保存失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
+
+async function deleteCharacter() {
+  const bookPath = document.getElementById('characters-book')?.value;
+  const name = document.getElementById('char-edit-name')?.value?.trim();
+  const resultDiv = document.getElementById('characters-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择项目', true); return; }
+  if (!name) { showResult(resultDiv, '请输入角色名', true); return; }
+  if (!window.confirm(`确认删除角色 "${name}"？`)) return;
+
+  try {
+    const res = await fetch(authUrl(API + `/api/characters?path=${encodeURIComponent(bookPath)}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 角色 "${name}" 已删除`, false);
+      document.getElementById('char-edit-name').value = ''; 
+      document.getElementById('char-edit-power').value = ''; 
+      document.getElementById('char-edit-location').value = ''; 
+      loadCharacters();
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '删除失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
+
+// ========== Hooks CRUD ==========
+async function loadHooks() {
+  const bookPath = document.getElementById('hooks-book')?.value;
+  const listDiv = document.getElementById('hooks-list');
+  if (!bookPath) {
+    listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">请选择项目</p>'; 
+    return;
+  }
+  try {
+    const res = await fetch(authUrl(API + `/api/hooks?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const hooks = await res.json();
+    if (!hooks || hooks.length === 0) {
+      listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">暂无伏笔数据</p>'; 
+    } else {
+      listDiv.innerHTML = hooks.map(h => {
+        const id = h.id || '未命名';
+        const priority = h.priority || 'medium'; 
+        const desc = h.description || ''; 
+        const priorityLabel = priority === 'high' ? '🔴 高' : priority === 'medium' ? '🟡 中' : '🟢 低';
+        return `<div class="ledger-item" onclick="editHook('${id}')">
+          <div class="ledger-name">${id}</div>
+          <div class="ledger-tags">
+            <span class="ledger-tag">${priorityLabel}</span>
+            ${desc ? '<span class="ledger-tag">' + desc.substring(0, 60) + '</span>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) {
+    listDiv.innerHTML = '<p style="color:var(--cinnabar-light);text-align:center">加载失败: ' + e.message + '</p>'; 
+  }
+}
+
+function editHook(hookId) {
+  // Fill the edit form with hook data
+  document.getElementById('hook-edit-id').value = hookId;
+  // Load current hook data from API
+  const bookPath = document.getElementById('hooks-book')?.value;
+  if (!bookPath) return;
+  fetch(authUrl(API + `/api/hooks?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() })
+    .then(r => r.json())
+    .then(hooks => {
+      const hook = hooks.find(h => h.id === hookId);
+      if (hook) {
+        document.getElementById('hook-edit-desc').value = hook.description || ''; 
+        document.getElementById('hook-edit-priority').value = hook.priority || 'medium';
+      }
+    })
+    .catch(() => {});
+}
+
+async function updateHook() {
+  const bookPath = document.getElementById('hooks-book')?.value;
+  const hookId = document.getElementById('hook-edit-id')?.value?.trim();
+  const description = document.getElementById('hook-edit-desc')?.value?.trim(); 
+  const priority = document.getElementById('hook-edit-priority')?.value;
+  const resultDiv = document.getElementById('hooks-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择项目', true); return; }
+  if (!hookId) { showResult(resultDiv, '请输入伏笔ID', true); return; }
+
+  try {
+    const res = await fetch(authUrl(API + `/api/hooks?path=${encodeURIComponent(bookPath)}`), {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ id: hookId, description, priority })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 伏笔 "${hookId}" 已更新`, false);
+      loadHooks();
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '更新失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
+
+async function deleteHook() {
+  const bookPath = document.getElementById('hooks-book')?.value;
+  const hookId = document.getElementById('hook-edit-id')?.value?.trim();
+  const resultDiv = document.getElementById('hooks-result');
+
+  if (!bookPath) { showResult(resultDiv, '请选择项目', true); return; }
+  if (!hookId) { showResult(resultDiv, '请输入伏笔ID', true); return; }
+  if (!window.confirm(`确认删除伏笔 "${hookId}"？`)) return;
+
+  try {
+    const res = await fetch(authUrl(API + `/api/hooks?path=${encodeURIComponent(bookPath)}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+      body: JSON.stringify({ id: hookId })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showResult(resultDiv, `✅ 伏笔 "${hookId}" 已删除`, false);
+      document.getElementById('hook-edit-id').value = ''; 
+      document.getElementById('hook-edit-desc').value = ''; 
+      loadHooks();
+    } else {
+      showResult(resultDiv, '❌ ' + (data.error || '删除失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
+  }
+}
 
 // ========== 大纲梗概生成 ==========
 async function generateOutlineSynopsis() {
