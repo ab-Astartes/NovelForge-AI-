@@ -34,6 +34,8 @@ import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.project.BookProject;
 
 import com.novelforge.core.state.TruthState;
+import com.novelforge.core.llm.LlmClient;
+import com.novelforge.core.prompt.PromptBuilder;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -233,6 +235,9 @@ public class StudioServer {
 
         server.createContext("/api/style", corsWrap(this::handleStyleApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
+        server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
+        server.createContext("/api/volume/synopsis", corsWrap(this::handleVolumeSynopsisApi));
+        server.createContext("/api/ai-trace", corsWrap(this::handleAiTraceApi));
 
 
 
@@ -2053,6 +2058,110 @@ public class StudioServer {
 
 
 
+
+        // --- API: Outline Synopsis ---
+    private void handleOutlineSynopsisApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
+        }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState state = new TruthState(Paths.get(bookPath));
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildOutlineSynopsisPrompt(book, state);
+            String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.5, 8000);
+            // Save outline to book
+            book.setOutline(result);
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("outline", result);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Volume Synopsis ---
+    private void handleVolumeSynopsisApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        int volumeStart = body.has("volumeStart") ? body.get("volumeStart").asInt() : 1;
+        int volumeEnd = body.has("volumeEnd") ? body.get("volumeEnd").asInt() : 10;
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
+        }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState state = new TruthState(Paths.get(bookPath));
+            if (book.getChapters().isEmpty()) {
+                sendJson(exchange, 400, "{\"error\":\"No chapters written yet; write chapters first\"}"); return;
+            }
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildVolumeSynopsisPrompt(book, state, volumeStart, volumeEnd);
+            String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.4, 6000);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("synopsis", result);
+            response.put("volumeStart", volumeStart);
+            response.put("volumeEnd", volumeEnd);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: AI Trace Detection & Removal ---
+    private void handleAiTraceApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
+        }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            if (book.getChapters().isEmpty()) {
+                sendJson(exchange, 400, "{\"error\":\"No chapters written yet\"}"); return;
+            }
+            int idx = chapterNum > 0 ? chapterNum - 1 : book.getChapters().size() - 1;
+            Chapter ch = book.getChapters().get(idx);
+            String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+            if (text == null || text.isEmpty()) {
+                sendJson(exchange, 400, "{\"error\":\"Chapter text is empty\"}"); return;
+            }
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Auditor");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildAiTracePrompt(text);
+            String result = client.chatComplete(messages, router.getModelForAgent("Auditor"), 0.3, 8000);
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("chapter", chapterNum > 0 ? chapterNum : book.getChapters().size());
+            response.put("analysis", result);
+            sendJson(exchange, 200, response.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
     private void handleVersionApi(HttpExchange exchange) throws IOException {
         try {

@@ -568,4 +568,149 @@ public class PromptBuilder {
     }
 
     // estimateChineseWords moved to TextUtils.estimateChineseWordCount
+
+    // ========== 新功能 prompt 方法 ==========
+
+    /**
+     * Build prompt for outline synopsis generation.
+     * Generates a comprehensive book outline with volume structure and chapter summaries.
+     */
+    public List<Map<String, String>> buildOutlineSynopsisPrompt(Book book, TruthState state) {
+        String system = """
+            你是小说大纲架构师。根据作者意图和题材规则，生成完整的卷纲梗概。
+
+            输出格式要求：
+            1. 全书总纲（整体故事走向、核心冲突、升级体系）
+            2. 分卷梗概（每卷的主题、核心事件、卷末高潮）
+            3. 每卷下的章节梗概（每章的核心事件、冲突点、hook）
+
+            规则：
+            - 每章必须有核心冲突或悬念推进
+            - 大纲必须体现升级体系的递进
+            - 卷末必须有高潮或转折
+            - 遵守题材特定规则和套路
+            - 章节梗概不超过200字
+            """;
+
+        String user = String.format("""
+            ## 作者意图
+            %s
+            
+            ## 题材
+            %s
+            
+            ## 已有角色
+            %s
+            
+            请生成完整的卷纲梗概，包含分卷结构和章节梗概。
+            """,
+                nullSafe(book.getAuthorIntent()),
+                nullSafe(book.getGenre()),
+                state != null ? state.characters().getSummary() : "无"
+        );
+
+        return messages(system, user);
+    }
+
+    /**
+     * Build prompt for volume synopsis generation from existing chapters.
+     * Summarizes what has been written so far into volume-level outlines.
+     */
+    public List<Map<String, String>> buildVolumeSynopsisPrompt(Book book, TruthState state, int volumeStart, int volumeEnd) {
+        StringBuilder chapterSummaries = new StringBuilder();
+        List<Chapter> chapters = book.getChapters();
+        int end = Math.min(volumeEnd, chapters.size());
+        for (int i = Math.max(0, volumeStart - 1); i < end; i++) {
+            Chapter ch = chapters.get(i);
+            String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+            chapterSummaries.append(String.format("### 第%d章 %s\n%s\n\n",
+                ch.getNumber(), ch.getTitle() != null ? ch.getTitle() : "",
+                truncateShort(text != null ? text : "", 500)));
+        }
+
+        String system = """
+            你是小说编辑。根据已写章节内容，生成卷级别的梗概总结。
+
+            输出格式：
+            1. 卷名和主题概述（100字）
+            2. 本卷核心冲突与转折（150字）
+            3. 角色在本卷的变化（100字）
+            4. 章节脉络梳理（每章50字概述）
+            5. 卷末高潮与下一卷衔接点
+
+            规则：
+            - 严格基于已写内容总结，不编造未写内容
+            - 突出情节递进和角色成长
+            - 识别伏笔和悬念推进
+            """;
+
+        String user = String.format("""
+            ## 书名
+            %s
+            
+            ## 题材
+            %s
+            
+            ## 第%d章 ~ 第%d章的内容摘要
+            %s
+            
+            ## 当前角色状态
+            %s
+            
+            请为本卷（第%d章~第%d章）生成卷纲梗概。
+            """,
+                nullSafe(book.getTitle()),
+                nullSafe(book.getGenre()),
+                volumeStart, volumeEnd,
+                chapterSummaries.toString(),
+                state != null ? state.characters().getSummary() : "无",
+                volumeStart, volumeEnd
+        );
+
+        return messages(system, user);
+    }
+
+    /**
+     * Build prompt for AI trace detection and removal.
+     * Detects AI writing patterns and proposes natural revisions.
+     */
+    public List<Map<String, String>> buildAiTracePrompt(String text) {
+        String system = """
+            你是资深文学编辑，专门检测和去除AI写作痕迹。
+
+            AI写作常见痕迹：
+            1. 过度使用转折词："然而"、"不过"、"与此同时"、"不仅如此"
+            2. 段落开头模式化："在...中"、"随着..."、"当...时"
+            3. 结尾总结式升华："这不仅仅...更是..."、"最终，..."
+            4. 过度解释和铺垫，缺少留白
+            5. 对话过于理性完整，缺少口语化碎片感
+            6. 情感描述堆砌形容词："深深的"、"强烈的"、"无比的"
+            7. 排比句和对称结构过多
+            8. 旁白式的内心独白："他想"、"他感到"、"他意识到"
+            9. 信息密度均匀，缺少节奏变化（长短句交替不足）
+            10. 场景描写像百科词条而非感官体验
+
+            输出格式：
+            1. 【检测报告】列出所有发现的AI痕迹，标注位置和类型
+            2. 【去痕改写】对有痕迹的段落给出改写版本
+            3. 【改写说明】简述每处改写的理由
+
+            改写原则：
+            - 用口语化替代书面化
+            - 用具体动作替代抽象描述
+            - 用短句打破长句节奏
+            - 用省略和跳跃替代过度解释
+            - 保留作者的原意和情节信息
+            """;
+
+        String user = String.format("""
+            请检测以下文本中的AI写作痕迹，并给出去痕改写：
+
+            %s
+            """,
+                truncateShort(text, 8000)
+        );
+
+        return messages(system, user);
+    }
 }

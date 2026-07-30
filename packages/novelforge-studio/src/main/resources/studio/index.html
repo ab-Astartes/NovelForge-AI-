@@ -242,8 +242,13 @@
     <div class="btn-row">
       <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
       <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
+      <button onclick="generateOutlineSynopsis()" class="btn-ink btn-secondary" id="btn-outline">大纲梗概</button>
+      <button onclick="generateVolumeSynopsis()" class="btn-ink btn-secondary" id="btn-volume">卷纲梗概</button>
+      <button onclick="detectAiTrace()" class="btn-ink btn-secondary" id="btn-ai-trace">去AI痕</button>
     </div>
     <div id="write-progress" class="progress-indicator"></div>
+    <div id="write-result" class="result-box"></div>
+    </div>
     <div id="write-result" class="result-box"></div>
 
     <!-- Chapter Preview -->

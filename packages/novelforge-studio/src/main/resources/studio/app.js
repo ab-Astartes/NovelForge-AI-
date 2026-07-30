@@ -986,6 +986,115 @@ async function loadProgress() {
 
 // ========== Init ==========
 
+// ========== 大纲梗概生成 ==========
+async function generateOutlineSynopsis() {
+  const bookPath = document.getElementById('write-book')?.value;
+  if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+
+  const btn = document.getElementById('btn-outline');
+  btn.disabled = true; btn.textContent = '生成中...';
+  clearResult(document.getElementById('write-result'));
+
+  try {
+    const resp = await fetch(authUrl(API + '/api/outline/synopsis'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, apiKey: apiKey, baseUrl: baseUrl, model: modelId })
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      showResult(document.getElementById('write-result'), '✅ 大纲梗概已生成并保存\n\n' + data.outline, false);
+    } else {
+      showResult(document.getElementById('write-result'), '❌ ' + (data.error || '生成失败'), true);
+    }
+  } catch (e) {
+    showResult(document.getElementById('write-result'), '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '大纲梗概';
+  }
+}
+
+// ========== 卷纲梗概生成 ==========
+async function generateVolumeSynopsis() {
+  const bookPath = document.getElementById('write-book')?.value;
+  if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+
+  // Get chapter range from book info
+  let volumeStart = 1, volumeEnd = 10;
+  try {
+    const infoResp = await fetch(authUrl(API + '/api/book/info?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    if (infoResp.ok) {
+      const info = await infoResp.json();
+      const chapterCount = info.chapters?.length || 0;
+      if (chapterCount > 0) volumeEnd = chapterCount;
+    }
+  } catch (e) { /* use defaults */ }
+
+  const btn = document.getElementById('btn-volume');
+  btn.disabled = true; btn.textContent = '生成中...';
+  clearResult(document.getElementById('write-result'));
+
+  try {
+    const resp = await fetch(authUrl(API + '/api/volume/synopsis'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, apiKey: apiKey, baseUrl: baseUrl, model: modelId, volumeStart, volumeEnd })
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      showResult(document.getElementById('write-result'),
+        `✅ 卷纲梗概已生成（第${data.volumeStart}章~第${data.volumeEnd}章）\n\n` + data.synopsis, false);
+    } else {
+      showResult(document.getElementById('write-result'), '❌ ' + (data.error || '生成失败'), true);
+    }
+  } catch (e) {
+    showResult(document.getElementById('write-result'), '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '卷纲梗概';
+  }
+}
+
+// ========== AI痕迹检测去除 ==========
+async function detectAiTrace() {
+  const bookPath = document.getElementById('write-book')?.value;
+  if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
+  const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
+  const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
+  const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
+  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+
+  const btn = document.getElementById('btn-ai-trace');
+  btn.disabled = true; btn.textContent = '检测中...';
+  clearResult(document.getElementById('write-result'));
+
+  try {
+    const resp = await fetch(authUrl(API + '/api/ai-trace'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, apiKey: apiKey, baseUrl: baseUrl, model: modelId })
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      showResult(document.getElementById('write-result'),
+        `✅ 第${data.chapter}章 AI痕迹检测完成\n\n` + data.analysis, false);
+    } else {
+      showResult(document.getElementById('write-result'), '❌ ' + (data.error || '检测失败'), true);
+    }
+  } catch (e) {
+    showResult(document.getElementById('write-result'), '❌ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '去AI痕';
+  }
+}
+
 async function fetchVersion() {
   try {
     const resp = await fetch(authUrl(API + '/api/version'), { headers: authHeaders() });
