@@ -1,6 +1,7 @@
 package com.novelforge.cli;
 
 import com.novelforge.cli.commands.*;
+import com.novelforge.core.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,8 +83,8 @@ public class Main {
     }
 
     private static void printHelp() {
+        System.out.println(Version.full());
         System.out.println("""
-            NovelForge — AI Novel Writing Engine
             
             Usage: novelforge <command> [options]
             
@@ -93,6 +94,8 @@ public class Main {
               book info     Show book details
               write next    Write next chapter (full 9-agent pipeline)
               write draft   Write draft only (Architect → Writer, skip quality)
+              write batch   Batch write multiple chapters (e.g. write batch 5)
+              write resume  Resume from checkpoint (after pipeline failure)
               write audit   Audit existing chapter (Auditor → Reviser)
               audit         Run standalone 33-dimension audit
               export        Export book (EPUB/TXT/MD)

@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import com.novelforge.core.pipeline.PipelineRunner;
+import com.novelforge.core.Version;
 
 import com.novelforge.core.pipeline.PipelineConfig;
 
@@ -277,9 +278,9 @@ public class StudioServer {
 
         }, 5, 5, TimeUnit.SECONDS);  // check every 5 seconds
 
-        log.info("NovelForge Studio started at http://localhost:{}", server.getAddress().getPort());
+        log.info("{} Studio started at http://localhost:{}", Version.full(), server.getAddress().getPort());
 
-        System.out.println("NovelForge Studio: http://localhost:" + server.getAddress().getPort());
+        System.out.println(Version.full() + " Studio: http://localhost:" + server.getAddress().getPort());
 
         System.out.println("Auth token: " + authToken);  // 🟡-1: show token for frontend to use
 
