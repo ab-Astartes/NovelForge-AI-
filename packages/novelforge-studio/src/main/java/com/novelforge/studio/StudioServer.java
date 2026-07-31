@@ -243,6 +243,7 @@ public class StudioServer {
         server.createContext("/api/chapter/revise", corsWrap(this::handleChapterReviseApi));
         server.createContext("/api/characters", corsWrap(this::handleCharactersApi));
         server.createContext("/api/hooks", corsWrap(this::handleHooksApi));
+        server.createContext("/api/chapter/synopsis", corsWrap(this::handleChapterSynopsisApi));
 
 
 
@@ -2363,6 +2364,56 @@ public class StudioServer {
                 }
                 default -> sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
             }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    // --- API: Chapter Synopsis Generation ---
+    private void handleChapterSynopsisApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String outlineOrVolume = body.has("source") ? body.get("source").asText() : null;
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        // Also accept path-based source: load outline from book if source not provided directly
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        if (apiKey == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        // If source text not provided directly, try to load from book outline
+        if (outlineOrVolume == null || outlineOrVolume.isEmpty()) {
+            if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
+                try {
+                    Book book = BookProject.loadBook(Paths.get(bookPath));
+                    outlineOrVolume = book.getOutline() != null ? book.getOutline() : "";
+                } catch (Exception e) {
+                    outlineOrVolume = "";
+                }
+            } else {
+                outlineOrVolume = "";
+            }
+        }
+        try {
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(outlineOrVolume, prompt, genre);
+            String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.7, 8000);
+            // If book path provided, save synopsis into book outline (append chapter synopsis section)
+            if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                String existingOutline = book.getOutline() != null ? book.getOutline() : "";
+                // Append chapter synopsis section
+                String updatedOutline = existingOutline + "\n\n--- 章节梗概 ---\n" + result;
+                book.setOutline(updatedOutline);
+                BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            }
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "ok");
+            response.put("synopsis", result);
+            sendJson(exchange, 200, response.toString());
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }

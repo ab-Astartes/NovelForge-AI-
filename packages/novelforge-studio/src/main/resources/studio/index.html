@@ -332,6 +332,49 @@
       <button onclick="reviseChapter()" class="btn-ink btn-sm" id="btn-revise">✦ 修改章节</button>
       <div id="revise-result" class="result-box"></div>
     </div>
+
+    <!-- Chapter Synopsis Generation -->
+    <div class="sub-section">
+      <h3 class="sub-title">章节梗概生成</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">参考来源</label>
+          <select id="synopsis-source-type" class="input-field">
+            <option value="outline">大纲</option>
+            <option value="volume">卷纲</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">书籍（可选，自动加载大纲）</label>
+          <select id="synopsis-book" class="input-field"></select>
+        </div>
+        <div class="form-group wide">
+          <label class="form-label">大纲/卷纲内容（未选书籍时手动输入）</label>
+          <textarea id="synopsis-source" class="input-field" rows="4" placeholder="粘贴大纲或卷纲内容，或选择书籍自动加载..."></textarea>
+        </div>
+        <div class="form-group wide">
+          <label class="form-label">补充提示词（可选）</label>
+          <textarea id="synopsis-prompt" class="input-field" rows="2" placeholder="对章节梗概的补充要求，如：每章必须有战斗场景、节奏要紧凑..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">题材</label>
+          <select id="synopsis-genre" class="input-field">
+            <option value="xuanhuan">玄幻</option>
+            <option value="xianxia">仙侠</option>
+            <option value="urban">都市</option>
+            <option value="horror">恐怖</option>
+            <option value="romance-zh">言情</option>
+            <option value="fantasy">Fantasy</option>
+            <option value="thriller">Thriller</option>
+            <option value="romance-en">Romance</option>
+            <option value="scifi">Sci-Fi</option>
+            <option value="mystery">Mystery</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="generateChapterSynopsis()" class="btn-ink btn-sm" id="btn-synopsis">✦ 生成章节梗概</button>
+      <div id="synopsis-result" class="result-box"></div>
+    </div>
     <div id="write-progress" class="progress-indicator"></div>
     <div id="write-result" class="result-box"></div>
 

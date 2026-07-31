@@ -149,7 +149,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -1478,7 +1478,65 @@ document.querySelectorAll('.shared-api-key, .shared-base-url, .shared-model-id')
   });
 });
 
-// ========== Rollback ==========
+// ========== Chapter Synopsis Generation ========== 
+async function generateChapterSynopsis() {
+  const resultDiv = document.getElementById('synopsis-result');
+  const sourceType = document.getElementById('synopsis-source-type').value;
+  const bookPath = document.getElementById('synopsis-book').value;
+  const sourceText = document.getElementById('synopsis-source').value.trim();
+  const prompt = document.getElementById('synopsis-prompt').value.trim();
+  const genre = document.getElementById('synopsis-genre').value;
+
+  if (!sourceText && !bookPath) {
+    showResult(resultDiv, '请输入大纲/卷纲内容或选择书籍', true);
+    return;
+  }
+
+  const apiKey = document.getElementById('write-api-key').value.trim();
+  const baseUrl = document.getElementById('write-base-url').value.trim() || 'https://api.openai.com/v1';
+  const modelId = document.getElementById('write-model-id').value.trim() || 'gpt-4o';
+
+  if (!apiKey) {
+    showResult(resultDiv, '请填写 API Key', true);
+    return;
+  }
+
+  showResult(resultDiv, '⏳ 正在生成章节梗概...', false);
+  const btn = document.getElementById('btn-synopsis');
+  btn.disabled = true;
+
+  try {
+    const body = {
+      source: sourceText || undefined,
+      prompt: prompt || '',
+      genre: genre,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      model: modelId
+    };
+    // If book selected, send path for auto-load + save
+    if (bookPath) body.path = bookPath;
+
+    const resp = await fetch(authUrl(API + '/api/chapter/synopsis'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+
+    if (data.status === 'ok') {
+      showResult(resultDiv, '✦ 章节梗概已生成\n\n' + data.synopsis, false);
+    } else {
+      showResult(resultDiv, '✗ 生成失败: ' + (data.error || '未知错误'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ========== Rollback ========== 
 async function listBackups() {
   const bookPath = document.getElementById('rollback-book').value;
   if (!bookPath) { showResult(document.getElementById('rollback-result'), '请选择项目', true); return; }

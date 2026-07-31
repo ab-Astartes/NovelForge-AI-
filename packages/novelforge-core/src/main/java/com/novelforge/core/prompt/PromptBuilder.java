@@ -810,6 +810,48 @@ public class PromptBuilder {
     }
 
     /**
+     * Build prompt for chapter synopsis generation from outline/volume.
+     * Generates chapter-level brief descriptions (梗概) based on existing outline or volume structure
+     * and user's creative prompts.
+     */
+    public List<Map<String, String>> buildChapterSynopsisPrompt(String outlineOrVolume, String prompt, String genre) {
+        String system = """
+            你是小说章节架构师。根据大纲或卷纲的结构，生成每章的梗概描述。
+
+            章节梗概要求：
+            1. 每章梗概不超过200字
+            2. 包含：核心事件、冲突点、角色出场、hook/悬念
+            3. 章节之间有明确的递进关系
+            4. 每章结尾要有推进或转折
+            5. 梗概应具体而非泛泛（避免「主角继续修炼」式空洞描述）
+            6. 遵守题材规则和升级体系
+
+            输出格式：
+            每章一行，格式为：「第X章 [章节名]：[梗概内容]」
+            确保章节编号连续，剧情逻辑连贯。
+            """;
+
+        String user = String.format("""
+            ## 大纲/卷纲
+            %s
+
+            ## 用户补充提示
+            %s
+
+            ## 题材
+            %s
+
+            请基于以上大纲/卷纲和提示，生成每一章的梗概描述。
+            """,
+                truncateShort(outlineOrVolume, 6000),
+                nullSafe(prompt),
+                nullSafe(genre)
+        );
+
+        return messages(system, user);
+    }
+
+    /**
      * Build prompt for AI trace detection and removal.
      * Detects AI writing patterns and proposes natural revisions.
      */
