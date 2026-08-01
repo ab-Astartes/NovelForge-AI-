@@ -152,7 +152,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -387,8 +387,11 @@ async function showChapterPreview(bookPath, chapterNum) {
 }
 
 // Show chapter content from API
+let currentChapterInfo = { bookPath: '', chapterNum: 0 }; // For title editing
+
 async function showChapterContent(bookPath, chapterNum) {
   const textDiv = document.getElementById('chapter-text');
+  const titleInput = document.getElementById('chapter-title-input');
   try {
     const res = await fetch(authUrl(API + `/api/book/chapter?path=${encodeURIComponent(bookPath)}&chapter=${chapterNum}`), {
       headers: authHeaders()
@@ -398,6 +401,8 @@ async function showChapterContent(bookPath, chapterNum) {
       return;
     }
     const data = await res.json();
+    currentChapterInfo = { bookPath, chapterNum: data.number }; // Store for title edit
+    titleInput.value = data.title || `第${data.number}章`; // Populate title edit field
     const content = data.finalText || data.draftText || '(无内容)';
     let header = `<strong>第 ${data.number} 章 · ${data.title}</strong> · ${data.wordCount} 字`;
     if (data.audit) header += ` · 审阅: ${data.audit.overallScore.toFixed(1)}/10 ${data.audit.passed ? '✅' : '⚠️'}`;
@@ -405,6 +410,86 @@ async function showChapterContent(bookPath, chapterNum) {
   } catch (e) {
     textDiv.textContent = '加载失败: ' + e.message;
   }
+}
+
+// ========== Outline/Intent Editors + Chapter Title Edit ==========
+async function loadOutlineEditor() {
+  const bookPath = document.getElementById('outline-editor-book').value;
+  const textarea = document.getElementById('outline-editor-content');
+  const resultDiv = document.getElementById('outline-editor-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  try {
+    const res = await fetch(authUrl(API + `/api/book/outline?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const data = await res.json();
+    textarea.value = data.outline || '';;
+    showResult(resultDiv, `大纲加载成功 (${data.outline ? data.outline.length : 0} 字)`, false);
+  } catch (e) { showResult(resultDiv, '加载失败: ' + e.message, true); }
+}
+
+async function saveOutlineEditor() {
+  const bookPath = document.getElementById('outline-editor-book').value;
+  const outline = document.getElementById('outline-editor-content').value;
+  const resultDiv = document.getElementById('outline-editor-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/book/outline'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, outline })
+    });
+    const data = await res.json();
+    if (data.status === 'saved') { showResult(resultDiv, `大纲已保存 (${data.length} 字)`, false); }
+    else { showResult(resultDiv, '保存失败: ' + (data.error || '未知'), true); }
+  } catch (e) { showResult(resultDiv, '网络错误: ' + e.message, true); }
+}
+
+async function loadIntentEditor() {
+  const bookPath = document.getElementById('intent-editor-book').value;
+  const textarea = document.getElementById('intent-editor-content');
+  const resultDiv = document.getElementById('intent-editor-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  try {
+    const res = await fetch(authUrl(API + `/api/book/intent?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const data = await res.json();
+    textarea.value = data.intent || '';;
+    showResult(resultDiv, `意图加载成功 (${data.intent ? data.intent.length : 0} 字)`, false);
+  } catch (e) { showResult(resultDiv, '加载失败: ' + e.message, true); }
+}
+
+async function saveIntentEditor() {
+  const bookPath = document.getElementById('intent-editor-book').value;
+  const intent = document.getElementById('intent-editor-content').value;
+  const resultDiv = document.getElementById('intent-editor-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/book/intent'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, intent })
+    });
+    const data = await res.json();
+    if (data.status === 'saved') { showResult(resultDiv, `意图已保存 (${data.length} 字)`, false); }
+    else { showResult(resultDiv, '保存失败: ' + (data.error || '未知'), true); }
+  } catch (e) { showResult(resultDiv, '网络错误: ' + e.message, true); }
+}
+
+async function saveChapterTitle() {
+  const { bookPath, chapterNum } = currentChapterInfo;
+  const title = document.getElementById('chapter-title-input').value.trim();
+  const preview = document.getElementById('chapter-preview');
+  if (!bookPath || !chapterNum) { alert('请先加载章节内容'); return; }
+  if (!title) { alert('标题不能为空'); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/book/chapter-title'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, chapter: chapterNum, title })
+    });
+    const data = await res.json();
+    if (data.status === 'saved') {
+      alert(`第 ${chapterNum} 章标题已更新为: ${title}`);
+      showChapterContent(bookPath, chapterNum); // Refresh display
+    } else {
+      alert('保存失败: ' + (data.error || '未知'));
+    }
+  } catch (e) { alert('网络错误: ' + e.message); }
 }
 
 // ========== Audit Chapter ==========

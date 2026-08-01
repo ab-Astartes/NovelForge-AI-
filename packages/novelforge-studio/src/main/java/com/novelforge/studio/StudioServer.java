@@ -210,6 +210,9 @@ public class StudioServer {
 
         server.createContext("/api/book/info", corsWrap(this::handleBookInfo));
         server.createContext("/api/book/chapter", corsWrap(this::handleBookChapterApi));
+        server.createContext("/api/book/outline", corsWrap(this::handleBookOutlineApi));
+        server.createContext("/api/book/intent", corsWrap(this::handleBookIntentApi));
+        server.createContext("/api/book/chapter-title", corsWrap(this::handleBookChapterTitleApi));
 
         server.createContext("/api/write", corsWrap(this::handleWriteApi));
 
@@ -590,6 +593,104 @@ public class StudioServer {
 
 
     // --- API: Delete book/project (🟢-4) ---
+
+
+    // --- API: Book outline (GET/POST) ---
+    private void handleBookOutlineApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        if ("GET".equals(method)) {
+            String query = exchange.getRequestURI().getQuery();
+            String bookPath = getQueryParam(query, "path");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            try {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                ObjectNode result = mapper.createObjectNode();
+                result.put("outline", book.getOutline() != null ? book.getOutline() : "");
+                sendJson(exchange, 200, mapper.writeValueAsString(result));
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+            }
+        } else if ("POST".equals(method)) {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            String outline = body.has("outline") ? body.get("outline").asText() : null;
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            if (outline == null) { sendJson(exchange, 400, "{\"error\":\"outline content required\"}"); return; }
+            try {
+                Path outlineFile = Paths.get(bookPath).resolve("outline.md");
+                Files.writeString(outlineFile, outline);
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                book.setOutline(outline);
+                BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                sendJson(exchange, 200, "{\"status\":\"saved\",\"length\":" + outline.length() + "}");
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+            }
+        } else {
+            sendJson(exchange, 405, "{\"error\":\"GET or POST only\"}");
+        }
+    }
+
+    // --- API: Book author intent (GET/POST) ---
+    private void handleBookIntentApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        if ("GET".equals(method)) {
+            String query = exchange.getRequestURI().getQuery();
+            String bookPath = getQueryParam(query, "path");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            try {
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                ObjectNode result = mapper.createObjectNode();
+                result.put("intent", book.getAuthorIntent() != null ? book.getAuthorIntent() : "");
+                sendJson(exchange, 200, mapper.writeValueAsString(result));
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+            }
+        } else if ("POST".equals(method)) {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            String intent = body.has("intent") ? body.get("intent").asText() : null;
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            if (intent == null) { sendJson(exchange, 400, "{\"error\":\"intent content required\"}"); return; }
+            try {
+                Path intentFile = Paths.get(bookPath).resolve("author_intent.md");
+                Files.writeString(intentFile, intent);
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                book.setAuthorIntent(intent);
+                BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                sendJson(exchange, 200, "{\"status\":\"saved\",\"length\":" + intent.length() + "}");
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+            }
+        } else {
+            sendJson(exchange, 405, "{\"error\":\"GET or POST only\"}");
+        }
+    }
+
+    // --- API: Chapter title update (POST) ---
+    private void handleBookChapterTitleApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
+        String title = body.has("title") ? body.get("title").asText() : null;
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (chapterNum < 1) { sendJson(exchange, 400, "{\"error\":\"chapter number required (>=1)\"}"); return; }
+        if (title == null || title.trim().isEmpty()) { sendJson(exchange, 400, "{\"error\":\"title content required\"}"); return; }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            Chapter ch = book.getChapters().stream()
+                .filter(c -> c.getNumber() == chapterNum)
+                .findFirst()
+                .orElse(null);
+            if (ch == null) { sendJson(exchange, 404, "{\"error\":\"Chapter " + chapterNum + " not found\"}"); return; }
+            ch.setTitle(title.trim());
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            sendJson(exchange, 200, "{\"status\":\"saved\",\"chapter\":" + chapterNum + "}");
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
     private void handleBookDeleteApi(HttpExchange exchange) throws IOException {
 

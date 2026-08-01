@@ -109,6 +109,36 @@
 
     <div id="books-list" class="books-grid"></div>
 
+    <!-- Outline Editor -->
+    <div class="sub-section">
+      <h3 class="sub-title">大纲编辑</h3>
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="outline-editor-book" class="input-field"></select>
+      </div>
+      <div class="btn-row">
+        <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
+        <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
+      </div>
+      <textarea id="outline-editor-content" class="input-field" rows="10" placeholder="在此编辑大纲内容..."></textarea>
+      <div id="outline-editor-result" class="result-box"></div>
+    </div>
+
+    <!-- Author Intent Editor -->
+    <div class="sub-section">
+      <h3 class="sub-title">意图编辑</h3>
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="intent-editor-book" class="input-field"></select>
+      </div>
+      <div class="btn-row">
+        <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
+        <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
+      </div>
+      <textarea id="intent-editor-content" class="input-field" rows="6" placeholder="在此编辑创作意图..."></textarea>
+      <div id="intent-editor-result" class="result-box"></div>
+    </div>
+
     <!-- 🟢-4: Delete book/project -->
     <div class="delete-section">
       <h3 class="sub-title">焚卷销书</h3>
@@ -381,6 +411,10 @@
     <!-- Chapter Preview -->
     <div id="chapter-preview" class="chapter-preview" style="display:none">
       <h3 class="sub-title">最新章节预览</h3>
+      <div id="chapter-title-edit" style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="chapter-title-input" class="input-field" placeholder="章节标题" style="flex:1">
+        <button onclick="saveChapterTitle()" class="btn-ink btn-sm" id="btn-save-title">保存标题</button>
+      </div>
       <div id="chapter-text" class="chapter-text-content"></div>
       <div id="chapter-stats" class="chapter-meta"></div>
     </div>
