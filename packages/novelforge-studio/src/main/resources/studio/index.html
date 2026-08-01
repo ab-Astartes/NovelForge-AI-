@@ -109,6 +109,11 @@
 
     <div id="books-list" class="books-grid"></div>
 
+    <!-- Book Detail -->
+    <div id="book-detail" style="display:none;margin-top:16px">
+      <div id="book-detail-content" class="chapter-preview"></div>
+    </div>
+
     <!-- Outline Editor -->
     <div class="sub-section">
       <h3 class="sub-title">大纲编辑</h3>
@@ -277,6 +282,7 @@
 
     <div class="btn-row">
       <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
+      <button onclick="startBatchWrite()" class="btn-ink btn-secondary" id="btn-batch">🔥 批量炼章</button>
       <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
       <button onclick="generateOutlineSynopsis()" class="btn-ink btn-secondary" id="btn-outline">大纲梗概</button>
       <button onclick="generateVolumeSynopsis()" class="btn-ink btn-secondary" id="btn-volume">卷纲梗概</button>

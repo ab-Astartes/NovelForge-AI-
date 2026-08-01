@@ -142,6 +142,37 @@ function selectBook(path) {
     sel.value = path;
   });
   showPanel('write');
+  showBookDetail(path); // Show book detail in bookshelf
+}
+
+async function showBookDetail(bookPath) {
+  const detailDiv = document.getElementById('book-detail');
+  const contentDiv = document.getElementById('book-detail-content');
+  try {
+    const res = await fetch(authUrl(API + `/api/book/info?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const info = await res.json();
+    detailDiv.style.display = 'block';
+    // Build summary + chapter list
+    let html = `<div style="display:flex;gap:16px;margin-bottom:16px">
+      <div class="stat-card"><div class="stat-value">${info.chapters}</div><div class="stat-label">章节</div></div>
+      <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.reduce((sum, ch) => sum + ch.wordCount, 0) : 0}</div><div class="stat-label">总字数</div></div>
+      <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.filter(ch => ch.passed).length : 0}</div><div class="stat-label">已通过</div></div>
+      <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.length > 0 ? (info.chapterDetails.reduce((sum, ch) => sum + (ch.auditScore || 0), 0) / info.chapterDetails.filter(ch => ch.auditScore).length).toFixed(1) : '—' : '—'}</div><div class="stat-label">平均分</div></div>
+    </div>`;
+    if (info.chapterDetails && info.chapterDetails.length > 0) {
+      html += '<table class="chapter-table" style="width:100%;border-collapse:collapse;font-size:13px"><tr style="border-bottom:2px solid #c0392b"><th>#</th><th>章节</th><th>字数</th><th>审阅分</th></tr>'; 
+      for (const ch of info.chapterDetails) {
+        const scoreColor = ch.auditScore >= 7 ? 'var(--success)' : ch.auditScore >= 5 ? 'var(--warning)' : 'var(--cinnabar-light)';
+        const scoreDisplay = ch.auditScore != null ? `<span style="color:${scoreColor}">${ch.auditScore.toFixed(1)}</span>/10` : '—';
+        const statusIcon = ch.passed ? '✅' : ch.auditScore != null ? '⚠️' : '—';
+        html += `<tr class="clickable" onclick="showPanel('write');showChapterContent('${bookPath}', ${ch.number})" style="cursor:pointer"><td>${ch.number}</td><td>${ch.title}</td><td>${ch.wordCount}</td><td>${statusIcon} ${scoreDisplay}</td></tr>`;
+      }
+      html += '</table>'; 
+    }
+    contentDiv.innerHTML = html;
+  } catch (e) {
+    detailDiv.style.display = 'none';
+  }
 }
 
 // ========== Populate Book Selects ==========
@@ -410,6 +441,13 @@ async function showChapterContent(bookPath, chapterNum) {
   } catch (e) {
     textDiv.textContent = '加载失败: ' + e.message;
   }
+}
+
+function startBatchWrite() {
+  // Switch to batch mode and trigger write
+  document.getElementById('write-mode').value = 'batch';
+  document.getElementById('batch-count-group').style.display = 'block';
+  writeChapter();
 }
 
 // ========== Outline/Intent Editors + Chapter Title Edit ==========
