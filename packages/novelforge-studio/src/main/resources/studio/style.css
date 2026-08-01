@@ -302,6 +302,20 @@ body {
   background: #a00000;
   box-shadow: 0 4px 16px rgba(139,0,0,0.4);
 }
+.btn-danger-inline {
+  background: transparent;
+  border: 1px solid rgba(192,57,43,0.4);
+  color: #c0392b;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-danger-inline:hover {
+  background: rgba(192,57,43,0.15);
+  border-color: #c0392b;
+}
 
 /* 🟢-4: Delete section */
 .delete-section {

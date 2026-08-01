@@ -115,13 +115,16 @@ async function loadBooks() {
       listDiv.innerHTML = '<p style="color:var(--paper-dark);text-align:center;padding:24px">书阁空空，先开卷创作吧</p>';
     } else {
       listDiv.innerHTML = books.map(b => `
-        <div class="book-card" onclick="selectBook('${safePath(b.path)}')">
-          <div class="card-title">${b.title}</div>
-          <div class="card-genre">${GENRE_LABELS[b.genre] || b.genre}</div>
-          <div class="card-meta">
-            <span class="card-chapters">${b.chapters} 章</span>
-            <span>${b.path}</span>
+        <div class="book-card">
+          <div onclick="selectBook('${safePath(b.path)}')" style="cursor:pointer">
+            <div class="card-title">${b.title}</div>
+            <div class="card-genre">${GENRE_LABELS[b.genre] || b.genre}</div>
+            <div class="card-meta">
+              <span class="card-chapters">${b.chapters} 章</span>
+              <span>${b.path}</span>
+            </div>
           </div>
+          <button onclick="quickDeleteBook('${safePath(b.path)}', '${b.title}')" class="btn-ghost btn-sm btn-danger-inline" title="删除此书" style="margin-top:8px;width:100%">🗑 焚卷</button>
         </div>
       `).join('');
     }
@@ -544,6 +547,26 @@ async function loadState() {
 }
 
 // ========== 🟢-4: Delete Book/Chapter ==========
+async function quickDeleteBook(bookPath, title) {
+  if (!window.confirm(`确认焚卷「${title}」？整部书将永久删除，不可恢复！`)) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/book/delete'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, type: 'project' })
+    });
+    const data = await res.json();
+    if (data.status === 'deleted') {
+      loadBooks();
+      populateBookSelects();
+    } else {
+      alert('删除失败: ' + (data.error || '未知错误'));
+    }
+  } catch (e) {
+    alert('网络错误: ' + e.message);
+  }
+}
+
 async function deleteBook() {
   const bookPath = document.getElementById('delete-book').value;
   const type = document.getElementById('delete-type').value;
@@ -1452,6 +1475,8 @@ async function fetchVersion() {
       const data = await resp.json();
       const label = document.getElementById('version-label');
       if (label) label.textContent = data.full || data.version;
+      const footer = document.getElementById('footer-version');
+      if (footer) footer.textContent = data.full || data.version;
     }
   } catch (e) { /* silent */ }
 }
