@@ -172,7 +172,7 @@ public class BookProject {
         Path chaptersDir = bookDir.resolve("chapters");
         if (Files.exists(chaptersDir)) {
             try (var stream = Files.list(chaptersDir)) {
-                stream.filter(p -> p.getFileName().toString().startsWith("chapter-") && p.getFileName().toString().endsWith(".md") && !p.getFileName().toString().endsWith(".intent.md"))
+                stream.filter(p -> p.getFileName().toString().startsWith("chapter-") && p.getFileName().toString().endsWith(".md") && !p.getFileName().toString().endsWith(".intent.md") && !p.getFileName().toString().endsWith(".draft.md"))
                     .sorted()
                     .forEach(p -> {
                         String name = p.getFileName().toString();

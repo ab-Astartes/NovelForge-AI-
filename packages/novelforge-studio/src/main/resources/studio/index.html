@@ -114,6 +114,47 @@
       <div id="book-detail-content" class="chapter-preview"></div>
     </div>
 
+    <!-- Book Property Edit -->
+    <div class="sub-section">
+      <h3 class="sub-title">书卷属性</h3>
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="book-edit-book" class="input-field"></select>
+      </div>
+      <div class="btn-row">
+        <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
+        <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">书名</label>
+          <input type="text" id="book-edit-title" class="input-field" placeholder="书名">
+        </div>
+        <div class="form-group">
+          <label class="form-label">作者</label>
+          <input type="text" id="book-edit-author" class="input-field" placeholder="笔名">
+        </div>
+        <div class="form-group">
+          <label class="form-label">流派</label>
+          <select id="book-edit-genre" class="input-field">
+            <option value="xuanhuan">玄幻 · 苍穹破天</option>
+            <option value="xianxia">仙侠 · 云海修真</option>
+            <option value="urban">都市 · 都市风云</option>
+            <option value="wuxia">武侠 · 侠骨柔情</option>
+            <option value="history">历史 · 烟雨长河</option>
+            <option value="horror">恐怖 · 诡异求生</option>
+            <option value="romance-zh">言情 · 缱绻情深</option>
+            <option value="fantasy">Fantasy · 西幻征途</option>
+            <option value="thriller">Thriller · 悬疑惊悚</option>
+            <option value="romance-en">Romance · 英伦情缘</option>
+            <option value="scifi">Sci-Fi · 未来纪元</option>
+            <option value="mystery">Mystery · 探案推理</option>
+          </select>
+        </div>
+      </div>
+      <div id="book-edit-result" class="result-box"></div>
+    </div>
+
     <!-- Outline Editor -->
     <div class="sub-section">
       <h3 class="sub-title">大纲编辑</h3>

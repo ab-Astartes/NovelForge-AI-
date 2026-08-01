@@ -183,7 +183,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -528,6 +528,42 @@ async function saveChapterTitle() {
       alert('保存失败: ' + (data.error || '未知'));
     }
   } catch (e) { alert('网络错误: ' + e.message); }
+}
+
+// ========== Book Property Edit ==========
+async function loadBookEdit() {
+  const bookPath = document.getElementById('book-edit-book').value;
+  const resultDiv = document.getElementById('book-edit-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  try {
+    const res = await fetch(authUrl(API + `/api/book/info?path=${encodeURIComponent(bookPath)}`), { headers: authHeaders() });
+    const info = await res.json();
+    document.getElementById('book-edit-title').value = info.title || '';
+    document.getElementById('book-edit-author').value = info.author || '';
+    document.getElementById('book-edit-genre').value = info.genre || 'xuanhuan';
+    showResult(resultDiv, `属性加载成功: ${info.title} (${info.genre})`, false);
+  } catch (e) { showResult(resultDiv, '加载失败: ' + e.message, true); }
+}
+
+async function saveBookEdit() {
+  const bookPath = document.getElementById('book-edit-book').value;
+  const title = document.getElementById('book-edit-title').value.trim();
+  const author = document.getElementById('book-edit-author').value.trim();
+  const genre = document.getElementById('book-edit-genre').value;
+  const resultDiv = document.getElementById('book-edit-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  if (!title) { showResult(resultDiv, '书名不能为空', true); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/book/edit'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, title, author, genre })
+    });
+    const data = await res.json();
+    if (data.status === 'saved') {
+      showResult(resultDiv, `属性已更新: ${data.title} (${data.genre})`, false);
+      loadBooks(); // Refresh book list
+    } else { showResult(resultDiv, '保存失败: ' + (data.error || '未知'), true); }
+  } catch (e) { showResult(resultDiv, '网络错误: ' + e.message, true); }
 }
 
 // ========== Audit Chapter ==========

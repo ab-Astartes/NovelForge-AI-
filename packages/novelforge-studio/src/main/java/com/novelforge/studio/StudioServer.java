@@ -213,6 +213,7 @@ public class StudioServer {
         server.createContext("/api/book/outline", corsWrap(this::handleBookOutlineApi));
         server.createContext("/api/book/intent", corsWrap(this::handleBookIntentApi));
         server.createContext("/api/book/chapter-title", corsWrap(this::handleBookChapterTitleApi));
+        server.createContext("/api/book/edit", corsWrap(this::handleBookEditApi));
 
         server.createContext("/api/write", corsWrap(this::handleWriteApi));
 
@@ -687,6 +688,32 @@ public class StudioServer {
             ch.setTitle(title.trim());
             BookProject.saveBookMetadata(Paths.get(bookPath), book);
             sendJson(exchange, 200, "{\"status\":\"saved\",\"chapter\":" + chapterNum + "}");
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private void handleBookEditApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String title = body.has("title") ? body.get("title").asText() : null;
+        String author = body.has("author") ? body.get("author").asText() : null;
+        String genre = body.has("genre") ? body.get("genre").asText() : null;
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (title == null || title.trim().isEmpty()) { sendJson(exchange, 400, "{\"error\":\"title required\"}"); return; }
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            book.setTitle(title.trim());
+            if (author != null) book.setAuthor(author.trim());
+            if (genre != null) book.setGenre(genre.trim());
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+            result.put("status", "saved");
+            result.put("title", book.getTitle());
+            result.put("author", book.getAuthor());
+            result.put("genre", book.getGenre());
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
