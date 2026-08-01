@@ -463,6 +463,12 @@
         <button onclick="saveChapterTitle()" class="btn-ink btn-sm" id="btn-save-title">保存标题</button>
       </div>
       <div id="chapter-text" class="chapter-text-content"></div>
+      <div class="btn-row" style="margin-top:8px">
+        <button onclick="editChapterContent()" class="btn-ghost btn-sm" id="btn-edit-chapter">编辑内容</button>
+        <button onclick="saveChapterContent()" class="btn-ink btn-sm" id="btn-save-chapter" style="display:none">保存内容</button>
+        <button onclick="cancelChapterEdit()" class="btn-ghost btn-sm" id="btn-cancel-edit" style="display:none">取消</button>
+      </div>
+      <textarea id="chapter-edit-textarea" class="input-field" rows="15" style="display:none;margin-top:8px" placeholder="编辑章节正文..."></textarea>
       <div id="chapter-stats" class="chapter-meta"></div>
     </div>
   </section>

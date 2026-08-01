@@ -530,6 +530,50 @@ async function saveChapterTitle() {
   } catch (e) { alert('网络错误: ' + e.message); }
 }
 
+// ========== Chapter Content Edit ==========
+function editChapterContent() {
+  const textDiv = document.getElementById('chapter-text');
+  const textarea = document.getElementById('chapter-edit-textarea');
+  const btnEdit = document.getElementById('btn-edit-chapter');
+  const btnSave = document.getElementById('btn-save-chapter');
+  const btnCancel = document.getElementById('btn-cancel-edit');
+  // Extract plain text from rendered HTML
+  textarea.value = textDiv.querySelector('div[style]')?.textContent || textDiv.textContent;
+  textarea.style.display = 'block';
+  textDiv.style.display = 'none';
+  btnEdit.style.display = 'none';
+  btnSave.style.display = 'inline-block';
+  btnCancel.style.display = 'inline-block';
+}
+
+function cancelChapterEdit() {
+  document.getElementById('chapter-edit-textarea').style.display = 'none';
+  document.getElementById('chapter-text').style.display = 'block';
+  document.getElementById('btn-edit-chapter').style.display = 'inline-block';
+  document.getElementById('btn-save-chapter').style.display = 'none';
+  document.getElementById('btn-cancel-edit').style.display = 'none';
+}
+
+async function saveChapterContent() {
+  const { bookPath, chapterNum } = currentChapterInfo;
+  const finalText = document.getElementById('chapter-edit-textarea').value;
+  if (!bookPath || !chapterNum) { alert('请先加载章节内容'); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/book/chapter'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path: bookPath, chapter: chapterNum, finalText })
+    });
+    const data = await res.json();
+    if (data.status === 'saved') {
+      alert(`第 ${chapterNum} 章内容已保存 (${data.wordCount} 字)`);
+      cancelChapterEdit(); // Switch back to view mode
+      await showChapterContent(bookPath, chapterNum); // Refresh display
+    } else {
+      alert('保存失败: ' + (data.error || '未知'));
+    }
+  } catch (e) { alert('网络错误: ' + e.message); }
+}
+
 // ========== Book Property Edit ==========
 async function loadBookEdit() {
   const bookPath = document.getElementById('book-edit-book').value;
