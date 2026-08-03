@@ -159,6 +159,16 @@ async function showBookDetail(bookPath) {
       <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.filter(ch => ch.passed).length : 0}</div><div class="stat-label">已通过</div></div>
       <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.length > 0 ? (info.chapterDetails.reduce((sum, ch) => sum + (ch.auditScore || 0), 0) / info.chapterDetails.filter(ch => ch.auditScore).length).toFixed(1) : '—' : '—'}</div><div class="stat-label">平均分</div></div>
     </div>`;
+    if (info.outlinePreview) {
+      html += `<div style="margin-bottom:12px;padding:8px;border:1px solid #333;border-radius:4px;font-size:13px;color:#999">`;
+      html += `<div style="color:#c9a961;font-weight:bold;margin-bottom:4px">大纲预览</div>`;
+      html += `${info.outlinePreview}...</div>`;
+    }
+    if (info.intentPreview) {
+      html += `<div style="margin-bottom:12px;padding:8px;border:1px solid #333;border-radius:4px;font-size:13px;color:#999">`;
+      html += `<div style="color:#c9a961;font-weight:bold;margin-bottom:4px">写作意图</div>`;
+      html += `${info.intentPreview}...</div>`;
+    }
     if (info.chapterDetails && info.chapterDetails.length > 0) {
       html += '<table class="chapter-table" style="width:100%;border-collapse:collapse;font-size:13px"><tr style="border-bottom:2px solid #c0392b"><th>#</th><th>章节</th><th>字数</th><th>审阅分</th></tr>'; 
       for (const ch of info.chapterDetails) {

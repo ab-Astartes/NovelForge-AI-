@@ -497,6 +497,8 @@ public class StudioServer {
             result.put("world", state.world().getSummary());
 
             result.put("hooks", state.hooks().getSummary());
+            if (book.getOutline() != null) result.put("outlinePreview", TextUtils.truncate(book.getOutline(), 300));
+            if (book.getAuthorIntent() != null) result.put("intentPreview", TextUtils.truncate(book.getAuthorIntent(), 300));
 
             // Chapter details: number, title, word count, audit score
             ArrayNode chaptersNode = mapper.createArrayNode();
