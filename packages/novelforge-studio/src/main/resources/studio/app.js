@@ -445,12 +445,30 @@ async function showChapterContent(bookPath, chapterNum) {
     currentChapterInfo = { bookPath, chapterNum: data.number }; // Store for title edit
     titleInput.value = data.title || `第${data.number}章`; // Populate title edit field
     const content = data.finalText || data.draftText || '(无内容)';
+    currentChapterDraftText = data.draftText || ''; // Store draft for toggle
+    currentChapterFinalText = data.finalText || ''; // Store final for toggle
+    currentChapterViewMode = 'final'; // Default view
     let header = `<strong>第 ${data.number} 章 · ${data.title}</strong> · ${data.wordCount} 字`;
     if (data.audit) header += ` · 审阅: ${data.audit.overallScore.toFixed(1)}/10 ${data.audit.passed ? '✅' : '⚠️'}`;
+    if (data.draftText && data.finalText) header += ` · <span id="draft-final-toggle" style="cursor:pointer;color:#c9a961;font-size:0.85em" onclick="toggleDraftFinal()">[切换初稿/终稿]</span>`;
     textDiv.innerHTML = header + '<hr style="border-color:var(--ink-border);margin:8px 0"><div style="white-space:pre-wrap;line-height:1.8">' + content.replace(/</g, '&lt;') + '</div>';
   } catch (e) {
     textDiv.textContent = '加载失败: ' + e.message;
   }
+}
+
+function toggleDraftFinal() {
+  const textDiv = document.getElementById('chapter-text');
+  if (!currentChapterDraftText && !currentChapterFinalText) return;
+  currentChapterViewMode = currentChapterViewMode === 'final' ? 'draft' : 'final';
+  const text = currentChapterViewMode === 'final' ? (currentChapterFinalText || currentChapterDraftText) : (currentChapterDraftText || currentChapterFinalText);
+  const label = currentChapterViewMode === 'final' ? '终稿' : '初稿';
+  // Update toggle text
+  const toggle = document.getElementById('draft-final-toggle');
+  if (toggle) toggle.textContent = `[当前:${label} · 点击切换]`;
+  // Update content div only
+  const contentDiv = textDiv.querySelector('div[style]');
+  if (contentDiv) contentDiv.innerHTML = text.replace(/</g, '&lt;');
 }
 
 function startBatchWrite() {
