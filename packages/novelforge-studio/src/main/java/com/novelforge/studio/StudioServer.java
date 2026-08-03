@@ -974,6 +974,7 @@ public class StudioServer {
                     int successCount = 0;
 
                     for (int i = 0; i < batchCount && i < 20; i++) {
+                        job.events.add("event: batch_chapter_start\ndata: {\"chapter\":" + (i + 1) + ",\"total\":" + Math.min(batchCount, 20) + "}\n\n");
 
                         PipelineConfig batchConfig = config.clone();
 
@@ -994,6 +995,7 @@ public class StudioServer {
                             state.saveAll();
 
                             successCount++;
+                            job.events.add("event: batch_chapter_complete\ndata: {\"chapter\":" + (i + 1) + ",\"total\":" + Math.min(batchCount, 20) + "}\n\n");
 
                         } else {
 

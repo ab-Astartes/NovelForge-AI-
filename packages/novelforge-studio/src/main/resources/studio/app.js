@@ -956,6 +956,16 @@ function streamWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPat
   try {
     const evtSource = new EventSource(authUrl(API + `/api/write/stream?jobId=${jobId}`));
 
+    evtSource.addEventListener('batch_chapter_start', (e) => {
+      const data = JSON.parse(e.data);
+      progressDiv.innerHTML = `<span class="spinner"></span> 批量炼章 ${data.chapter}/${data.total}…`;
+    });
+
+    evtSource.addEventListener('batch_chapter_complete', (e) => {
+      const data = JSON.parse(e.data);
+      progressDiv.innerHTML = `<span style="color:var(--success)">✓ 第 ${data.chapter}/${data.total} 章已成</span>`;
+    });
+
     evtSource.addEventListener('pipeline_start', (e) => {
       progressDiv.innerHTML = '<span class="spinner"></span> 流水线启动…';
     });
