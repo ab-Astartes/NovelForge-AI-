@@ -1,84 +1,48 @@
 package com.novelforge.studio;
 
-
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import com.fasterxml.jackson.databind.JsonNode;
-
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import com.fasterxml.jackson.databind.node.ArrayNode;
-
-import com.novelforge.core.pipeline.PipelineRunner;
-import com.novelforge.core.Version;
-
-import com.novelforge.core.pipeline.PipelineConfig;
-
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novelforge.core.genre.GenreManager;
-
-import com.novelforge.core.llm.ModelRouter;
-
-import com.novelforge.core.models.Book;
-
-import com.novelforge.core.models.Chapter;
-
-import com.novelforge.core.models.AuditResult;
-
-import com.novelforge.core.models.WritingStyle;
-
-import com.novelforge.core.models.PipelineResult;
-
-import com.novelforge.core.models.PipelineContext;
-
-import com.novelforge.core.models.TextUtils;import com.novelforge.core.project.BookProject;
-
-import com.novelforge.core.state.TruthState;
 import com.novelforge.core.llm.LlmClient;
+import com.novelforge.core.llm.ModelRouter;
+import com.novelforge.core.models.AuditResult;
+import com.novelforge.core.models.Book;
+import com.novelforge.core.models.Chapter;
+import com.novelforge.core.models.PipelineContext;
+import com.novelforge.core.models.PipelineResult;
+import com.novelforge.core.models.TextUtils;
+import com.novelforge.core.models.WritingStyle;
+import com.novelforge.core.pipeline.PipelineConfig;
+import com.novelforge.core.pipeline.PipelineRunner;
+import com.novelforge.core.project.BookProject;
 import com.novelforge.core.prompt.PromptBuilder;
-
-import com.sun.net.httpserver.HttpServer;
-
-import com.sun.net.httpserver.HttpHandler;
-
+import com.novelforge.core.state.TruthState;
+import com.novelforge.core.Version;
 import com.sun.net.httpserver.HttpExchange;
-
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+import java.io.InputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.SecureRandom;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
-
 import org.slf4j.LoggerFactory;
 
 
-
-import java.io.IOException;
-
-import java.io.InputStream;
-
-import java.io.OutputStream;
-
-import java.net.InetSocketAddress;
-
-import java.nio.charset.StandardCharsets;
-
-import java.nio.file.Files;
-
-import java.nio.file.Path;
-
-import java.nio.file.Paths;
-
-import java.util.concurrent.ConcurrentHashMap;
-
-import java.util.List;
-
-import java.util.concurrent.Executors;
-
-import java.util.concurrent.ScheduledExecutorService;
-
-import java.util.concurrent.TimeUnit;
-
-import java.security.SecureRandom;
-
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.Map;
 
 
 
