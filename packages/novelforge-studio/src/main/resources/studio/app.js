@@ -6,6 +6,8 @@ const API = '';  // same origin
 let AUTH_TOKEN = '';
 
 // 🟢-1: Shared LLM config — single source for all panels
+let currentWriteJobId = null;
+
 const sharedConfig = {
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
@@ -267,6 +269,7 @@ async function writeChapter() {
   chapterPreview.style.display = 'none';
   btnWrite.disabled = true;
   btnWrite.textContent = '炼章中…';
+  document.getElementById('btn-cancel').style.display = 'inline-block';
 
   // Start pipeline animation
   resetPipelineSteps();
@@ -298,6 +301,7 @@ async function writeChapter() {
 
     // 🟡-2: Handle async job response
     if (data.jobId) {
+      currentWriteJobId = data.jobId;
       streamWriteJob(data.jobId, agents, progressDiv, resultDiv, btnWrite, bookPath);
       return;
     }
@@ -469,6 +473,30 @@ function toggleDraftFinal() {
   // Update content div only
   const contentDiv = textDiv.querySelector('div[style]');
   if (contentDiv) contentDiv.innerHTML = text.replace(/</g, '&lt;');
+}
+
+async function cancelWrite() {
+  if (!currentWriteJobId) { alert('当前没有进行中的写作任务'); return; }
+  if (!window.confirm('确认取消写作？当前进度将丢失。')) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/write/cancel'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ jobId: currentWriteJobId })
+    });
+    const data = await res.json();
+    if (data.status === 'cancelled') {
+      currentWriteJobId = null;
+      document.getElementById('btn-write').disabled = false;
+      document.getElementById('btn-write').textContent = '落笔！';
+      document.getElementById('btn-cancel').style.display = 'none';
+      resetPipelineSteps();
+      document.getElementById('write-progress').textContent = '✗ 已取消';
+      showResult(document.getElementById('write-result'), '✗ 写作已取消', true);
+    } else {
+      alert('取消失败: ' + (data.error || '未知错误')); 
+    }
+  } catch (e) { alert('网络错误: ' + e.message); }
 }
 
 function startBatchWrite() {
@@ -1021,6 +1049,8 @@ function streamWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPat
       evtSource.close();
       btnWrite.disabled = false;
       btnWrite.textContent = '落笔！';
+      document.getElementById('btn-cancel').style.display = 'none';
+      currentWriteJobId = null;
       const data = JSON.parse(e.data);
       if (data.status === 'completed') {
         showResult(resultDiv, '✦ 章已成！', false);

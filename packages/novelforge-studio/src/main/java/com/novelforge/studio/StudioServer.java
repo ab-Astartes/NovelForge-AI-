@@ -199,6 +199,7 @@ public class StudioServer {
         server.createContext("/api/diff", corsWrap(this::handleDiffApi));
 
         server.createContext("/api/write/resume", corsWrap(this::handleWriteResumeApi));
+        server.createContext("/api/write/cancel", corsWrap(this::handleWriteCancelApi));
 
         server.createContext("/api/rollback", corsWrap(this::handleRollbackApi));
 
@@ -974,6 +975,7 @@ public class StudioServer {
                     int successCount = 0;
 
                     for (int i = 0; i < batchCount && i < 20; i++) {
+                        if (job.status.equals("cancelled")) break; // User cancelled
                         job.events.add("event: batch_chapter_start\ndata: {\"chapter\":" + (i + 1) + ",\"total\":" + Math.min(batchCount, 20) + "}\n\n");
 
                         PipelineConfig batchConfig = config.clone();
@@ -1923,6 +1925,25 @@ public class StudioServer {
 
 
     /** Handle write resume API — POST: resume from checkpoint */
+
+
+    private void handleWriteCancelApi(HttpExchange exchange) throws IOException {
+
+        if (!exchange.getRequestMethod().equals("POST")) { sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed"))); return; }
+
+        JsonNode body = readBody(exchange);
+        String jobId = body.has("jobId") ? body.get("jobId").asText() : null;
+
+        if (jobId == null) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "jobId required"))); return; }
+
+        WriteJob job = writeJobs.get(jobId);
+        if (job == null) { sendJson(exchange, 404, mapper.writeValueAsString(mapper.createObjectNode().put("error", "job not found"))); return; }
+
+        job.status = "cancelled";
+        job.error = "Cancelled by user";
+        job.events.add("event: pipeline_fail\ndata: {\"error\":\"Cancelled by user\"}\n\n");
+        sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "cancelled").put("jobId", jobId)));
+    }
 
     private void handleWriteResumeApi(HttpExchange exchange) throws IOException {
 
