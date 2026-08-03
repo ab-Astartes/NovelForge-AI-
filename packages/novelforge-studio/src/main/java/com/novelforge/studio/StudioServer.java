@@ -214,6 +214,7 @@ public class StudioServer {
         server.createContext("/api/book/intent", corsWrap(this::handleBookIntentApi));
         server.createContext("/api/book/chapter-title", corsWrap(this::handleBookChapterTitleApi));
         server.createContext("/api/book/edit", corsWrap(this::handleBookEditApi));
+        server.createContext("/api/search", corsWrap(this::handleSearchApi));
 
         server.createContext("/api/write", corsWrap(this::handleWriteApi));
 
@@ -742,6 +743,51 @@ public class StudioServer {
             result.put("author", book.getAuthor());
             result.put("genre", book.getGenre());
             sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private void handleSearchApi(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        String keyword = getQueryParam(query, "keyword");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+        if (keyword == null || keyword.trim().isEmpty()) { sendJson(exchange, 400, "{\"error\":\"keyword required\"}"); return; }
+        keyword = keyword.trim();
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            ArrayNode results = mapper.createArrayNode();
+            for (Chapter ch : book.getChapters()) {
+                String text = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+                if (text != null && text.contains(keyword)) {
+                    ObjectNode hit = mapper.createObjectNode();
+                    hit.put("chapter", ch.getNumber());
+                    hit.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
+                    // Find snippet context (50 chars before + keyword + 50 chars after)
+                    int idx = text.indexOf(keyword);
+                    int start = Math.max(0, idx - 50);
+                    int end = Math.min(text.length(), idx + keyword.length() + 50);
+                    hit.put("snippet", text.substring(start, end));
+                    hit.put("position", idx);
+                    results.add(hit);
+                }
+            }
+            // Also search outline
+            String outline = book.getOutline();
+            if (outline != null && outline.contains(keyword)) {
+                ObjectNode hit = mapper.createObjectNode();
+                hit.put("chapter", 0);
+                hit.put("title", "大纲");
+                int idx = outline.indexOf(keyword);
+                int start = Math.max(0, idx - 50);
+                int end = Math.min(outline.length(), idx + keyword.length() + 50);
+                hit.put("snippet", outline.substring(start, end));
+                hit.put("position", idx);
+                results.add(hit);
+            }
+            sendJson(exchange, 200, mapper.writeValueAsString(results));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }

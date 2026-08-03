@@ -183,7 +183,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book'];
+  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book', 'search-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -572,6 +572,32 @@ async function saveChapterContent() {
       alert('保存失败: ' + (data.error || '未知'));
     }
   } catch (e) { alert('网络错误: ' + e.message); }
+}
+
+// ========== Book Search ==========
+async function searchBookContent() {
+  const bookPath = document.getElementById('search-book').value;
+  const keyword = document.getElementById('search-keyword').value;
+  const resultDiv = document.getElementById('search-results');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  if (!keyword || keyword.trim().length === 0) { showResult(resultDiv, '请输入关键词', true); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/search?path=' + encodeURIComponent(bookPath) + '&keyword=' + encodeURIComponent(keyword.trim())), { headers: authHeaders() });
+    const data = await res.json();
+    if (data.length === 0) {
+      showResult(resultDiv, `未找到「${keyword}」`, true);
+      return;
+    }
+    let html = `<div style="margin-bottom:4px;color:#c9a961">找到 ${data.length} 处匹配：</div>`;
+    data.forEach(hit => {
+      const loc = hit.chapter === 0 ? '大纲' : `第${hit.chapter}章 ${hit.title}`;
+      html += `<div style="padding:6px 8px;border-bottom:1px solid #333;cursor:pointer" onclick="showChapterContent('${bookPath}',${hit.chapter})">`;
+      html += `<span style="color:#c0392b;font-weight:bold">${loc}</span>`;
+      html += `<div style="color:#999;font-size:0.85em;margin-top:2px">…${hit.snippet}…</div></div>`;
+    });
+    resultDiv.innerHTML = html;
+    resultDiv.className = 'result-box show success';
+  } catch (e) { showResult(resultDiv, '网络错误: ' + e.message, true); }
 }
 
 // ========== Book Property Edit ==========

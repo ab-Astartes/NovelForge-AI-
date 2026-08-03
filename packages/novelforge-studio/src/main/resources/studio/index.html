@@ -155,6 +155,23 @@
       <div id="book-edit-result" class="result-box"></div>
     </div>
 
+    <!-- Book Search -->
+    <div class="sub-section">
+      <h3 class="sub-title">全书搜索</h3>
+      <div class="form-group">
+        <label class="form-label">选择书籍</label>
+        <select id="search-book" class="input-field"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">关键词</label>
+        <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容">
+      </div>
+      <div class="btn-row">
+        <button onclick="searchBookContent()" class="btn-ink btn-sm">搜</button>
+      </div>
+      <div id="search-results" class="result-box"></div>
+    </div>
+
     <!-- Outline Editor -->
     <div class="sub-section">
       <h3 class="sub-title">大纲编辑</h3>
