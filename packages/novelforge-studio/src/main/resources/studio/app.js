@@ -176,12 +176,12 @@ async function showBookDetail(bookPath) {
 
     // === 写作素材区块：参考文献 + 参照作品 ===
     html += `<div id="materials-section" style="margin-bottom:12px">`;
-    html += `<div style="display:flex;gap:12px;margin-bottom:8px">`;
-    html += `<button onclick="loadReferences('${bookPath}')" class="btn btn-sm" style="background:#2a2a2a;border:1px solid #c0392b;color:#c9a961;padding:4px 12px;border-radius:4px">📚 参考文献</button>`;
-    html += `<button onclick="loadInspirations('${bookPath}')" class="btn btn-sm" style="background:#2a2a2a;border:1px solid #2980b9;color:#c9a961;padding:4px 12px;border-radius:4px">📖 参照作品</button>`;
+    html += `<div style="display:flex;gap:0;margin-bottom:8px;border:1px solid #333;border-radius:4px;overflow:hidden">`;
+    html += `<button onclick="loadReferences('${bookPath}')" id="tab-refs" style="flex:1;padding:8px;background:#c0392b;color:#fff;border:none;font-size:14px;cursor:pointer">📚 参考文献 (${info.referencesCount || 0})</button>`;
+    html += `<button onclick="loadInspirations('${bookPath}')" id="tab-insps" style="flex:1;padding:8px;background:#2a2a2a;color:#c9a961;border:none;border-left:1px solid #333;font-size:14px;cursor:pointer">📖 参照作品 (${info.inspirationsCount || 0})</button>`;
     html += `</div>`;
     html += `<div id="references-list" style="margin-bottom:8px"></div>`;
-    html += `<div id="inspirations-list"></div>`;
+    html += `<div id="inspirations-list" style="display:none"></div>`;
     html += `</div>`;
 
     if (info.chapterDetails && info.chapterDetails.length > 0) {
@@ -195,6 +195,9 @@ async function showBookDetail(bookPath) {
       html += '</table>'; 
     }
     contentDiv.innerHTML = html;
+    // 自动加载写作素材
+    loadReferences(bookPath);
+    loadInspirations(bookPath);
   } catch (e) {
     detailDiv.style.display = 'none';
   }
@@ -1923,6 +1926,13 @@ async function rollbackState(timestamp) {
 const REF_TYPE_LABELS = { book: '书籍', paper: '论文', web: '网页', article: '文章', film: '影视', game: '游戏', other: '其他' };
 
 async function loadReferences(bookPath) {
+  // 标签切换：显示参考文献，隐藏参照作品
+  document.getElementById('references-list').style.display = 'block';
+  document.getElementById('inspirations-list').style.display = 'none';
+  document.getElementById('tab-refs').style.background = '#c0392b';
+  document.getElementById('tab-refs').style.color = '#fff';
+  document.getElementById('tab-insps').style.background = '#2a2a2a';
+  document.getElementById('tab-insps').style.color = '#c9a961';
   try {
     const res = await fetch(authUrl(API + '/api/book/references?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const refs = await res.json();
@@ -1955,6 +1965,13 @@ async function loadReferences(bookPath) {
 }
 
 async function loadInspirations(bookPath) {
+  // 标签切换：显示参照作品，隐藏参考文献
+  document.getElementById('references-list').style.display = 'none';
+  document.getElementById('inspirations-list').style.display = 'block';
+  document.getElementById('tab-insps').style.background = '#2980b9';
+  document.getElementById('tab-insps').style.color = '#fff';
+  document.getElementById('tab-refs').style.background = '#2a2a2a';
+  document.getElementById('tab-refs').style.color = '#c9a961';
   try {
     const res = await fetch(authUrl(API + '/api/book/inspirations?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const insps = await res.json();
