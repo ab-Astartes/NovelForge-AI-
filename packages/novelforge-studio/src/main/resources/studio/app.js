@@ -1058,6 +1058,8 @@ function streamWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPat
     evtSource.addEventListener('pipeline_fail', (e) => {
       const data = JSON.parse(e.data);
       resetPipelineSteps();
+      document.getElementById('btn-cancel').style.display = 'none';
+      currentWriteJobId = null;
       showResult(resultDiv, '✗ 流水线失败: ' + data.error, true);
     });
 
@@ -1128,6 +1130,8 @@ async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, boo
         showResult(resultDiv, '✦ 章已成！', false);
         btnWrite.disabled = false;
         btnWrite.textContent = '落笔！';
+        document.getElementById('btn-cancel').style.display = 'none';
+        currentWriteJobId = null;
         showChapterPreview(bookPath);
         return;
       }
@@ -1138,6 +1142,18 @@ async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, boo
         showResult(resultDiv, '✗ ' + (data.error || '写作失败'), true);
         btnWrite.disabled = false;
         btnWrite.textContent = '落笔！';
+        document.getElementById('btn-cancel').style.display = 'none';
+        currentWriteJobId = null;
+        return;
+      }
+
+      if (data.status === 'cancelled') {
+        resetPipelineSteps();
+        progressDiv.textContent = '';\n        showResult(resultDiv, '✦ 已取消', true);
+        btnWrite.disabled = false;
+        btnWrite.textContent = '落笔！';
+        document.getElementById('btn-cancel').style.display = 'none';
+        currentWriteJobId = null;
         return;
       }
 
@@ -1147,6 +1163,8 @@ async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, boo
       showResult(resultDiv, '✗ 轮询失败: ' + e.message, true);
       btnWrite.disabled = false;
       btnWrite.textContent = '落笔！';
+      document.getElementById('btn-cancel').style.display = 'none';
+      currentWriteJobId = null;
     }
   };
 
