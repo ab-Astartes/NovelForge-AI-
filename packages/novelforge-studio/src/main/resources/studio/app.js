@@ -159,7 +159,9 @@ async function showBookDetail(bookPath) {
       <div class="stat-card"><div class="stat-value">${info.chapters}</div><div class="stat-label">章节</div></div>
       <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.reduce((sum, ch) => sum + ch.wordCount, 0) : 0}</div><div class="stat-label">总字数</div></div>
       <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.filter(ch => ch.passed).length : 0}</div><div class="stat-label">已通过</div></div>
-      <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.length > 0 ? (info.chapterDetails.reduce((sum, ch) => sum + (ch.auditScore || 0), 0) / info.chapterDetails.filter(ch => ch.auditScore).length).toFixed(1) : '—' : '—'}</div><div class="stat-label">平均分</div></div>
+      <div class="stat-card"><div class="stat-value">${info.chapterDetails ? info.chapterDetails.length > 0 ? (info.chapterDetails.reduce((sum, ch) => sum + (ch.auditScore || 0), 0) / info.chapterDetails.filter(ch => ch.auditScore).length).toFixed(1) : '\u2014' : '\u2014'}</div><div class="stat-label">平均分</div></div>
+      <div class="stat-card"><div class="stat-value">${info.referencesCount || 0}</div><div class="stat-label">参考文献</div></div>
+      <div class="stat-card"><div class="stat-value">${info.inspirationsCount || 0}</div><div class="stat-label">参照作品</div></div>
     </div>`;
     if (info.outlinePreview) {
       html += `<div style="margin-bottom:12px;padding:8px;border:1px solid #333;border-radius:4px;font-size:13px;color:#999">`;
@@ -171,6 +173,17 @@ async function showBookDetail(bookPath) {
       html += `<div style="color:#c9a961;font-weight:bold;margin-bottom:4px">写作意图</div>`;
       html += `${info.intentPreview}...</div>`;
     }
+
+    // === 写作素材区块：参考文献 + 参照作品 ===
+    html += `<div id="materials-section" style="margin-bottom:12px">`;
+    html += `<div style="display:flex;gap:12px;margin-bottom:8px">`;
+    html += `<button onclick="loadReferences('${bookPath}')" class="btn btn-sm" style="background:#2a2a2a;border:1px solid #c0392b;color:#c9a961;padding:4px 12px;border-radius:4px">📚 参考文献</button>`;
+    html += `<button onclick="loadInspirations('${bookPath}')" class="btn btn-sm" style="background:#2a2a2a;border:1px solid #2980b9;color:#c9a961;padding:4px 12px;border-radius:4px">📖 参照作品</button>`;
+    html += `</div>`;
+    html += `<div id="references-list" style="margin-bottom:8px"></div>`;
+    html += `<div id="inspirations-list"></div>`;
+    html += `</div>`;
+
     if (info.chapterDetails && info.chapterDetails.length > 0) {
       html += '<table class="chapter-table" style="width:100%;border-collapse:collapse;font-size:13px"><tr style="border-bottom:2px solid #c0392b"><th>#</th><th>章节</th><th>字数</th><th>审阅分</th></tr>'; 
       for (const ch of info.chapterDetails) {
@@ -1904,4 +1917,199 @@ async function rollbackState(timestamp) {
   } catch (e) {
     showResult(document.getElementById('rollback-result'), '回滚失败: ' + e.message, true);
   }
+}
+
+// ========== 写作素材：参考文献 & 参照作品 ==========
+const REF_TYPE_LABELS = { book: '书籍', paper: '论文', web: '网页', article: '文章', film: '影视', game: '游戏', other: '其他' };
+
+async function loadReferences(bookPath) {
+  try {
+    const res = await fetch(authUrl(API + '/api/book/references?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    const refs = await res.json();
+    let html = '<div style="color:#c9a961;font-weight:bold;margin-bottom:6px">📚 参考文献</div>';
+    if (refs.length === 0) {
+      html += '<div style="color:#666;font-size:13px">暂无参考文献，点击下方添加</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      for (const r of refs) {
+        const typeLabel = REF_TYPE_LABELS[r.type] || r.type;
+        html += `<div style="padding:6px 8px;border:1px solid #333;border-radius:4px;font-size:13px;background:#1a1a1a">`;
+        html += `<div style="display:flex;justify-content:space-between">`;
+        html += `<span style="color:#e0e0e0;font-weight:bold">${r.title}</span>`;
+        html += `<span style="color:#666;font-size:11px">[${typeLabel}]</span>`;
+        html += `</div>`;
+        if (r.author) html += `<div style="color:#999;font-size:12px">作者: ${r.author}</div>`;
+        if (r.summary) html += `<div style="color:#888;font-size:12px;margin-top:2px">${r.summary}</div>`;
+        if (r.notes) html += `<div style="color:#c9a961;font-size:12px;margin-top:2px">📝 ${r.notes}</div>`;
+        html += `<div style="margin-top:4px;display:flex;gap:8px">`;
+        html += `<button onclick="deleteReference('${bookPath}','${r.id}')" style="color:#c0392b;border:none;background:none;font-size:12px;cursor:pointer">删除</button>`;
+        html += `</div></div>`;
+      }
+      html += '</div>';
+    }
+    html += `<button onclick="addReference('${bookPath}')" style="margin-top:8px;background:#2a2a2a;border:1px solid #c0392b;color:#c9a961;padding:4px 12px;border-radius:4px;font-size:13px;cursor:pointer">+ 添加参考文献</button>`;
+    document.getElementById('references-list').innerHTML = html;
+  } catch (e) {
+    document.getElementById('references-list').innerHTML = '<div style="color:#c0392b">加载失败</div>'; 
+  }
+}
+
+async function loadInspirations(bookPath) {
+  try {
+    const res = await fetch(authUrl(API + '/api/book/inspirations?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    const insps = await res.json();
+    let html = '<div style="color:#c9a961;font-weight:bold;margin-bottom:6px">📖 参照作品</div>';
+    if (insps.length === 0) {
+      html += '<div style="color:#666;font-size:13px">暂无参照作品，点击下方添加</div>'; 
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      for (const insp of insps) {
+        const typeLabel = REF_TYPE_LABELS[insp.type] || insp.type;
+        html += `<div style="padding:6px 8px;border:1px solid #333;border-radius:4px;font-size:13px;background:#1a1a1a">`;
+        html += `<div style="display:flex;justify-content:space-between">`;
+        html += `<span style="color:#e0e0e0;font-weight:bold">${insp.title}</span>`;
+        html += `<span style="color:#666;font-size:11px">[${typeLabel}]</span>`;
+        html += `</div>`;
+        if (insp.author) html += `<div style="color:#999;font-size:12px">作者: ${insp.author}</div>`;
+        if (insp.summary) html += `<div style="color:#888;font-size:12px;margin-top:2px">${insp.summary}</div>`;
+        if (insp.notes) html += `<div style="color:#c9a961;font-size:12px;margin-top:2px">📝 对标笔记: ${insp.notes}</div>`;
+        html += `<div style="margin-top:4px;display:flex;gap:8px">`;
+        html += `<button onclick="deleteInspiration('${bookPath}','${insp.id}')" style="color:#c0392b;border:none;background:none;font-size:12px;cursor:pointer">删除</button>`;
+        html += `</div></div>`;
+      }
+      html += '</div>'; 
+    }
+    html += `<button onclick="addInspiration('${bookPath}')" style="margin-top:8px;background:#2a2a2a;border:1px solid #2980b9;color:#c9a961;padding:4px 12px;border-radius:4px;font-size:13px;cursor:pointer">+ 添加参照作品</button>`;
+    document.getElementById('inspirations-list').innerHTML = html;
+  } catch (e) {
+    document.getElementById('inspirations-list').innerHTML = '<div style="color:#c0392b">加载失败</div>'; 
+  }
+}
+
+function addReference(bookPath) {
+  const container = document.getElementById('references-list');
+  const existing = container.querySelector('.add-form');
+  if (existing) existing.remove();
+  const form = document.createElement('div');
+  form.className = 'add-form';
+  form.style.cssText = 'padding:8px;border:1px solid #c0392b;border-radius:4px;background:#1a1a1a;margin-top:8px';
+  form.innerHTML = `
+    <div style="font-size:13px;color:#c9a961;margin-bottom:6px">添加参考文献</div>
+    <input id="ref-title" placeholder="标题/书名" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="ref-author" placeholder="作者" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <select id="ref-type" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+      <option value="book">书籍</option><option value="paper">论文</option><option value="web">网页</option><option value="article">文章</option><option value="film">影视</option><option value="game">游戏</option><option value="other">其他</option>
+    </select>
+    <input id="ref-summary" placeholder="简要说明" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="ref-notes" placeholder="作者笔记（如何参考）" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="ref-url" placeholder="链接（可选）" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <button onclick="submitReference('${bookPath}')" style="background:#c0392b;color:#fff;border:none;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer">保存</button>
+    <button onclick="this.parentElement.remove()" style="background:none;border:1px solid #333;color:#666;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:8px">取消</button>
+  `;
+  container.appendChild(form);
+}
+
+async function submitReference(bookPath) {
+  const title = document.getElementById('ref-title').value.trim();
+  if (!title) { alert('请填写标题'); return; }
+  const body = {
+    path: bookPath,
+    title: title,
+    author: document.getElementById('ref-author').value.trim(),
+    type: document.getElementById('ref-type').value,
+    summary: document.getElementById('ref-summary').value.trim(),
+    notes: document.getElementById('ref-notes').value.trim(),
+    url: document.getElementById('ref-url').value.trim()
+  };
+  try {
+    const res = await fetch(authUrl(API + '/api/book/references'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      loadReferences(bookPath);
+    } else {
+      alert('保存失败: ' + (data.error || ''));
+    }
+  } catch (e) { alert('保存失败: ' + e.message); }
+}
+
+async function deleteReference(bookPath, refId) {
+  if (!confirm('确定删除此参考文献？')) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/book/references?path=' + encodeURIComponent(bookPath) + '&id=' + encodeURIComponent(refId)), {
+      method: 'DELETE', headers: authHeaders()
+    });
+    const data = await res.json();
+    if (data.status === 'deleted') {
+      loadReferences(bookPath);
+    } else {
+      alert('删除失败: ' + (data.error || ''));
+    }
+  } catch (e) { alert('删除失败: ' + e.message); }
+}
+
+function addInspiration(bookPath) {
+  const container = document.getElementById('inspirations-list');
+  const existing = container.querySelector('.add-form');
+  if (existing) existing.remove();
+  const form = document.createElement('div');
+  form.className = 'add-form';
+  form.style.cssText = 'padding:8px;border:1px solid #2980b9;border-radius:4px;background:#1a1a1a;margin-top:8px';
+  form.innerHTML = `
+    <div style="font-size:13px;color:#c9a961;margin-bottom:6px">添加参照作品</div>
+    <input id="insp-title" placeholder="标题/作品名" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="insp-author" placeholder="作者" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <select id="insp-type" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+      <option value="book">书籍</option><option value="film">影视</option><option value="game">游戏</option><option value="article">文章</option><option value="web">网页</option><option value="other">其他</option>
+    </select>
+    <input id="insp-summary" placeholder="简要说明" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="insp-notes" placeholder="对标笔记（如何参照/对标）" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <input id="insp-url" placeholder="链接（可选）" style="width:100%;padding:4px;margin-bottom:4px;background:#0d0d0d;border:1px solid #333;color:#e0e0e0;border-radius:3px;font-size:13px">
+    <button onclick="submitInspiration('${bookPath}')" style="background:#2980b9;color:#fff;border:none;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer">保存</button>
+    <button onclick="this.parentElement.remove()" style="background:none;border:1px solid #333;color:#666;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:8px">取消</button>
+  `;
+  container.appendChild(form);
+}
+
+async function submitInspiration(bookPath) {
+  const title = document.getElementById('insp-title').value.trim();
+  if (!title) { alert('请填写标题'); return; }
+  const body = {
+    path: bookPath,
+    title: title,
+    author: document.getElementById('insp-author').value.trim(),
+    type: document.getElementById('insp-type').value,
+    summary: document.getElementById('insp-summary').value.trim(),
+    notes: document.getElementById('insp-notes').value.trim(),
+    url: document.getElementById('insp-url').value.trim()
+  };
+  try {
+    const res = await fetch(authUrl(API + '/api/book/inspirations'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      loadInspirations(bookPath);
+    } else {
+      alert('保存失败: ' + (data.error || ''));
+    }
+  } catch (e) { alert('保存失败: ' + e.message); }
+}
+
+async function deleteInspiration(bookPath, inspId) {
+  if (!confirm('确定删除此参照作品？')) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/book/inspirations?path=' + encodeURIComponent(bookPath) + '&id=' + encodeURIComponent(inspId)), {
+      method: 'DELETE', headers: authHeaders()
+    });
+    const data = await res.json();
+    if (data.status === 'deleted') {
+      loadInspirations(bookPath);
+    } else {
+      alert('删除失败: ' + (data.error || ''));
+    }
+  } catch (e) { alert('删除失败: ' + e.message); }
 }

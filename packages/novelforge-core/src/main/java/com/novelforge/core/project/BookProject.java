@@ -2,6 +2,7 @@ package com.novelforge.core.project;
 
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
+import com.novelforge.core.models.Reference;
 import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.models.WritingStyle;
 import com.novelforge.core.state.TruthState;
@@ -15,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -154,6 +157,42 @@ public class BookProject {
                 if (styleNode.has("referenceSample")) style.setReferenceSample(styleNode.get("referenceSample").asText());
                 book.setStyle(style);
             }
+
+            // Load references from book.json
+            if (root.has("references") && root.get("references").isArray()) {
+                List<Reference> refs = new ArrayList<>();
+                for (JsonNode refNode : root.get("references")) {
+                    Reference ref = new Reference();
+                    ref.setId(refNode.has("id") ? refNode.get("id").asText() : "ref-0");
+                    ref.setTitle(refNode.has("title") ? refNode.get("title").asText() : "");
+                    ref.setAuthor(refNode.has("author") ? refNode.get("author").asText() : null);
+                    ref.setType(refNode.has("type") ? refNode.get("type").asText() : "book");
+                    ref.setCategory("reference");
+                    ref.setSummary(refNode.has("summary") ? refNode.get("summary").asText() : null);
+                    ref.setNotes(refNode.has("notes") ? refNode.get("notes").asText() : null);
+                    ref.setUrl(refNode.has("url") ? refNode.get("url").asText() : null);
+                    refs.add(ref);
+                }
+                book.setReferences(refs);
+            }
+
+            // Load inspirations from book.json
+            if (root.has("inspirations") && root.get("inspirations").isArray()) {
+                List<Reference> insps = new ArrayList<>();
+                for (JsonNode inspNode : root.get("inspirations")) {
+                    Reference insp = new Reference();
+                    insp.setId(inspNode.has("id") ? inspNode.get("id").asText() : "insp-0");
+                    insp.setTitle(inspNode.has("title") ? inspNode.get("title").asText() : "");
+                    insp.setAuthor(inspNode.has("author") ? inspNode.get("author").asText() : null);
+                    insp.setType(inspNode.has("type") ? inspNode.get("type").asText() : "book");
+                    insp.setCategory("inspiration");
+                    insp.setSummary(inspNode.has("summary") ? inspNode.get("summary").asText() : null);
+                    insp.setNotes(inspNode.has("notes") ? inspNode.get("notes").asText() : null);
+                    insp.setUrl(inspNode.has("url") ? inspNode.get("url").asText() : null);
+                    insps.add(insp);
+                }
+                book.setInspirations(insps);
+            }
         }
 
         // Load outline
@@ -265,6 +304,38 @@ public class BookProject {
             chNode.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getNumber() + "章");
             chNode.put("wordCount", TextUtils.estimateChineseWordCount(ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText()));
             chaptersArr.add(chNode);
+        }
+
+        // Store references (参考文献)
+        if (book.getReferences() != null && !book.getReferences().isEmpty()) {
+            ArrayNode refsArr = bookJson.putArray("references");
+            for (Reference ref : book.getReferences()) {
+                ObjectNode refNode = mapper.createObjectNode();
+                refNode.put("id", ref.getId());
+                refNode.put("title", ref.getTitle());
+                if (ref.getAuthor() != null) refNode.put("author", ref.getAuthor());
+                if (ref.getType() != null) refNode.put("type", ref.getType());
+                if (ref.getSummary() != null) refNode.put("summary", ref.getSummary());
+                if (ref.getNotes() != null) refNode.put("notes", ref.getNotes());
+                if (ref.getUrl() != null) refNode.put("url", ref.getUrl());
+                refsArr.add(refNode);
+            }
+        }
+
+        // Store inspirations (参照作品)
+        if (book.getInspirations() != null && !book.getInspirations().isEmpty()) {
+            ArrayNode inspArr = bookJson.putArray("inspirations");
+            for (Reference insp : book.getInspirations()) {
+                ObjectNode inspNode = mapper.createObjectNode();
+                inspNode.put("id", insp.getId());
+                inspNode.put("title", insp.getTitle());
+                if (insp.getAuthor() != null) inspNode.put("author", insp.getAuthor());
+                if (insp.getType() != null) inspNode.put("type", insp.getType());
+                if (insp.getSummary() != null) inspNode.put("summary", insp.getSummary());
+                if (insp.getNotes() != null) inspNode.put("notes", insp.getNotes());
+                if (insp.getUrl() != null) inspNode.put("url", insp.getUrl());
+                inspArr.add(inspNode);
+            }
         }
         try (java.io.OutputStream os = Files.newOutputStream(bookJsonPath)) {
             mapper.writerWithDefaultPrettyPrinter().writeValue(os, bookJson);

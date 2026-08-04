@@ -18,6 +18,8 @@ public class Book {
     private List<Chapter> chapters = new ArrayList<>();
     private String outline;      // book outline text or JSON
     private String authorIntent; // free-form author intent description
+    private List<Reference> references = new ArrayList<>();  // 参考文献素材
+    private List<Reference> inspirations = new ArrayList<>(); // 参照作品/灵感来源
     private WritingProgress progress; // stored progress with per-chapter details
 
     // --- Getters/Setters ---
@@ -36,6 +38,10 @@ public class Book {
     public void setOutline(String outline) { this.outline = outline; }
     public String getAuthorIntent() { return authorIntent; }
     public void setAuthorIntent(String intent) { this.authorIntent = intent; }
+    public List<Reference> getReferences() { return references; }
+    public void setReferences(List<Reference> references) { this.references = references; }
+    public List<Reference> getInspirations() { return inspirations; }
+    public void setInspirations(List<Reference> inspirations) { this.inspirations = inspirations; }
 
     /** Get next chapter number */
     public int nextChapterNumber() {

@@ -10,6 +10,7 @@ import com.novelforge.core.llm.ModelRouter;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
+import com.novelforge.core.models.Reference;
 import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
 import com.novelforge.core.models.TextUtils;
@@ -214,6 +215,8 @@ public class StudioServer {
         server.createContext("/api/characters", corsWrap(this::handleCharactersApi));
         server.createContext("/api/hooks", corsWrap(this::handleHooksApi));
         server.createContext("/api/chapter/synopsis", corsWrap(this::handleChapterSynopsisApi));
+        server.createContext("/api/book/references", corsWrap(this::handleBookReferencesApi));
+        server.createContext("/api/book/inspirations", corsWrap(this::handleBookInspirationsApi));
 
 
 
@@ -490,9 +493,9 @@ public class StudioServer {
             result.put("author", book.getAuthor());
 
             result.put("chapters", book.getChapters().size());
-
             result.put("nextChapter", book.nextChapterNumber());
-
+            result.put("referencesCount", book.getReferences() != null ? book.getReferences().size() : 0);
+            result.put("inspirationsCount", book.getInspirations() != null ? book.getInspirations().size() : 0);
             result.put("characters", state.characters().getSummary());
 
             result.put("world", state.world().getSummary());
@@ -1013,7 +1016,7 @@ public class StudioServer {
 
                     }
 
-                    if (job.status == null || !job.status.equals("failed")) {
+                    if (job.status == null || (!job.status.equals("failed") && !job.status.equals("cancelled"))) {
 
                         job.result = "{\"status\":\"ok\",\"chaptersWritten\":\"" + successCount + "\"}";
 
@@ -2874,6 +2877,153 @@ public class StudioServer {
     }
 
 
+
+    // ==================== 参考文献 / 参照作品 API ====================
+
+    private void handleBookReferencesApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        String query = exchange.getRequestURI().getQuery();
+
+        // GET /api/book/references?path=xxx — 获取参考文献列表
+        if (method.equals("GET") && query != null) {
+            String bookPath = getQueryParam(query, "path");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+
+            ArrayNode refsArr = mapper.createArrayNode();
+            for (Reference ref : book.getReferences()) {
+                ObjectNode refNode = mapper.createObjectNode();
+                refNode.put("id", ref.getId());
+                refNode.put("title", ref.getTitle());
+                if (ref.getAuthor() != null) refNode.put("author", ref.getAuthor());
+                if (ref.getType() != null) refNode.put("type", ref.getType());
+                if (ref.getSummary() != null) refNode.put("summary", ref.getSummary());
+                if (ref.getNotes() != null) refNode.put("notes", ref.getNotes());
+                if (ref.getUrl() != null) refNode.put("url", ref.getUrl());
+                refsArr.add(refNode);
+            }
+            sendJson(exchange, 200, mapper.writeValueAsString(refsArr));
+            return;
+        }
+
+        // POST /api/book/references — 添加或更新参考文献
+        if (method.equals("POST")) {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+
+            Reference ref = new Reference();
+            if (body.has("id")) ref.setId(body.get("id").asText());
+            ref.setTitle(body.has("title") ? body.get("title").asText() : "Untitled");
+            ref.setAuthor(body.has("author") ? body.get("author").asText() : null);
+            ref.setType(body.has("type") ? body.get("type").asText() : "book");
+            ref.setCategory("reference");
+            ref.setSummary(body.has("summary") ? body.get("summary").asText() : null);
+            ref.setNotes(body.has("notes") ? body.get("notes").asText() : null);
+            ref.setUrl(body.has("url") ? body.get("url").asText() : null);
+
+            // If id matches existing, update it; otherwise append
+            java.util.List<Reference> refs = book.getReferences();
+            boolean updated = false;
+            for (int i = 0; i < refs.size(); i++) {
+                if (refs.get(i).getId().equals(ref.getId())) { refs.set(i, ref); updated = true; break; }
+            }
+            if (!updated) refs.add(ref);
+
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            ObjectNode resp = mapper.createObjectNode().put("status", "ok").put("id", ref.getId());
+            sendJson(exchange, 200, mapper.writeValueAsString(resp));
+            return;
+        }
+
+        // DELETE /api/book/references?path=xxx&id=yyy — 删除参考文献
+        if (method.equals("DELETE") && query != null) {
+            String bookPath = getQueryParam(query, "path");
+            String refId = getQueryParam(query, "id");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath) || refId == null) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path and id required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            boolean removed = book.getReferences().removeIf(r -> r.getId().equals(refId));
+            if (!removed) { sendJson(exchange, 404, mapper.writeValueAsString(mapper.createObjectNode().put("error", "reference not found"))); return; }
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "deleted").put("id", refId)));
+            return;
+        }
+
+        sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed")));
+    }
+
+    private void handleBookInspirationsApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        String query = exchange.getRequestURI().getQuery();
+
+        // GET /api/book/inspirations?path=xxx — 获取参照作品列表
+        if (method.equals("GET") && query != null) {
+            String bookPath = getQueryParam(query, "path");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+
+            ArrayNode inspArr = mapper.createArrayNode();
+            for (Reference insp : book.getInspirations()) {
+                ObjectNode inspNode = mapper.createObjectNode();
+                inspNode.put("id", insp.getId());
+                inspNode.put("title", insp.getTitle());
+                if (insp.getAuthor() != null) inspNode.put("author", insp.getAuthor());
+                if (insp.getType() != null) inspNode.put("type", insp.getType());
+                if (insp.getSummary() != null) inspNode.put("summary", insp.getSummary());
+                if (insp.getNotes() != null) inspNode.put("notes", insp.getNotes());
+                if (insp.getUrl() != null) inspNode.put("url", insp.getUrl());
+                inspArr.add(inspNode);
+            }
+            sendJson(exchange, 200, mapper.writeValueAsString(inspArr));
+            return;
+        }
+
+        // POST /api/book/inspirations — 添加或更新参照作品
+        if (method.equals("POST")) {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+
+            Reference insp = new Reference();
+            if (body.has("id")) insp.setId(body.get("id").asText());
+            insp.setTitle(body.has("title") ? body.get("title").asText() : "Untitled");
+            insp.setAuthor(body.has("author") ? body.get("author").asText() : null);
+            insp.setType(body.has("type") ? body.get("type").asText() : "book");
+            insp.setCategory("inspiration");
+            insp.setSummary(body.has("summary") ? body.get("summary").asText() : null);
+            insp.setNotes(body.has("notes") ? body.get("notes").asText() : null);
+            insp.setUrl(body.has("url") ? body.get("url").asText() : null);
+
+            java.util.List<Reference> insps = book.getInspirations();
+            boolean updated = false;
+            for (int i = 0; i < insps.size(); i++) {
+                if (insps.get(i).getId().equals(insp.getId())) { insps.set(i, insp); updated = true; break; }
+            }
+            if (!updated) insps.add(insp);
+
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            ObjectNode resp = mapper.createObjectNode().put("status", "ok").put("id", insp.getId());
+            sendJson(exchange, 200, mapper.writeValueAsString(resp));
+            return;
+        }
+
+        // DELETE /api/book/inspirations?path=xxx&id=yyy — 删除参照作品
+        if (method.equals("DELETE") && query != null) {
+            String bookPath = getQueryParam(query, "path");
+            String inspId = getQueryParam(query, "id");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath) || inspId == null) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path and id required"))); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            boolean removed = book.getInspirations().removeIf(r -> r.getId().equals(inspId));
+            if (!removed) { sendJson(exchange, 404, mapper.writeValueAsString(mapper.createObjectNode().put("error", "inspiration not found"))); return; }
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "deleted").put("id", inspId)));
+            return;
+        }
+
+        sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed")));
+    }
 
     /** Persist defaultConfig to ~/.NovelForge/config/pipeline.json */
 
