@@ -112,14 +112,18 @@
                                         <argument>com.novelforge.studio.StudioServer</argument>
                                         <argument>--dest</argument>
                                         <argument>${project.build.directory}/jpackage</argument>
+                                        <argument>--icon</argument>
+                                        <argument>${project.basedir}/src/main/resources/icon/novelforge.ico</argument>
                                         <argument>--java-options</argument>
                                         <argument>-Xmx256m</argument>
                                         <argument>--app-version</argument>
-                                        <argument>0.4.3</argument>
+                                        <argument>${project.version}</argument>
                                         <argument>--vendor</argument>
                                         <argument>NovelForge</argument>
                                         <argument>--description</argument>
                                         <argument>AI Novel Writing Engine Studio</argument>
+                                        <argument>--win-console</argument>
+                                        <!-- MSI-only options (enable for type exe/msi): win-dir-chooser, win-shortcut, win-menu-group NovelForge -->
                                     </arguments>
                                 </configuration>
                             </execution>

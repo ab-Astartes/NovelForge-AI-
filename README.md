@@ -123,6 +123,57 @@ mvn test           # 测试
 
 要求：Java 17+, Maven 3.8+
 
+## 安装与启动（Windows EXE）
+
+### 一键构建独立 EXE
+
+使用构建脚本一键打包为无需 JRE 的独立 Windows 可执行程序：
+
+```bash
+# Windows
+build-studio-exe.bat
+
+# Linux / macOS
+bash build-studio-exe.sh
+```
+
+脚本会自动完成：
+1. 全量构建（`mvn clean package`）
+2. jpackage 打包（生成自带 JRE 的独立应用）
+3. 输出验证
+
+### 输出位置
+
+```
+packages/novelforge-studio/target/jpackage/NovelForgeStudio/
+```
+
+Windows 下双击 `NovelForgeStudio.exe` 即可启动，无需安装 Java。
+
+### jpackage 手动构建
+
+```bash
+# 先全量构建
+mvn clean package
+
+# 再单独触发 jpackage
+mvn package -Pjpackage-studio -pl packages/novelforge-studio
+```
+
+### 功能特性
+
+- `--icon` 自定义应用图标（橙焰锻造风格）
+- `--win-console` 保留控制台窗口方便查看日志
+- 版本号自动从 `pom.xml` 读取（当前 1.0.0）
+
+> **注意：** `--win-dir-chooser`、`--win-shortcut`、`--win-menu-group` 仅对 MSI/EXE 安装包类型有效，app-image 类型不支持这些选项。若需生成 MSI 安装包，请将 `--type app-image` 改为 `--type msi` 并启用这些选项。
+
+### 前置要求
+
+- JDK 17+（需要 `jpackage` 工具，位于 JDK 的 bin 目录）
+- Maven 3.8+
+- 确认 `jpackage` 可用：`jpackage --version`
+
 ## License
 
 MIT

@@ -1,0 +1,58 @@
+<idea-plugin>
+    <id>com.novelforge.studio</id>
+    <name>NovelForge Studio</name>
+    <vendor>NovelForge</vendor>
+    <description>
+        AI小说锻造工坊 — 在IntelliJ IDEA内嵌NovelForge Studio面板。
+        一键启动/管理本地StudioServer，通过JCEF浏览器加载Studio UI。
+    </description>
+    <version>0.4.3</version>
+
+    <!-- Requires IntelliJ IDEA 2024.2+ (JCEF available, Java 17) -->
+    <idea-version since-build="242"/>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- Plugin entry point -->
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- ToolWindow: embedded browser panel on right side -->
+        <toolWindow
+                id="NovelForge"
+                anchor="right"
+                icon="/icons/novelforge.svg"
+                factoryClass="com.novelforge.studio.StudioToolWindowFactory"
+                canCloseContents="false"
+                secondary="false"/>
+
+        <!-- Application-level settings -->
+        <applicationConfigurable
+                parentId="tools"
+                id="novelforge.settings"
+                displayName="NovelForge"
+                instance="com.novelforge.studio.ConfigPanel"/>
+    </extensions>
+
+    <!-- Actions -->
+    <actions>
+        <group id="NovelForge.Actions" text="NovelForge" popup="true">
+            <add-to-group group-id="MainMenu" anchor="after" relative-to-action="ToolsMenu"/>
+            <action id="novelforge.startServer"
+                    class="com.novelforge.studio.StartServerAction"
+                    text="Start Studio Server"
+                    description="Start NovelForge StudioServer"/>
+            <action id="novelforge.stopServer"
+                    class="com.novelforge.studio.StopServerAction"
+                    text="Stop Studio Server"
+                    description="Stop NovelForge StudioServer"/>
+            <action id="novelforge.openInBrowser"
+                    class="com.novelforge.studio.OpenInBrowserAction"
+                    text="Open Studio in Browser"
+                    description="Open NovelForge Studio in external browser"/>
+            <separator/>
+            <action id="novelforge.restartServer"
+                    class="com.novelforge.studio.RestartServerAction"
+                    text="Restart Studio Server"
+                    description="Restart NovelForge StudioServer"/>
+        </group>
+    </actions>
+</idea-plugin>

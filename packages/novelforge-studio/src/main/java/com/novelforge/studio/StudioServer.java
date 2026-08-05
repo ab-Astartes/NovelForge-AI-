@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novelforge.core.genre.GenreManager;
 import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
+import com.novelforge.core.models.AgentApiConfig;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.Book;
 import com.novelforge.core.models.Chapter;
@@ -15,6 +16,7 @@ import com.novelforge.core.models.PipelineContext;
 import com.novelforge.core.models.PipelineResult;
 import com.novelforge.core.models.TextUtils;
 import com.novelforge.core.models.WritingStyle;
+import com.novelforge.core.models.StudioConfig;
 import com.novelforge.core.pipeline.PipelineConfig;
 import com.novelforge.core.pipeline.PipelineRunner;
 import com.novelforge.core.project.BookProject;
@@ -89,6 +91,18 @@ public class StudioServer {
 
 
 
+    // Full studio config (global + per-agent API overrides + presets)
+
+    private volatile StudioConfig studioConfig;
+
+
+
+    // ModelRouter for pipeline (updated when config changes)
+
+    private volatile ModelRouter modelRouter;
+
+
+
     // fixes #28: Configuration hot-reload — watches pipeline.json for changes
 
     private final ScheduledExecutorService configWatcher = Executors.newSingleThreadScheduledExecutor();
@@ -149,6 +163,22 @@ public class StudioServer {
 
         this.defaultConfig = new PipelineConfig();
 
+        // Load studio config (global API + per-agent overrides + presets)
+
+        this.studioConfig = StudioConfig.load();
+
+        this.defaultConfig = studioConfig.getPipelineConfig();
+
+        this.modelRouter = new ModelRouter(studioConfig.getGlobalDefault().toModelConfig());
+
+        // Apply per-agent overrides from studio config
+
+        for (Map.Entry<String, AgentApiConfig> entry : studioConfig.getAgentOverrides().entrySet()) {
+
+            modelRouter.setAgentModel(entry.getKey(), entry.getValue().toModelConfig());
+
+        }
+
         // 🟡-1: Generate random auth token for local API access
 
         this.authToken = generateToken();
@@ -192,6 +222,10 @@ public class StudioServer {
         server.createContext("/api/export", corsWrap(this::handleExportApi));
 
         server.createContext("/api/config", corsWrap(this::handleConfigApi));
+
+        server.createContext("/api/config/presets", corsWrap(this::handleConfigPresetsApi));
+
+        server.createContext("/api/config/sample", corsWrap(this::handleConfigSampleApi));
 
         server.createContext("/api/write/stream", corsWrap(this::handleWriteStreamApi));
 
@@ -264,9 +298,25 @@ public class StudioServer {
 
         }, 5, 5, TimeUnit.SECONDS);  // check every 5 seconds
 
-        log.info("{} Studio started at http://localhost:{}", Version.full(), server.getAddress().getPort());
-
-        System.out.println(Version.full() + " Studio: http://localhost:" + server.getAddress().getPort());
+        // Splash ASCII art welcome banner
+        int port = server.getAddress().getPort();
+        String splash = "\n" +
+            "  ╔═════════════════════════════════════════════════════╗\n" +
+            "  ║                                                     ║\n" +
+            "  ║    ██╗  ███╗   ██╗ ██████╗ ██╗  ██╗ ███████╗      ║\n" +
+            "  ║    ██║ ████╗  ██║ ██╔══██╗ ██║ ██╔╝ ██╔════╝      ║\n" +
+            "  ║    ██║ ██╔██╗ ██║ ██████╔╝ █████╔╝  ███████╗      ║\n" +
+            "  ║    ██║ ██║╚██╗██║ ██╔═══╗  ██╔═██╗  ╚════██║      ║\n" +
+            "  ║    ██║ ██║ ╚████║ ██████╗  ██║  ██╗ ███████║      ║\n" +
+            "  ║    ╚═╝ ╚═╝  ╚═══╝ ╚═════╝  ╚═╝  ╚═╝ ╚══════╝      ║\n" +
+            "  ║                                                     ║\n" +
+            "  ║   🔥  AI Novel Writing Engine  —  v" + Version.VERSION + "            ║\n" +
+            "  ║                                                     ║\n" +
+            "  ║   Studio: http://localhost:" + port + "                    ║\n" +
+            "  ║                                                     ║\n" +
+            "  ╚═════════════════════════════════════════════════════╝\n";
+        System.out.println(splash);
+        log.info("{} Studio started at http://localhost:{}", Version.full(), port);
 
         System.out.println("Auth token: " + authToken);  // 🟡-1: show token for frontend to use
 
@@ -869,9 +919,27 @@ public class StudioServer {
 
         String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
 
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
 
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        String modelId = body.has("model") ? body.get("model").asText() : null;
+
+        // Fallback to studio config if not provided in request
+
+        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
+
+        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
+
+        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
+
+        final String fApiKey = apiKey;
+
+        final String fBaseUrl = baseUrl;
+
+        final String fModelId = modelId;
 
         String mode = body.has("mode") ? body.get("mode").asText() : "next";
 
@@ -879,7 +947,7 @@ public class StudioServer {
 
         if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
-        if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (fApiKey == null || fApiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
         String jobId = "job-" + jobIdCounter.incrementAndGet();
 
@@ -907,7 +975,7 @@ public class StudioServer {
 
                 PipelineConfig config = loadConfig(Paths.get(bookPath));
 
-                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
 
                 PipelineRunner runner = new PipelineRunner(config, router);
 
@@ -1305,13 +1373,27 @@ public class StudioServer {
 
         String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
 
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
 
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        String modelId = body.has("model") ? body.get("model").asText() : null;
+
+        // Fallback to studio config
+
+        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
+
+        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
+
+        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
+
+        final String fApiKey = apiKey, fBaseUrl = baseUrl, fModelId = modelId;
 
 
 
-        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return; }
+        if (bookPath == null || fApiKey == null || fApiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return; }
 
 
 
@@ -1321,7 +1403,7 @@ public class StudioServer {
 
             TruthState state = new TruthState(Paths.get(bookPath));
 
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
 
             PipelineRunner runner = new PipelineRunner(defaultConfig, router);
 
@@ -1531,15 +1613,9 @@ public class StudioServer {
 
         if (exchange.getRequestMethod().equals("GET")) {
 
-            ObjectNode config = mapper.createObjectNode();
+            // Return full studio config (pipeline + global API + agent overrides + presets)
 
-            config.put("chapterWordsMin", defaultConfig.getChapterWordsMin());
-
-            config.put("chapterWordsMax", defaultConfig.getChapterWordsMax());
-
-            config.put("auditPassThreshold", defaultConfig.getAuditPassThreshold());
-
-            config.put("maxRevisionPasses", defaultConfig.getMaxRevisionPasses());
+            ObjectNode config = studioConfig.toJson();
 
             config.put("genreKeys", GenreManager.getInstance().listGenreKeys().toString());
 
@@ -1549,6 +1625,8 @@ public class StudioServer {
 
             JsonNode body = readBody(exchange);
 
+            // Pipeline config
+
             if (body.has("chapterWordsMin")) defaultConfig.setChapterWordsMin(body.get("chapterWordsMin").asInt());
 
             if (body.has("chapterWordsMax")) defaultConfig.setChapterWordsMax(body.get("chapterWordsMax").asInt());
@@ -1557,17 +1635,185 @@ public class StudioServer {
 
             if (body.has("maxRevisionPasses")) defaultConfig.setMaxRevisionPasses(body.get("maxRevisionPasses").asInt());
 
+            // Global API config
+
+            if (body.has("globalDefault")) {
+
+                AgentApiConfig globalCfg = AgentApiConfig.fromJson(body.get("globalDefault"));
+
+                studioConfig.setGlobalDefault(globalCfg);
+
+                modelRouter = new ModelRouter(globalCfg.toModelConfig());
+
+            }
+
+            // Per-agent API overrides
+
+            if (body.has("agentOverrides")) {
+
+                JsonNode ov = body.get("agentOverrides");
+
+                java.util.Map<String, AgentApiConfig> overrides = new java.util.LinkedHashMap<>();
+
+                ov.fields().forEachRemaining(field -> {
+
+                    AgentApiConfig cfg = AgentApiConfig.fromJson(field.getValue());
+
+                    overrides.put(field.getKey(), cfg);
+
+                    modelRouter.setAgentModel(field.getKey(), cfg.toModelConfig());
+
+                });
+
+                studioConfig.setAgentOverrides(overrides);
+
+            }
+
+            // Preset switch
+
+            if (body.has("activePreset")) {
+
+                String presetName = body.get("activePreset").asText();
+
+                studioConfig.applyPreset(presetName);
+
+                modelRouter = new ModelRouter(studioConfig.getGlobalDefault().toModelConfig());
+
+                for (java.util.Map.Entry<String, AgentApiConfig> e : studioConfig.getAgentOverrides().entrySet()) {
+
+                    modelRouter.setAgentModel(e.getKey(), e.getValue().toModelConfig());
+
+                }
+
+            }
+
+            // Agent toggles
+
+            if (body.has("runArchitect")) defaultConfig.setRunArchitect(body.get("runArchitect").asBoolean());
+
+            if (body.has("runPlanner")) defaultConfig.setRunPlanner(body.get("runPlanner").asBoolean());
+
+            if (body.has("runComposer")) defaultConfig.setRunComposer(body.get("runComposer").asBoolean());
+
+            if (body.has("runWriter")) defaultConfig.setRunWriter(body.get("runWriter").asBoolean());
+
+            if (body.has("runObserver")) defaultConfig.setRunObserver(body.get("runObserver").asBoolean());
+
+            if (body.has("runReflector")) defaultConfig.setRunReflector(body.get("runReflector").asBoolean());
+
+            if (body.has("runNormalizer")) defaultConfig.setRunNormalizer(body.get("runNormalizer").asBoolean());
+
+            if (body.has("runAuditor")) defaultConfig.setRunAuditor(body.get("runAuditor").asBoolean());
+
+            if (body.has("runReviser")) defaultConfig.setRunReviser(body.get("runReviser").asBoolean());
+
             // Persist config to disk
 
             saveDefaultConfig();
 
-            sendJson(exchange, 200, "{\"status\":\"updated\"}");
+            studioConfig.save();
+
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "updated")));
 
         } else {
 
-            sendJson(exchange, 405, "{\"error\":\"method not allowed\"}");
+            sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed")));
 
         }
+
+    }
+
+    // --- API: Config Presets ---
+    private void handleConfigPresetsApi(HttpExchange exchange) throws IOException {
+
+        if (exchange.getRequestMethod().equals("GET")) {
+
+            ObjectNode result = mapper.createObjectNode();
+
+            for (java.util.Map.Entry<String, StudioConfig.PresetEntry> entry : studioConfig.getPresets().entrySet()) {
+
+                result.set(entry.getKey(), entry.getValue().toJson());
+
+            }
+
+            result.put("activePreset", studioConfig.getActivePreset() != null ? studioConfig.getActivePreset() : "");
+
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+
+        } else if (exchange.getRequestMethod().equals("POST")) {
+
+            JsonNode body = readBody(exchange);
+
+            String action = body.has("action") ? body.get("action").asText() : "";
+
+            if ("apply".equals(action) && body.has("name")) {
+
+                String presetName = body.get("name").asText();
+
+                studioConfig.applyPreset(presetName);
+
+                modelRouter = new ModelRouter(studioConfig.getGlobalDefault().toModelConfig());
+
+                for (java.util.Map.Entry<String, AgentApiConfig> e : studioConfig.getAgentOverrides().entrySet()) {
+
+                    modelRouter.setAgentModel(e.getKey(), e.getValue().toModelConfig());
+
+                }
+
+                studioConfig.save();
+
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "preset applied").put("activePreset", presetName)));
+
+            } else if ("save".equals(action) && body.has("name")) {
+
+                String name = body.get("name").asText();
+
+                String desc = body.has("description") ? body.get("description").asText() : "";
+
+                StudioConfig.PresetEntry entry = new StudioConfig.PresetEntry(desc, studioConfig.getGlobalDefault().copy(), new java.util.LinkedHashMap<>(studioConfig.getAgentOverrides()));
+
+                studioConfig.getPresets().put(name, entry);
+
+                studioConfig.save();
+
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "preset saved").put("name", name)));
+
+            } else if ("delete".equals(action) && body.has("name")) {
+
+                String name = body.get("name").asText();
+
+                studioConfig.getPresets().remove(name);
+
+                studioConfig.save();
+
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode().put("status", "preset deleted").put("name", name)));
+
+            } else {
+
+                sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "action required: apply|save|delete")));
+
+            }
+
+        } else {
+
+            sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed")));
+
+        }
+
+    }
+
+    // --- API: Config Sample ---
+    private void handleConfigSampleApi(HttpExchange exchange) throws IOException {
+
+        if (!exchange.getRequestMethod().equals("GET")) {
+
+            sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "GET only")));
+
+            return;
+
+        }
+
+        sendJson(exchange, 200, StudioConfig.getSamplePresetsJsonString());
 
     }
 
@@ -1960,15 +2206,29 @@ public class StudioServer {
 
         String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
 
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
 
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        String modelId = body.has("model") ? body.get("model").asText() : null;
+
+        // Fallback to studio config
+
+        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
+
+        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
+
+        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
+
+        final String fApiKey = apiKey, fBaseUrl = baseUrl, fModelId = modelId;
 
 
 
         if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
-        if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (fApiKey == null || fApiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
 
 
@@ -2014,7 +2274,7 @@ public class StudioServer {
 
                 PipelineConfig config = loadConfig(bookDir);
 
-                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
 
 
 
@@ -2264,10 +2524,9 @@ public class StudioServer {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
         JsonNode body = readBody(exchange);
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
-        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
@@ -2297,10 +2556,9 @@ public class StudioServer {
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         int volumeStart = body.has("volumeStart") ? body.get("volumeStart").asInt() : 1;
         int volumeEnd = body.has("volumeEnd") ? body.get("volumeEnd").asInt() : 10;
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
-        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
@@ -2331,10 +2589,9 @@ public class StudioServer {
         JsonNode body = readBody(exchange);
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
-        if (bookPath == null || apiKey == null || !isPathWithinBooksRoot(bookPath)) {
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
@@ -2370,10 +2627,9 @@ public class StudioServer {
         String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
-        if (prompt == null || apiKey == null) {
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        if (prompt == null || apiKey == null || apiKey.isEmpty()) {
             sendJson(exchange, 400, "{\"error\":\"prompt and apiKey required\"}"); return;
         }
         if (bookPath != null && !isPathWithinBooksRoot(bookPath)) {
@@ -2408,9 +2664,8 @@ public class StudioServer {
         String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
         if (apiKey == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
         // Outline can come from body or from book
         if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
@@ -2445,10 +2700,9 @@ public class StudioServer {
         int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
         String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
         String source = body.has("source") ? body.get("source").asText() : "outline";
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
-        if (bookPath == null || apiKey == null || prompt == null || !isPathWithinBooksRoot(bookPath)) {
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        if (bookPath == null || apiKey == null || apiKey.isEmpty() || prompt == null || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path, apiKey, and prompt required; path must be within books directory\"}"); return;
         }
         if (chapterNum < 1) {
@@ -2570,12 +2824,11 @@ public class StudioServer {
         String outlineOrVolume = body.has("source") ? body.get("source").asText() : null;
         String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : "https://api.openai.com/v1";
-        String modelId = body.has("model") ? body.get("model").asText() : "gpt-4o";
+        String[] creds = resolveApiCredentials(body);
+        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
         // Also accept path-based source: load outline from book if source not provided directly
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        if (apiKey == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
         // If source text not provided directly, try to load from book outline
         if (outlineOrVolume == null || outlineOrVolume.isEmpty()) {
             if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
@@ -2866,6 +3119,32 @@ public class StudioServer {
 
     /** Handle CORS preflight OPTIONS requests */
 
+    /** Resolve API credentials from request body, falling back to studio config. */
+
+    private String[] resolveApiCredentials(JsonNode body) {
+
+        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+
+        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
+
+        String modelId = body.has("model") ? body.get("model").asText() : null;
+
+        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
+
+        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
+
+        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
+
+        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
+
+        return new String[]{apiKey, baseUrl, modelId};
+
+    }
+
+
+
     private void handleCorsPreflight(HttpExchange exchange) throws IOException {
 
         addCorsHeaders(exchange);
@@ -3102,7 +3381,14 @@ public class StudioServer {
 
     public static void main(String[] args) throws IOException {
 
-        int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
+        int port = DEFAULT_PORT;
+        if (args.length > 0) {
+            try {
+                port = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid port number: " + args[0] + ". Using default port " + DEFAULT_PORT);
+            }
+        }
 
         StudioServer studio = new StudioServer(port);
 
@@ -3110,7 +3396,7 @@ public class StudioServer {
 
         System.out.println("Press Enter to stop...");
 
-        System.in.read();
+        try { System.in.read(); } catch (IOException e) { /* ctrl+c or closed */ }
 
         studio.stop();
 

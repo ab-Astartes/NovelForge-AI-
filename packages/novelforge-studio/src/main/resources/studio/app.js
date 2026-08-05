@@ -278,7 +278,7 @@ async function writeChapter() {
   const chapterPreview = document.getElementById('chapter-preview');
 
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
-  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  // apiKey is optional — if not provided, backend will fallback to studio config
 
   // Reset UI
   clearResult(resultDiv);
@@ -369,7 +369,7 @@ async function resumeChapter() {
   const btnWrite = document.getElementById('btn-write');
 
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
-  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  // apiKey is optional — if not provided, backend will fallback to studio config
 
   clearResult(resultDiv);
   btnResume.disabled = true;
@@ -725,7 +725,7 @@ async function auditChapter() {
   const progressDiv = document.getElementById('audit-progress');
 
   if (!bookPath) { return; }
-  if (!apiKey) { showResult(document.createElement('div'), '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   progressDiv.innerHTML = '<span class="spinner"></span> 33维审阅运行中…';
 
@@ -971,12 +971,34 @@ async function saveConfig() {
     chapterWordsMin: parseInt(document.getElementById('cfg-min-words').value),
     chapterWordsMax: parseInt(document.getElementById('cfg-max-words').value),
     auditPassThreshold: parseFloat(document.getElementById('cfg-audit-threshold').value),
-    maxRevisionPasses: parseInt(document.getElementById('cfg-max-revisions').value)
+    maxRevisionPasses: parseInt(document.getElementById('cfg-max-revisions').value),
+    globalDefault: {
+      provider: document.getElementById('cfg-global-provider').value,
+      model: document.getElementById('cfg-global-model').value,
+      baseUrl: document.getElementById('cfg-global-baseurl').value,
+      apiKey: document.getElementById('cfg-global-apikey').value
+    },
+    agentOverrides: {}
   };
 
   // Add agent toggles
   Object.entries(agentToggles).forEach(([key, val]) => {
     body[key] = val;
+  });
+
+  // Collect per-agent API overrides
+  const agentNames = ['Architect','Planner','Composer','Writer','Observer','Reflector','Normalizer','Auditor','Reviser'];
+  agentNames.forEach(name => {
+    const el = document.getElementById('cfg-agent-' + name);
+    if (el && el.value && el.value.trim()) {
+      const parts = el.value.trim().split('|');
+      const override = {};
+      if (parts[0]) override.provider = parts[0];
+      if (parts[1]) override.model = parts[1];
+      if (parts[2]) override.baseUrl = parts[2];
+      if (parts[3]) override.apiKey = parts[3];
+      body.agentOverrides[name] = override;
+    }
   });
 
   try {
@@ -986,10 +1008,18 @@ async function saveConfig() {
       body: JSON.stringify(body)
     });
     const data = await res.json();
+    if (data.status === 'updated') {
+      // Sync to sharedConfig so other panels auto-use saved config
+      sharedConfig.apiKey = body.globalDefault.apiKey || sharedConfig.apiKey;
+      sharedConfig.baseUrl = body.globalDefault.baseUrl || sharedConfig.baseUrl;
+      sharedConfig.modelId = body.globalDefault.model || sharedConfig.modelId;
+      syncConfigToUI();
+    }
     showResult(resultDiv, data.status === 'updated' ? '✦ 配置已入炉' : '✗ ' + (data.error || '更新失败'), data.status !== 'updated');
   } catch (e) {
     showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
   }
+}
 }
 
 // ========== 🟡-2: SSE Write Streaming + Polling Fallback ==========
@@ -1194,8 +1224,82 @@ async function loadConfig() {
       }
     });
     updatePipelineStepVisibility();
+
+    // Load global API config
+    if (data.globalDefault) {
+      document.getElementById('cfg-global-provider').value = data.globalDefault.provider || 'openai';
+      document.getElementById('cfg-global-model').value = data.globalDefault.model || 'gpt-4o';
+      document.getElementById('cfg-global-baseurl').value = data.globalDefault.baseUrl || 'https://api.openai.com/v1';
+      document.getElementById('cfg-global-apikey').value = data.globalDefault.apiKey || '';
+      // Sync to sharedConfig so other panels auto-use saved config
+      sharedConfig.apiKey = data.globalDefault.apiKey || '';
+      sharedConfig.baseUrl = data.globalDefault.baseUrl || 'https://api.openai.com/v1';
+      sharedConfig.modelId = data.globalDefault.model || 'gpt-4o';
+      syncConfigToUI();
+    }
+
+    // Load active preset
+    if (data.activePreset) {
+      document.getElementById('cfg-preset').value = data.activePreset;
+    }
+
+    // Render per-agent API config rows
+    renderAgentApiConfigs(data.agentOverrides || {});
+
   } catch (e) {
     // Use defaults
+  }
+}
+
+function renderAgentApiConfigs(overrides) {
+  const container = document.getElementById('agent-api-configs');
+  if (!container) return;
+  const agentNames = ['Architect','Planner','Composer','Writer','Observer','Reflector','Normalizer','Auditor','Reviser'];
+  const agentLabels = ['构思','计划','编排','书写','观察','反思','润色','审查','修订'];
+  let html = '';
+  agentNames.forEach((name, i) => {
+    const ov = overrides[name];
+    const val = ov ? [ov.provider||'', ov.model||'', ov.baseUrl||'', ov.apiKey||''].join('|').replace(/\|+$/, '') : '';
+    html += `<div style="display:flex;gap:6px;align-items:center">
+      <span style="min-width:100px;color:rgba(255,255,255,0.5);font-size:12px">${agentLabels[i]} ${name}</span>
+      <input type="text" id="cfg-agent-${name}" class="input-field" style="flex:1;font-size:12px" placeholder="provider|model|baseUrl|apiKey（留空跟随全局）" value="${escapeHtml(val)}">
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+async function applyPreset(presetName) {
+  if (!presetName) return;
+  try {
+    const res = await fetch(authUrl(API + '/api/config/presets'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ action: 'apply', name: presetName })
+    });
+    const data = await res.json();
+    if (data.status === 'preset applied') {
+      loadConfig(); // reload everything
+    }
+  } catch (e) {}
+}
+
+async function showSampleConfig() {
+  const box = document.getElementById('sample-config-box');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/config/sample'), { headers: authHeaders() });
+    const data = await res.json();
+    let html = '<div style="margin-bottom:6px;color:var(--accent);font-weight:bold">配置参考样例</div>';
+    if (data.economy) html += '<div>💰 <b>省钱模式</b>：Writer/Auditor用gpt-4o-mini，其余默认</div>';
+    if (data.quality) html += '<div>👑 <b>高质量模式</b>：Writer用claude-3-opus，Auditor用gpt-4o</div>';
+    if (data.fast) html += '<div>⚡ <b>快速模式</b>：全部用gpt-4o-mini，建议跳过Observer/Reflector</div>';
+    html += '<div style="margin-top:6px;color:rgba(255,255,255,0.3)">点击预设下拉框一键切换，或手动填写Agent独立配置</div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+  } catch (e) {
+    box.innerHTML = '加载失败';
+    box.style.display = 'block';
   }
 }
 
@@ -1354,7 +1458,7 @@ async function generateOutlineFromPrompt() {
   const resultDiv = document.getElementById('outline-gen-result');
 
   if (!prompt) { showResult(resultDiv, '请输入创意提示词', true); return; }
-  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   // Sync config
   sharedConfig.apiKey = apiKey;
@@ -1396,7 +1500,7 @@ async function generateVolumeOutline() {
   const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
   const resultDiv = document.getElementById('volume-gen-result');
 
-  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
   if (!bookPath) { showResult(resultDiv, '请选择书籍（需有大纲）', true); return; }
 
   // Sync config
@@ -1441,7 +1545,7 @@ async function reviseChapter() {
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
   if (chapterNum < 1) { showResult(resultDiv, '请输入有效章节号（>=1）', true); return; }
   if (!prompt) { showResult(resultDiv, '请输入修改提示词', true); return; }
-  if (!apiKey) { showResult(resultDiv, '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   // Sync config
   sharedConfig.apiKey = apiKey;
@@ -1698,7 +1802,7 @@ async function generateOutlineSynopsis() {
   const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
   const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
   const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
-  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   const btn = document.getElementById('btn-outline');
   btn.disabled = true; btn.textContent = '生成中...';
@@ -1730,7 +1834,7 @@ async function generateVolumeSynopsis() {
   const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
   const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
   const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
-  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   // Get chapter range from book info
   let volumeStart = 1, volumeEnd = 10;
@@ -1774,7 +1878,7 @@ async function detectAiTrace() {
   const apiKey = document.getElementById('write-api-key')?.value?.trim() || sharedConfig.apiKey;
   const baseUrl = document.getElementById('write-base-url')?.value?.trim() || sharedConfig.baseUrl;
   const modelId = document.getElementById('write-model-id')?.value?.trim() || sharedConfig.modelId;
-  if (!apiKey) { showResult(document.getElementById('write-result'), '请输入 API Key', true); return; }
+  // apiKey is optional — backend will fallback to studio config
 
   const btn = document.getElementById('btn-ai-trace');
   btn.disabled = true; btn.textContent = '检测中...';
@@ -1853,9 +1957,7 @@ async function generateChapterSynopsis() {
   const baseUrl = document.getElementById('write-base-url').value.trim() || 'https://api.openai.com/v1';
   const modelId = document.getElementById('write-model-id').value.trim() || 'gpt-4o';
 
-  if (!apiKey) {
-    showResult(resultDiv, '请填写 API Key', true);
-    return;
+  // apiKey is optional — backend will fallback to studio config
   }
 
   showResult(resultDiv, '⏳ 正在生成章节梗概...', false);

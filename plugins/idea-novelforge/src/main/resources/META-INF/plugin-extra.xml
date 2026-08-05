@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<idea-plugin>
+    <!-- Notification group registration (required by IntelliJ notification API) -->
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="NovelForge Notifications" displayType="BALLOON"/>
+    </extensions>
+</idea-plugin>

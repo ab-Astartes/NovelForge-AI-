@@ -88,14 +88,21 @@
                     <argument>com.novelforge.studio.StudioServer</argument>
                     <argument>--dest</argument>
                     <argument>${project.build.directory}/jpackage</argument>
+                    <argument>--icon</argument>
+                    <argument>${project.basedir}/src/main/resources/icon/novelforge.ico</argument>
                     <argument>--java-options</argument>
                     <argument>-Xmx256m</argument>
                     <argument>--app-version</argument>
-                    <argument>0.4.3</argument>
+                    <argument>${project.version}</argument>
                     <argument>--vendor</argument>
                     <argument>NovelForge</argument>
                     <argument>--description</argument>
                     <argument>AI Novel Writing Engine Studio</argument>
+                    <argument>--win-console</argument>
+                    <argument>--win-dir-chooser</argument>
+                    <argument>--win-shortcut</argument>
+                    <argument>--win-menu-group</argument>
+                    <argument>NovelForge</argument>
                   </arguments>
                 </configuration>
               </execution>
