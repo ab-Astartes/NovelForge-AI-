@@ -976,7 +976,7 @@ async function saveConfig() {
       provider: document.getElementById('cfg-global-provider').value,
       model: document.getElementById('cfg-global-model').value,
       baseUrl: document.getElementById('cfg-global-baseurl').value,
-      apiKey: document.getElementById('cfg-global-apikey').value
+      ...(document.getElementById('cfg-global-apikey').value.trim() ? { apiKey: document.getElementById('cfg-global-apikey').value.trim() } : {})
     },
     agentOverrides: {}
   };
@@ -1234,17 +1234,33 @@ async function loadConfig() {
       document.getElementById('cfg-global-provider').value = data.globalDefault.provider || 'openai';
       document.getElementById('cfg-global-model').value = data.globalDefault.model || 'gpt-4o';
       document.getElementById('cfg-global-baseurl').value = data.globalDefault.baseUrl || 'https://api.openai.com/v1';
-      document.getElementById('cfg-global-apikey').value = data.globalDefault.apiKey || '';
-      // Sync to sharedConfig so other panels auto-use saved config
-      sharedConfig.apiKey = data.globalDefault.apiKey || '';
+      // Show masked apiKey as placeholder, keep input empty for new entry
+      const maskedKey = data.globalDefault.apiKey || '';
+      const keyInput = document.getElementById('cfg-global-apikey');
+      keyInput.value = '';
+      keyInput.placeholder = maskedKey ? maskedKey + '（留空保留原值）' : 'sk-...';
+      // Sync to sharedConfig (baseUrl/model only; apiKey uses server-side fallback)
       sharedConfig.baseUrl = data.globalDefault.baseUrl || 'https://api.openai.com/v1';
       sharedConfig.modelId = data.globalDefault.model || 'gpt-4o';
       syncConfigToUI();
     }
 
-    // Load active preset
-    if (data.activePreset) {
-      document.getElementById('cfg-preset').value = data.activePreset;
+    // Load active preset + populate preset dropdown from server data
+    const presetSelect = document.getElementById('cfg-preset');
+    if (data.presets && presetSelect) {
+      const currentVal = presetSelect.value;
+      presetSelect.innerHTML = '<option value="">自定义</option>';
+      const presetLabels = { economy: '💰 省钱模式', quality: '👑 高质量模式', fast: '⚡ 快速模式' };
+      Object.keys(data.presets).forEach(key => {
+        const desc = data.presets[key].description || presetLabels[key] || key;
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = desc;
+        presetSelect.appendChild(opt);
+      });
+      presetSelect.value = data.activePreset || currentVal || '';
+    } else if (data.activePreset) {
+      presetSelect.value = data.activePreset;
     }
 
     // Render per-agent API config rows
@@ -1275,7 +1291,7 @@ function renderAgentApiConfigs(overrides) {
         <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API地址</label>
           <input type="text" id="cfg-agent-baseurl-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.baseUrl||'')}"></div>
         <div style="grid-column:span 2"><label style="color:rgba(255,255,255,0.3);font-size:10px">API Key</label>
-          <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.apiKey||'')}"></div>
+          <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="${ov.apiKey ? escapeHtml(ov.apiKey)+'（留空保留）' : '默认'}" value=""></div>
       </div>
     </details>`;
   });

@@ -1625,6 +1625,14 @@ public class StudioServer {
 
                 AgentApiConfig globalCfg = AgentApiConfig.fromJson(body.get("globalDefault"));
 
+                // Preserve existing apiKey if not provided in request (frontend omits it when user leaves input empty)
+
+                if (globalCfg.getApiKey() == null || globalCfg.getApiKey().isEmpty()) {
+
+                    globalCfg.setApiKey(studioConfig.getGlobalDefault().getApiKey());
+
+                }
+
                 studioConfig.setGlobalDefault(globalCfg);
 
                 modelRouter = new ModelRouter(globalCfg.toModelConfig());
@@ -1642,6 +1650,20 @@ public class StudioServer {
                 ov.fields().forEachRemaining(field -> {
 
                     AgentApiConfig cfg = AgentApiConfig.fromJson(field.getValue());
+
+                    // Preserve existing agent apiKey if not provided
+
+                    if (cfg.getApiKey() == null || cfg.getApiKey().isEmpty()) {
+
+                        AgentApiConfig existing = studioConfig.getAgentOverrides().get(field.getKey());
+
+                        if (existing != null && existing.getApiKey() != null && !existing.getApiKey().isEmpty()) {
+
+                            cfg.setApiKey(existing.getApiKey());
+
+                        }
+
+                    }
 
                     overrides.put(field.getKey(), cfg);
 
