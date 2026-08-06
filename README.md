@@ -125,16 +125,19 @@ mvn test           # 测试
 
 ## 安装与启动（Windows EXE）
 
-### 一键构建独立 EXE
+### 一键构建
 
-使用构建脚本一键打包为无需 JRE 的独立 Windows 可执行程序：
+使用构建脚本一键打包为自带 JRE 的独立 Windows 应用：
 
 ```bash
-# Windows
+# 便携版（默认，双击即可运行）
 build-studio-exe.bat
 
-# Linux / macOS
-bash build-studio-exe.sh
+# MSI 安装包（需安装 WiX Toolset v3）
+build-studio-exe.bat msi
+
+# EXE 安装包（需安装 WiX Toolset v3）
+build-studio-exe.bat exe
 ```
 
 脚本会自动完成：
@@ -144,11 +147,13 @@ bash build-studio-exe.sh
 
 ### 输出位置
 
-```
-packages/novelforge-studio/target/jpackage/NovelForgeStudio/
-```
+| 打包类型 | 输出目录 |
+|---------|--------|
+| app-image（便携版） | `packages/novelforge-studio/target/jpackage/NovelForgeStudio/` |
+| MSI 安装包 | `packages/novelforge-studio/target/jpackage-msi/` |
+| EXE 安装包 | `packages/novelforge-studio/target/jpackage-exe/` |
 
-Windows 下双击 `NovelForgeStudio.exe` 即可启动，无需安装 Java。
+便携版双击 `NovelForgeStudio.exe` 即可启动，无需安装 Java。MSI/EXE 安装包支持安装目录选择、桌面快捷方式、开始菜单。
 
 ### jpackage 手动构建
 
@@ -156,23 +161,29 @@ Windows 下双击 `NovelForgeStudio.exe` 即可启动，无需安装 Java。
 # 先全量构建
 mvn clean package
 
-# 再单独触发 jpackage
+# 便携版
 mvn package -Pjpackage-studio -pl packages/novelforge-studio
+
+# MSI 安装包
+mvn package -Pjpackage-studio-msi -pl packages/novelforge-studio
+
+# EXE 安装包
+mvn package -Pjpackage-studio-exe -pl packages/novelforge-studio
 ```
 
 ### 功能特性
 
 - `--icon` 自定义应用图标（橙焰锻造风格）
 - `--win-console` 保留控制台窗口方便查看日志
-- 版本号自动从 `pom.xml` 读取（当前 1.0.0）
-
-> **注意：** `--win-dir-chooser`、`--win-shortcut`、`--win-menu-group` 仅对 MSI/EXE 安装包类型有效，app-image 类型不支持这些选项。若需生成 MSI 安装包，请将 `--type app-image` 改为 `--type msi` 并启用这些选项。
+- MSI/EXE 支持：安装目录选择、桌面快捷方式、开始菜单组
+- 版本号自动从 `pom.xml` 读取
 
 ### 前置要求
 
 - JDK 17+（需要 `jpackage` 工具，位于 JDK 的 bin 目录）
 - Maven 3.8+
 - 确认 `jpackage` 可用：`jpackage --version`
+- MSI/EXE 安装包额外需要 [WiX Toolset v3](https://wixtoolset.org/releases/)
 
 ## License
 
