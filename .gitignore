@@ -28,3 +28,7 @@ build/
 # Runtime
 *.log
 test-run/
+
+# Node
+node_modules/
+package-lock.json
