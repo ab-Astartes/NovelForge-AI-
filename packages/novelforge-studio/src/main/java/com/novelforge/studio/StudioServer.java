@@ -917,29 +917,29 @@ public class StudioServer {
 
         String bookPath = body.has("path") ? body.get("path").asText() : null;
 
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String reqApiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
 
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
+        String reqBaseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
 
-        String modelId = body.has("model") ? body.get("model").asText() : null;
+        String reqModelId = body.has("model") ? body.get("model").asText() : null;
 
-        // Fallback to studio config if not provided in request
+        // Determine ModelRouter: if request provides apiKey, use request params; otherwise use instance modelRouter
 
-        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
+        final ModelRouter router;
 
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
+        if (reqApiKey != null && !reqApiKey.isEmpty()) {
 
-        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
+            String baseUrl = reqBaseUrl != null && !reqBaseUrl.isEmpty() ? reqBaseUrl : "https://api.openai.com/v1";
 
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
+            String modelId = reqModelId != null && !reqModelId.isEmpty() ? reqModelId : "gpt-4o";
 
-        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
+            router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, reqApiKey));
 
-        final String fApiKey = apiKey;
+        } else {
 
-        final String fBaseUrl = baseUrl;
+            router = this.modelRouter;
 
-        final String fModelId = modelId;
+        }
 
         String mode = body.has("mode") ? body.get("mode").asText() : "next";
 
@@ -947,7 +947,7 @@ public class StudioServer {
 
         if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
-        if (fApiKey == null || fApiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
         String jobId = "job-" + jobIdCounter.incrementAndGet();
 
@@ -975,7 +975,7 @@ public class StudioServer {
 
                 PipelineConfig config = loadConfig(Paths.get(bookPath));
 
-                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
+                // Use the router determined above (either from request params or instance modelRouter)
 
                 PipelineRunner runner = new PipelineRunner(config, router);
 
@@ -1371,29 +1371,11 @@ public class StudioServer {
 
         int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
 
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String reqApiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
 
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
+        final ModelRouter router = resolveModelRouter(body);
 
-        String modelId = body.has("model") ? body.get("model").asText() : null;
-
-        // Fallback to studio config
-
-        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
-
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
-
-        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
-
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
-
-        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
-
-        final String fApiKey = apiKey, fBaseUrl = baseUrl, fModelId = modelId;
-
-
-
-        if (bookPath == null || fApiKey == null || fApiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return; }
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required; path must be within books directory\"}"); return; }
 
 
 
@@ -1403,9 +1385,11 @@ public class StudioServer {
 
             TruthState state = new TruthState(Paths.get(bookPath));
 
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
+            // Use resolved router (either from request params or instance modelRouter with per-agent overrides)
 
             PipelineRunner runner = new PipelineRunner(defaultConfig, router);
+
+
 
 
 
@@ -2204,31 +2188,11 @@ public class StudioServer {
 
         String bookPath = body.has("path") ? body.get("path").asText() : null;
 
-        String apiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
-
-        String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
-
-        String modelId = body.has("model") ? body.get("model").asText() : null;
-
-        // Fallback to studio config
-
-        if (apiKey == null || apiKey.isEmpty()) apiKey = studioConfig.getGlobalDefault().resolveApiKey();
-
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = studioConfig.getGlobalDefault().getBaseUrl();
-
-        if (modelId == null || modelId.isEmpty()) modelId = studioConfig.getGlobalDefault().getModel();
-
-        if (baseUrl == null || baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1";
-
-        if (modelId == null || modelId.isEmpty()) modelId = "gpt-4o";
-
-        final String fApiKey = apiKey, fBaseUrl = baseUrl, fModelId = modelId;
-
-
+        final ModelRouter router = resolveModelRouter(body);
 
         if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}"); return; }
 
-        if (fApiKey == null || fApiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
 
 
@@ -2274,7 +2238,7 @@ public class StudioServer {
 
                 PipelineConfig config = loadConfig(bookDir);
 
-                ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", fModelId, fBaseUrl, fApiKey));
+                // Use resolved router (either from request params or instance modelRouter with per-agent overrides)
 
 
 
@@ -2524,15 +2488,15 @@ public class StudioServer {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
         JsonNode body = readBody(exchange);
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
             Book book = BookProject.loadBook(Paths.get(bookPath));
             TruthState state = new TruthState(Paths.get(bookPath));
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router (either from request params or instance modelRouter with per-agent overrides)
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildOutlineSynopsisPrompt(book, state);
@@ -2556,9 +2520,9 @@ public class StudioServer {
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         int volumeStart = body.has("volumeStart") ? body.get("volumeStart").asInt() : 1;
         int volumeEnd = body.has("volumeEnd") ? body.get("volumeEnd").asInt() : 10;
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
@@ -2567,7 +2531,7 @@ public class StudioServer {
             if (book.getChapters().isEmpty()) {
                 sendJson(exchange, 400, "{\"error\":\"No chapters written yet; write chapters first\"}"); return;
             }
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router (either from request params or instance modelRouter with per-agent overrides)
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildVolumeSynopsisPrompt(book, state, volumeStart, volumeEnd);
@@ -2589,9 +2553,9 @@ public class StudioServer {
         JsonNode body = readBody(exchange);
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (bookPath == null || apiKey == null || apiKey.isEmpty() || !isPathWithinBooksRoot(bookPath)) {
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path and apiKey required; path must be within books directory\"}"); return;
         }
         try {
@@ -2605,7 +2569,7 @@ public class StudioServer {
             if (text == null || text.isEmpty()) {
                 sendJson(exchange, 400, "{\"error\":\"Chapter text is empty\"}"); return;
             }
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router (either from request params or instance modelRouter with per-agent overrides)
             LlmClient client = router.getClientForAgent("Auditor");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildAiTracePrompt(text);
@@ -2627,16 +2591,16 @@ public class StudioServer {
         String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (prompt == null || apiKey == null || apiKey.isEmpty()) {
-            sendJson(exchange, 400, "{\"error\":\"prompt and apiKey required\"}"); return;
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (prompt == null || router == null) {
+            sendJson(exchange, 400, "{\"error\":\"prompt required\"}"); return;
         }
         if (bookPath != null && !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return;
         }
         try {
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre);
@@ -2664,10 +2628,10 @@ public class StudioServer {
         String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (apiKey == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
-        // Outline can come from body or from book
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+
         if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
             try {
                 Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -2678,7 +2642,7 @@ public class StudioServer {
             sendJson(exchange, 400, "{\"error\":\"outline required (provide in body or select a book with existing outline)\"}"); return;
         }
         try {
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outline, prompt, genre);
@@ -2700,9 +2664,9 @@ public class StudioServer {
         int chapterNum = body.has("chapter") ? body.get("chapter").asInt() : -1;
         String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
         String source = body.has("source") ? body.get("source").asText() : "outline";
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
-        if (bookPath == null || apiKey == null || apiKey.isEmpty() || prompt == null || !isPathWithinBooksRoot(bookPath)) {
+        final ModelRouter router = resolveModelRouter(body);
+
+        if (bookPath == null || router == null || prompt == null || !isPathWithinBooksRoot(bookPath)) {
             sendJson(exchange, 400, "{\"error\":\"path, apiKey, and prompt required; path must be within books directory\"}"); return;
         }
         if (chapterNum < 1) {
@@ -2722,7 +2686,7 @@ public class StudioServer {
             } else {
                 sourceContent = book.getOutline() != null ? book.getOutline() : "";
             }
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router
             LlmClient client = router.getClientForAgent("Reviser");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildChapterRevisionPrompt(book, state, chapterNum, prompt, sourceContent);
@@ -2824,11 +2788,11 @@ public class StudioServer {
         String outlineOrVolume = body.has("source") ? body.get("source").asText() : null;
         String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
         String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
-        String[] creds = resolveApiCredentials(body);
-        final String apiKey = creds[0], baseUrl = creds[1], modelId = creds[2];
+        final ModelRouter router = resolveModelRouter(body);
+
         // Also accept path-based source: load outline from book if source not provided directly
         String bookPath = body.has("path") ? body.get("path").asText() : null;
-        if (apiKey == null || apiKey.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
         // If source text not provided directly, try to load from book outline
         if (outlineOrVolume == null || outlineOrVolume.isEmpty()) {
             if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
@@ -2843,7 +2807,7 @@ public class StudioServer {
             }
         }
         try {
-            ModelRouter router = new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+            // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
             List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(outlineOrVolume, prompt, genre);
@@ -3142,6 +3106,21 @@ public class StudioServer {
         return new String[]{apiKey, baseUrl, modelId};
 
     }
+
+    /** Resolve ModelRouter: if request provides apiKey, build from request params; otherwise use instance modelRouter (with per-agent overrides). */
+    private ModelRouter resolveModelRouter(JsonNode body) {
+        String reqApiKey = body.has("apiKey") ? body.get("apiKey").asText() : null;
+        String reqBaseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
+        String reqModelId = body.has("model") ? body.get("model").asText() : null;
+        if (reqApiKey != null && !reqApiKey.isEmpty()) {
+            String baseUrl = reqBaseUrl != null && !reqBaseUrl.isEmpty() ? reqBaseUrl : "https://api.openai.com/v1";
+            String modelId = reqModelId != null && !reqModelId.isEmpty() ? reqModelId : "gpt-4o";
+            return new ModelRouter(new ModelRouter.ModelConfig("openai", modelId, baseUrl, reqApiKey));
+        }
+        return this.modelRouter;
+    }
+
+
 
 
 
