@@ -63,6 +63,25 @@
       <build>
         <plugins>
           <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <id>prepare-jpackage-input</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <mkdir />
+                    <copy />
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
             <version>3.3.0</version>
@@ -81,7 +100,7 @@
                     <argument>--name</argument>
                     <argument>NovelForgeStudio</argument>
                     <argument>--input</argument>
-                    <argument>${project.build.directory}</argument>
+                    <argument>${project.build.directory}/jpackage-input</argument>
                     <argument>--main-jar</argument>
                     <argument>novelforge-studio.jar</argument>
                     <argument>--main-class</argument>
@@ -96,8 +115,6 @@
                     <argument>${project.version}</argument>
                     <argument>--vendor</argument>
                     <argument>NovelForge</argument>
-                    <argument>--description</argument>
-                    <argument>AI Novel Writing Engine Studio</argument>
                     <argument>--win-console</argument>
                   </arguments>
                 </configuration>
@@ -111,6 +128,25 @@
       <id>jpackage-studio-msi</id>
       <build>
         <plugins>
+          <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <id>prepare-jpackage-input-msi</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <mkdir />
+                    <copy />
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
@@ -130,7 +166,7 @@
                     <argument>--name</argument>
                     <argument>NovelForgeStudio</argument>
                     <argument>--input</argument>
-                    <argument>${project.build.directory}</argument>
+                    <argument>${project.build.directory}/jpackage-input</argument>
                     <argument>--main-jar</argument>
                     <argument>novelforge-studio.jar</argument>
                     <argument>--main-class</argument>
@@ -145,8 +181,6 @@
                     <argument>${project.version}</argument>
                     <argument>--vendor</argument>
                     <argument>NovelForge</argument>
-                    <argument>--description</argument>
-                    <argument>AI Novel Writing Engine Studio</argument>
                     <argument>--win-console</argument>
                     <argument>--win-dir-chooser</argument>
                     <argument>--win-shortcut</argument>
@@ -167,6 +201,25 @@
       <build>
         <plugins>
           <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <id>prepare-jpackage-input-exe</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <mkdir />
+                    <copy />
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
             <version>3.3.0</version>
@@ -185,7 +238,7 @@
                     <argument>--name</argument>
                     <argument>NovelForgeStudio</argument>
                     <argument>--input</argument>
-                    <argument>${project.build.directory}</argument>
+                    <argument>${project.build.directory}/jpackage-input</argument>
                     <argument>--main-jar</argument>
                     <argument>novelforge-studio.jar</argument>
                     <argument>--main-class</argument>
@@ -200,8 +253,6 @@
                     <argument>${project.version}</argument>
                     <argument>--vendor</argument>
                     <argument>NovelForge</argument>
-                    <argument>--description</argument>
-                    <argument>AI Novel Writing Engine Studio</argument>
                     <argument>--win-console</argument>
                     <argument>--win-dir-chooser</argument>
                     <argument>--win-shortcut</argument>

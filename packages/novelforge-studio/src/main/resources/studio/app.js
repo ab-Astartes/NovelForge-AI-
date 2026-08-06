@@ -1000,7 +1000,7 @@ async function saveConfig() {
       if (model) override.model = model;
       if (baseUrl) override.baseUrl = baseUrl;
       if (apiKey) override.apiKey = apiKey;
-      override.provider = 'openai';
+      override.provider = document.getElementById('cfg-global-provider').value;
       body.agentOverrides[name] = override;
     }
   });
