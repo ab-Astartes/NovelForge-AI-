@@ -989,14 +989,18 @@ async function saveConfig() {
   // Collect per-agent API overrides
   const agentNames = ['Architect','Planner','Composer','Writer','Observer','Reflector','Normalizer','Auditor','Reviser'];
   agentNames.forEach(name => {
-    const el = document.getElementById('cfg-agent-' + name);
-    if (el && el.value && el.value.trim()) {
-      const parts = el.value.trim().split('|');
+    const modelEl = document.getElementById('cfg-agent-model-' + name);
+    const baseUrlEl = document.getElementById('cfg-agent-baseurl-' + name);
+    const apiKeyEl = document.getElementById('cfg-agent-apikey-' + name);
+    const model = modelEl ? modelEl.value.trim() : '';
+    const baseUrl = baseUrlEl ? baseUrlEl.value.trim() : '';
+    const apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    if (model || baseUrl || apiKey) {
       const override = {};
-      if (parts[0]) override.provider = parts[0];
-      if (parts[1]) override.model = parts[1];
-      if (parts[2]) override.baseUrl = parts[2];
-      if (parts[3]) override.apiKey = parts[3];
+      if (model) override.model = model;
+      if (baseUrl) override.baseUrl = baseUrl;
+      if (apiKey) override.apiKey = apiKey;
+      override.provider = 'openai';
       body.agentOverrides[name] = override;
     }
   });
@@ -1256,14 +1260,24 @@ function renderAgentApiConfigs(overrides) {
   if (!container) return;
   const agentNames = ['Architect','Planner','Composer','Writer','Observer','Reflector','Normalizer','Auditor','Reviser'];
   const agentLabels = ['构思','计划','编排','书写','观察','反思','润色','审查','修订'];
-  let html = '';
+  let html = '<div style="margin-bottom:4px;color:rgba(255,255,255,0.35);font-size:11px">点击展开Agent独立配置，留空则跟随全局默认</div>';
   agentNames.forEach((name, i) => {
-    const ov = overrides[name];
-    const val = ov ? [ov.provider||'', ov.model||'', ov.baseUrl||'', ov.apiKey||''].join('|').replace(/\|+$/, '') : '';
-    html += `<div style="display:flex;gap:6px;align-items:center">
-      <span style="min-width:100px;color:rgba(255,255,255,0.5);font-size:12px">${agentLabels[i]} ${name}</span>
-      <input type="text" id="cfg-agent-${name}" class="input-field" style="flex:1;font-size:12px" placeholder="provider|model|baseUrl|apiKey（留空跟随全局）" value="${escapeHtml(val)}">
-    </div>`;
+    const ov = overrides[name] || {};
+    const hasOverride = ov.model || ov.baseUrl || ov.apiKey;
+    html += `<details style="margin-bottom:2px" ${hasOverride?'open':''}>
+      <summary style="cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;list-style:none;display:flex;align-items:center;gap:4px">
+        <span style="color:var(--accent);font-size:10px">${hasOverride?'▼':'▶'}</span> ${agentLabels[i]} <span style="color:rgba(255,255,255,0.3)">${name}</span>
+        ${hasOverride?'<span style="color:var(--success);font-size:10px;margin-left:auto">已覆盖</span>':''}
+      </summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;padding:4px 0 4px 16px">
+        <div><label style="color:rgba(255,255,255,0.3);font-size:10px">模型</label>
+          <input type="text" id="cfg-agent-model-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.model||'')}"></div>
+        <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API地址</label>
+          <input type="text" id="cfg-agent-baseurl-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.baseUrl||'')}"></div>
+        <div style="grid-column:span 2"><label style="color:rgba(255,255,255,0.3);font-size:10px">API Key</label>
+          <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.apiKey||'')}"></div>
+      </div>
+    </details>`;
   });
   container.innerHTML = html;
 }
