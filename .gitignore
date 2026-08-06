@@ -23,6 +23,7 @@ Thumbs.db
 
 # Build
 dist/
+dist-app/
 build/
 
 # Runtime

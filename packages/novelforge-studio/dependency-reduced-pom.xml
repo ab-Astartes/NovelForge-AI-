@@ -99,10 +99,116 @@
                     <argument>--description</argument>
                     <argument>AI Novel Writing Engine Studio</argument>
                     <argument>--win-console</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>jpackage-studio-msi</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.3.0</version>
+            <executions>
+              <execution>
+                <id>jpackage-studio-msi</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>jpackage</executable>
+                  <arguments>
+                    <argument>--type</argument>
+                    <argument>msi</argument>
+                    <argument>--name</argument>
+                    <argument>NovelForgeStudio</argument>
+                    <argument>--input</argument>
+                    <argument>${project.build.directory}</argument>
+                    <argument>--main-jar</argument>
+                    <argument>novelforge-studio.jar</argument>
+                    <argument>--main-class</argument>
+                    <argument>com.novelforge.studio.StudioServer</argument>
+                    <argument>--dest</argument>
+                    <argument>${project.build.directory}/jpackage-msi</argument>
+                    <argument>--icon</argument>
+                    <argument>${project.basedir}/src/main/resources/icon/novelforge.ico</argument>
+                    <argument>--java-options</argument>
+                    <argument>-Xmx256m</argument>
+                    <argument>--app-version</argument>
+                    <argument>${project.version}</argument>
+                    <argument>--vendor</argument>
+                    <argument>NovelForge</argument>
+                    <argument>--description</argument>
+                    <argument>AI Novel Writing Engine Studio</argument>
+                    <argument>--win-console</argument>
                     <argument>--win-dir-chooser</argument>
                     <argument>--win-shortcut</argument>
                     <argument>--win-menu-group</argument>
                     <argument>NovelForge</argument>
+                    <argument>--license-file</argument>
+                    <argument>${project.basedir}/../../LICENSE</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>jpackage-studio-exe</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.3.0</version>
+            <executions>
+              <execution>
+                <id>jpackage-studio-exe</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>jpackage</executable>
+                  <arguments>
+                    <argument>--type</argument>
+                    <argument>exe</argument>
+                    <argument>--name</argument>
+                    <argument>NovelForgeStudio</argument>
+                    <argument>--input</argument>
+                    <argument>${project.build.directory}</argument>
+                    <argument>--main-jar</argument>
+                    <argument>novelforge-studio.jar</argument>
+                    <argument>--main-class</argument>
+                    <argument>com.novelforge.studio.StudioServer</argument>
+                    <argument>--dest</argument>
+                    <argument>${project.build.directory}/jpackage-exe</argument>
+                    <argument>--icon</argument>
+                    <argument>${project.basedir}/src/main/resources/icon/novelforge.ico</argument>
+                    <argument>--java-options</argument>
+                    <argument>-Xmx256m</argument>
+                    <argument>--app-version</argument>
+                    <argument>${project.version}</argument>
+                    <argument>--vendor</argument>
+                    <argument>NovelForge</argument>
+                    <argument>--description</argument>
+                    <argument>AI Novel Writing Engine Studio</argument>
+                    <argument>--win-console</argument>
+                    <argument>--win-dir-chooser</argument>
+                    <argument>--win-shortcut</argument>
+                    <argument>--win-menu-group</argument>
+                    <argument>NovelForge</argument>
+                    <argument>--license-file</argument>
+                    <argument>${project.basedir}/../../LICENSE</argument>
                   </arguments>
                 </configuration>
               </execution>
