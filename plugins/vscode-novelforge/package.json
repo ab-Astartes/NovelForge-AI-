@@ -2,7 +2,7 @@
   "name": "vscode-novelforge",
   "displayName": "NovelForge Studio",
   "description": "AI小说锻造工坊 — 在VSCode侧边栏内嵌NovelForge Studio面板，一键启动本地StudioServer",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "novelforge",
   "license": "MIT",
   "engines": {

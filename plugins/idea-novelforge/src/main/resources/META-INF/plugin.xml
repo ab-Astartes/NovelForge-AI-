@@ -6,7 +6,7 @@
         AI小说锻造工坊 — 在IntelliJ IDEA内嵌NovelForge Studio面板。
         一键启动/管理本地StudioServer，通过JCEF浏览器加载Studio UI。
     </description>
-    <version>0.4.3</version>
+    <version>0.4.4</version>
 
     <!-- Requires IntelliJ IDEA 2024.2+ (JCEF available, Java 17) -->
     <idea-version since-build="242"/>

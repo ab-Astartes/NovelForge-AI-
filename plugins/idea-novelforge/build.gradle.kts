@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.novelforge"
-version = "0.4.3"
+version = "0.4.4"
 
 repositories {
     mavenCentral()
@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    intellijPlatform(provider(":ideaIC:2024.2"))
+    intellijIdeaCommunity("2024.2")
 }
 
 intellijPlatform {
@@ -34,7 +34,7 @@ intellijPlatform {
     }
     pluginVerification {
         ides {
-            ide(":ideaIC:2024.2")
+            ide("IC-2024.2")
         }
     }
 }

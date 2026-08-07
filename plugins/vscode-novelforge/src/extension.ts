@@ -6,13 +6,16 @@
  * - deactivate: stop StudioServer child process (if we started it)
  */
 import * as vscode from "vscode";
+import * as path from "path";
+import * as fs from "fs";
+import * as child_process from "child_process";
 import { NovelForgeSidebarProvider } from "./sidebar-provider";
 import { StudioApiClient } from "./api-client";
 import { ConfigManager } from "./config-manager";
 
 let apiClient: StudioApiClient;
 let configManager: ConfigManager;
-let serverProcess: ReturnType<typeof import("child_process").spawn> | null = null;
+let serverProcess: child_process.ChildProcess | null = null;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 
@@ -63,7 +66,6 @@ export async function activate(context: vscode.ExtensionContext) {
   // Auto-start if configured
   const autoStart = configManager.get<boolean>("autoStart");
   if (autoStart) {
-    // Check if server is already running before starting
     const running = await apiClient.isServerRunning();
     if (!running) {
       outputChannel.appendLine("[NovelForge] Auto-starting StudioServer...");
@@ -116,8 +118,7 @@ async function startServer(): Promise<void> {
   outputChannel.appendLine(`[NovelForge] Starting StudioServer: ${javaPath} -jar ${jarPath} --port ${port}`);
   outputChannel.show(true);
 
-  const { spawn } = require("child_process") as typeof import("child_process");
-  serverProcess = spawn(javaPath, ["-jar", jarPath, "--port", String(port)], {
+  serverProcess = child_process.spawn(javaPath, ["-jar", jarPath, "--port", String(port)], {
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -128,7 +129,7 @@ async function startServer(): Promise<void> {
   serverProcess.stderr?.on("data", (data: Buffer) => {
     outputChannel.append("[stderr] " + data.toString());
   });
-  serverProcess.on("exit", (code: number) => {
+  serverProcess.on("exit", (code: number | null) => {
     outputChannel.appendLine(`[NovelForge] StudioServer exited with code ${code}`);
     updateStatusBar("stopped");
     serverProcess = null;
@@ -154,7 +155,6 @@ function stopServer(): Promise<void> {
     outputChannel.appendLine("[NovelForge] StudioServer stopped (child process killed)");
     vscode.window.showInformationMessage("NovelForge StudioServer stopped");
   } else {
-    // We didn't start it — just notify
     vscode.window.showInformationMessage("No managed StudioServer process to stop. If started externally, stop it manually.");
   }
   return Promise.resolve();
@@ -177,26 +177,44 @@ async function showStatus(): Promise<void> {
 
 // ─────────── Helpers ───────────
 
-function findJava(): string {
+function findJava(): string | null {
   // 1. Check JAVA_HOME
   const javaHome = process.env.JAVA_HOME;
   if (javaHome) {
-    const javaBin = path.join(javaHome, "bin", "java");
-    return process.platform === "win32" ? javaBin + ".exe" : javaBin;
+    const javaBin = path.join(javaHome, "bin", process.platform === "win32" ? "java.exe" : "java");
+    if (fs.existsSync(javaBin)) {
+      return javaBin;
+    }
   }
-  // 2. Try common locations
-  const candidates = process.platform === "win32"
-    ? ["java.exe", "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe"]
-    : ["java", "/usr/bin/java", "/usr/local/bin/java"];
-  return candidates[0]; // let PATH resolve
+  // 2. Check JDK_HOME
+  const jdkHome = process.env.JDK_HOME;
+  if (jdkHome) {
+    const javaBin = path.join(jdkHome, "bin", process.platform === "win32" ? "java.exe" : "java");
+    if (fs.existsSync(javaBin)) {
+      return javaBin;
+    }
+  }
+  // 3. Try PATH resolution
+  try {
+    const result = child_process.execSync(
+      process.platform === "win32" ? "where java.exe" : "which java",
+      { encoding: "utf-8", timeout: 5000 }
+    ).trim().split(/\r?\n/)[0];
+    if (result && fs.existsSync(result)) {
+      return result;
+    }
+  } catch { /* not in PATH */ }
+  return null;
 }
 
 async function findStudioJar(): Promise<string | null> {
-  // Search common locations for novelforge-studio.jar
-  const { glob } = require("vscode") as any; // not available; use fs
-  const fs = require("fs") as typeof import("fs");
   const homeDir = process.env.USERPROFILE || process.env.HOME || "";
   const searchPaths = [
+    // Project build output
+    path.join(homeDir, "Desktop", "ab", "demo", "NovelForge", "packages", "novelforge-studio", "target", "novelforge-studio.jar"),
+    // dist-app directory
+    path.join(homeDir, "Desktop", "ab", "demo", "NovelForge", "dist-app", "NovelForgeStudio", "app", "novelforge-studio.jar"),
+    // Common locations
     path.join(homeDir, "NovelForge", "novelforge-studio.jar"),
     path.join(homeDir, ".novelforge", "novelforge-studio.jar"),
   ];

@@ -121,7 +121,7 @@ public final class ServerManager {
 
     // ─────── Path Resolution ───────
 
-    private @NotNull String resolveJavaPath(String configuredPath) {
+    private String resolveJavaPath(String configuredPath) {
         if (configuredPath != null && !configuredPath.trim().isEmpty()) {
             if (Files.exists(Paths.get(configuredPath))) {
                 return configuredPath.trim();
@@ -144,7 +144,7 @@ public final class ServerManager {
         return "java"; // let PATH resolve
     }
 
-    private @NotNull String resolveJarPath(String configuredPath) {
+    private String resolveJarPath(String configuredPath) {
         if (configuredPath != null && !configuredPath.trim().isEmpty()) {
             if (Files.exists(Paths.get(configuredPath))) {
                 return configuredPath.trim();
@@ -154,6 +154,7 @@ public final class ServerManager {
         // Search common locations
         String home = System.getProperty("user.home");
         String[] candidates = {
+            home + "/Desktop/ab/demo/NovelForge/packages/novelforge-studio/target/novelforge-studio.jar",
             home + "/NovelForge/novelforge-studio.jar",
             home + "/.novelforge/novelforge-studio.jar",
         };

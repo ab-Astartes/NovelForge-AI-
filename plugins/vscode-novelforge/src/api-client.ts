@@ -6,6 +6,7 @@
  * Since both the extension host and StudioServer run on the same machine,
  * there are no CORS issues (requests are made from Node.js, not from browser context).
  */
+import * as http from "http";
 import * as vscode from "vscode";
 import { ConfigManager } from "./config-manager";
 
@@ -109,11 +110,10 @@ export class StudioApiClient {
     method: string = "GET",
     body?: any
   ): Promise<ApiResponse> {
-    const http = require("http") as typeof import("http");
     const port = this._config.get<number>("serverPort");
 
     const urlObj = new URL(url);
-    const options: import("http").RequestOptions = {
+    const options: http.RequestOptions = {
       hostname: urlObj.hostname,
       port: urlObj.port || port,
       path: urlObj.pathname + urlObj.search,
@@ -127,11 +127,11 @@ export class StudioApiClient {
 
     if (body) {
       const bodyStr = JSON.stringify(body);
-      options.headers!["Content-Length"] = Buffer.byteLength(bodyStr);
+      (options.headers as Record<string, string | number>)['Content-Length'] = Buffer.byteLength(bodyStr);
     }
 
     return new Promise<ApiResponse>((resolve) => {
-      const req = http.request(options, (res: import("http").IncomingMessage) => {
+      const req = http.request(options, (res: http.IncomingMessage) => {
         let data = "";
         res.on("data", (chunk: Buffer) => (data += chunk.toString()));
         res.on("end", () => {

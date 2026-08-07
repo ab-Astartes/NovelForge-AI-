@@ -33,3 +33,9 @@ test-run/
 # Node
 node_modules/
 package-lock.json
+
+# Build temp files
+npm-err.txt
+npm-out.txt
+compile-err.txt
+compile-out.txt
