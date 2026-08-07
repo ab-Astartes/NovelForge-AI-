@@ -2,6 +2,8 @@ package com.novelforge.studio;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.ui.Messages;
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.Desktop;
 import java.net.URI;
@@ -19,7 +21,7 @@ public class OpenInBrowserAction extends AnAction {
         try {
             Desktop.getDesktop().browse(new URI(url));
         } catch (Exception ex) {
-            com.intellij.openapi.ui.Messages.showWarningMessage(
+            Messages.showInfoMessage(
                 "Failed to open browser: " + ex.getMessage(),
                 "NovelForge"
             );

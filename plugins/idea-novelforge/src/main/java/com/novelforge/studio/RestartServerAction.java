@@ -2,28 +2,30 @@ package com.novelforge.studio;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.ui.Messages;
+import org.jetbrains.annotations.NotNull;
 
 /**
- * Restart StudioServer (stop + start).
+ * Restart StudioServer Action.
  */
 public class RestartServerAction extends AnAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ServerManager serverManager = ServerManager.getInstance();
-        serverManager.stopServer();
 
-        // Brief pause before restarting
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        if (serverManager.isRunning()) {
+            serverManager.stopServer();
+        }
 
         int result = serverManager.startServer();
         if (result == 0) {
-            com.intellij.openapi.ui.Messages.showInfoMessage(
+            Messages.showInfoMessage(
                 "StudioServer restarted on port " + NovelForgeSettings.getInstance().getServerPort(),
                 "NovelForge"
             );
         } else {
-            com.intellij.openapi.ui.Messages.showWarningMessage(
+            Messages.showInfoMessage(
                 "Failed to restart StudioServer.",
                 "NovelForge"
             );

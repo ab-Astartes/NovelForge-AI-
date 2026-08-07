@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.1.2"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = "com.novelforge"
@@ -8,11 +8,15 @@ version = "0.4.4"
 
 repositories {
     mavenCentral()
-    intellijPlatform()
+    intellijPlatform {
+        defaultRepositories()
+    }
 }
 
 dependencies {
-    intellijIdeaCommunity("2024.2")
+    intellijPlatform {
+        intellijIdea("2024.2")
+    }
 }
 
 intellijPlatform {
@@ -30,11 +34,6 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = "242"
             untilBuild = provider { null }
-        }
-    }
-    pluginVerification {
-        ides {
-            ide("IC-2024.2")
         }
     }
 }

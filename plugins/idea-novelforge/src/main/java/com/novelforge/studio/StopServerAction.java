@@ -3,11 +3,10 @@ package com.novelforge.studio;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.ui.Messages;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Stop StudioServer Action.
- *
- * Stops the StudioServer subprocess (if managed by this plugin).
  */
 public class StopServerAction extends AnAction {
 

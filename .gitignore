@@ -25,6 +25,8 @@ Thumbs.db
 dist/
 dist-app/
 build/
+.gradle/
+.intellijPlatform/
 
 # Runtime
 *.log
