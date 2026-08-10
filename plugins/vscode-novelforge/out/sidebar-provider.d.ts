@@ -1,9 +1,3 @@
-/**
- * NovelForge Sidebar WebView Provider
- *
- * Embeds the NovelForge Studio UI inside the VSCode sidebar.
- * The StudioServer serves the HTML/JS/CSS — we proxy it into the webview.
- */
 import * as vscode from "vscode";
 import { StudioApiClient } from "./api-client";
 import { ConfigManager } from "./config-manager";
@@ -18,13 +12,15 @@ export declare class NovelForgeSidebarProvider implements vscode.WebviewViewProv
     constructor(_extensionUri: vscode.Uri, _apiClient: StudioApiClient, _configManager: ConfigManager, _outputChannel: vscode.OutputChannel);
     resolveWebviewView(webviewView: vscode.WebviewView, _context: vscode.WebviewViewResolveContext, _token: vscode.CancellationToken): void;
     private _renderStudio;
+    /** Fetch the Studio index.html from StudioServer */
+    private _fetchStudioHtml;
     /**
-     * Generate HTML that embeds Studio via an iframe.
-     * Note: VSCode webviews restrict iframe loading of localhost URLs by default.
-     * We use a postMessage bridge pattern instead — the webview JS fetches
-     * the Studio HTML from the server and renders it inline.
+     * Wrap Studio HTML for VSCode webview.
+     * - Replace relative URLs with absolute localhost URLs
+     * - Add postMessage bridge for API calls (inject auth token)
+     * - Set proper CSP for VSCode webview
      */
-    private _getStudioHtml;
+    private _wrapStudioHtml;
     private _getOfflineHtml;
     private _handleMessage;
 }
