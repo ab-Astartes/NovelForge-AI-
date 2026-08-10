@@ -1,11 +1,10 @@
 /**
  * NovelForge Sidebar WebView Provider
  *
- * Embeds the NovelForge Studio UI inside the VSCode sidebar.
- * Strategy: Fetch Studio HTML from StudioServer, inject into webview,
- * and bridge API requests via postMessage (avoids iframe CSP issues).
+ * Shows a compact control panel in the VSCode sidebar.
+ * Full Studio UI opens in VSCode's built-in Simple Browser tab.
+ * This avoids all CSP/iframe/script-loading issues with webviews.
  */
-import * as http from "http";
 import * as vscode from "vscode";
 import { StudioApiClient } from "./api-client";
 import { ConfigManager } from "./config-manager";
@@ -14,7 +13,6 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "novelforge-studio";
 
   private _view?: vscode.WebviewView;
-  private _disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -22,8 +20,6 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     private readonly _configManager: ConfigManager,
     private readonly _outputChannel: vscode.OutputChannel
   ) {}
-
-  // ─────── WebviewViewProvider ───────
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -39,194 +35,140 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage((msg) => this._handleMessage(msg));
 
-    this._renderStudio();
+    this._render();
   }
 
-  // ─────── Rendering ───────
-
-  private async _renderStudio() {
+  private async _render() {
     if (!this._view) return;
 
-    const port = this._configManager.get<number>("serverPort");
     const running = await this._apiClient.isServerRunning();
-
-    if (running) {
-      // Fetch Studio HTML from server and inject into webview
-      const studioHtml = await this._fetchStudioHtml(port);
-      if (studioHtml) {
-        this._view.webview.html = this._wrapStudioHtml(studioHtml, port);
-      } else {
-        this._view.webview.html = this._getOfflineHtml();
-      }
-    } else {
-      this._view.webview.html = this._getOfflineHtml();
-    }
+    const version = running ? await this._apiClient.getVersion() : null;
+    this._view.webview.html = this._getControlPanelHtml(running, version);
   }
 
-  /** Fetch the Studio index.html from StudioServer */
-  private _fetchStudioHtml(port: number): Promise<string | null> {
-    return new Promise((resolve) => {
-      const token = this._apiClient.getAuthToken();
-      const options: http.RequestOptions = {
-        hostname: "localhost",
-        port,
-        path: `/?token=${encodeURIComponent(token)}`,
-        method: "GET",
-        headers: {
-          "Accept": "text/html",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        timeout: 10_000,
-      };
-
-      const req = http.request(options, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk.toString()));
-        res.on("end", () => {
-          if (res.statusCode === 200) {
-            resolve(data);
-          } else {
-            this._outputChannel.appendLine(`[Studio] Failed to fetch HTML: ${res.statusCode}`);
-            resolve(null);
-          }
-        });
-      });
-
-      req.on("error", (err) => {
-        this._outputChannel.appendLine(`[Studio] Fetch HTML error: ${err.message}`);
-        resolve(null);
-      });
-
-      req.on("timeout", () => {
-        req.destroy();
-        resolve(null);
-      });
-
-      req.end();
-    });
-  }
-
-  /**
-   * Wrap Studio HTML for VSCode webview.
-   * - Replace relative URLs with absolute localhost URLs
-   * - Add postMessage bridge for API calls (inject auth token)
-   * - Set proper CSP for VSCode webview
-   */
-  private _wrapStudioHtml(html: string, port: number): string {
+  private _getControlPanelHtml(running: boolean, version: string | null): string {
     const nonce = getNonce();
+    const port = this._configManager.get<number>("serverPort");
     const token = this._apiClient.getAuthToken();
 
-    // Replace relative resource URLs with absolute URLs
-    let wrapped = html
-      .replace(/href="\/style\.css"/g, `href="http://localhost:${port}/style.css?token=${token}"`)
-      .replace(/src="\/app\.js"/g, `src="http://localhost:${port}/app.js?token=${token}"`)
-      .replace(/href="https:\/\/fonts\.googleapis\.com/g, `href="https://fonts.googleapis.com`);
+    if (running) {
+      return /*html*/ `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline';">
+  <style nonce="${nonce}">
+    :root { --red: #c0392b; --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --text: #e0e0e0; --muted: #888; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 12px; font-size: 13px; }
+    .header { text-align: center; margin-bottom: 16px; }
+    .header .logo { font-size: 32px; margin-bottom: 4px; }
+    .header h2 { font-size: 16px; color: var(--text); font-weight: 600; }
+    .header .ver { font-size: 11px; color: var(--muted); }
+    .status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--card); border-radius: 6px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #27ae60; flex-shrink: 0; }
+    .status .label { color: var(--muted); font-size: 12px; }
+    .btn { display: block; width: 100%; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; text-align: center; margin-bottom: 8px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: var(--red); color: #fff; }
+    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: transparent; color: #e74c3c; border: 1px solid #e74c3c; }
+    .info { margin-top: 16px; padding: 10px; background: var(--card); border-radius: 6px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .info code { color: var(--red); background: #1a0a0a; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🔥</div>
+    <h2>墨阁 · NovelForge</h2>
+    <div class="ver">v${version || '0.4.4'}</div>
+  </div>
 
-    // Inject a bridge script that intercepts fetch calls and adds auth token
-    const bridgeScript = `
-<script nonce="${nonce}">
-(function() {
-  const TOKEN = '${token}';
-  const PORT = ${port};
+  <div class="status">
+    <div class="dot"></div>
+    <div class="label">服务器运行中 · 端口 ${port}</div>
+  </div>
 
-  // Override fetch to add auth token
-  const originalFetch = window.fetch;
-  window.fetch = function(url, options) {
-    options = options || {};
-    options.headers = options.headers || {};
+  <button class="btn btn-primary" id="open-btn">打开 Studio 工作台</button>
+  <button class="btn btn-secondary" id="browser-btn">在浏览器中打开</button>
+  <button class="btn btn-danger" id="stop-btn">停止服务器</button>
 
-    // Add auth header for localhost requests
-    if (typeof url === 'string' && url.includes('localhost')) {
-      options.headers['Authorization'] = 'Bearer ' + TOKEN;
-      // Also add token param if not already present
-      if (!url.includes('token=')) {
-        const sep = url.includes('?') ? '&' : '?';
-        url = url + sep + 'token=' + encodeURIComponent(TOKEN);
-      }
+  <div class="info">
+    访问地址：<code>http://localhost:${port}</code><br>
+    认证令牌：<code>${token}</code><br>
+    <br>
+    💡 点击「打开 Studio 工作台」在 VSCode 内编辑
+  </div>
+
+  <script nonce="${nonce}">
+    const vscodeApi = acquireVsCodeApi();
+    document.getElementById('open-btn').addEventListener('click', () => {
+      vscodeApi.postMessage({ type: 'openStudio' });
+    });
+    document.getElementById('browser-btn').addEventListener('click', () => {
+      vscodeApi.postMessage({ type: 'openInBrowser' });
+    });
+    document.getElementById('stop-btn').addEventListener('click', () => {
+      vscodeApi.postMessage({ type: 'stopServer' });
+    });
+  </script>
+</body>
+</html>`;
     }
 
-    return originalFetch.call(this, url, options);
-  };
-
-  // Override XMLHttpRequest to add auth token
-  const originalOpen = XMLHttpRequest.prototype.open;
-  const originalSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    this._url = url;
-    if (typeof url === 'string' && url.includes('localhost') && !url.includes('token=')) {
-      const sep = url.includes('?') ? '&' : '?';
-      url = url + sep + 'token=' + encodeURIComponent(TOKEN);
-    }
-    return originalOpen.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function() {
-    if (this._url && this._url.includes('localhost')) {
-      this.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
-    }
-    return originalSend.apply(this, arguments);
-  };
-
-  // Bridge to VSCode extension for API calls
-  const vscodeApi = acquireVsCodeApi();
-  window._vscodeBridge = {
-    postMessage: function(msg) {
-      vscodeApi.postMessage(msg);
-    }
-  };
-})();
-</script>`;
-
-    // Insert bridge script before </head>
-    if (wrapped.includes("</head>")) {
-      wrapped = wrapped.replace("</head>", bridgeScript + "\n</head>");
-    } else {
-      wrapped = bridgeScript + wrapped;
-    }
-
-    // Add VSCode webview CSP meta tag (replace existing if any)
-    const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}' http://localhost:${port} https://fonts.googleapis.com https://fonts.gstatic.com; connect-src http://localhost:${port} http://localhost:${port}/api/; img-src http://localhost:${port} data:; style-src 'self' 'unsafe-inline' http://localhost:${port} https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'nonce-${nonce}' http://localhost:${port}; font-src http://localhost:${port} https://fonts.gstatic.com; frame-src http://localhost:${port};">`;
-
-    // Remove existing CSP meta tags
-    wrapped = wrapped.replace(/<meta[^>]*Content-Security-Policy[^>]*>/gi, "");
-    // Insert our CSP
-    if (wrapped.includes("<head>")) {
-      wrapped = wrapped.replace("<head>", "<head>\n" + cspMeta);
-    }
-
-    return wrapped;
-  }
-
-  private _getOfflineHtml(): string {
-    const nonce = getNonce();
+    // Offline state
     return /*html*/ `
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline';">
   <style nonce="${nonce}">
-    body { margin: 0; padding: 0; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; height: 100vh;
-           background: #0d0d0d; color: #c0392b; font-family: 'Noto Serif SC', serif; text-align: center; }
-    h2 { font-size: 24px; color: #e0e0e0; }
-    p { margin: 8px 0; color: #999; }
-    button { margin-top: 16px; padding: 8px 24px; background: #c0392b; color: #fff;
-             border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    button:hover { background: #a93226; }
-    .logo { font-size: 48px; margin-bottom: 8px; }
+    :root { --red: #c0392b; --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --text: #e0e0e0; --muted: #888; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 12px; font-size: 13px; }
+    .header { text-align: center; margin-bottom: 20px; }
+    .header .logo { font-size: 40px; margin-bottom: 8px; }
+    .header h2 { font-size: 16px; color: var(--text); font-weight: 600; }
+    .status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--card); border-radius: 6px; margin-bottom: 16px; border: 1px solid var(--border); }
+    .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #e74c3c; flex-shrink: 0; }
+    .status .label { color: var(--muted); font-size: 12px; }
+    .btn { display: block; width: 100%; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; text-align: center; margin-bottom: 8px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: var(--red); color: #fff; }
+    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .hint { margin-top: 16px; padding: 10px; background: var(--card); border-radius: 6px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .hint code { color: var(--red); background: #1a0a0a; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
   </style>
 </head>
 <body>
-  <div class="logo">🔥</div>
-  <h2>墨阁 · NovelForge Studio</h2>
-  <p>StudioServer 未运行</p>
-  <p>点击下方启动，或使用面板标题栏 ▶ 按钮</p>
-  <button id="start-btn">启动服务器</button>
+  <div class="header">
+    <div class="logo">🔥</div>
+    <h2>墨阁 · NovelForge</h2>
+  </div>
+
+  <div class="status">
+    <div class="dot"></div>
+    <div class="label">服务器未运行</div>
+  </div>
+
+  <button class="btn btn-primary" id="start-btn">启动服务器</button>
+  <button class="btn btn-secondary" id="settings-btn">配置</button>
+
+  <div class="hint">
+    端口：<code>${port}</code><br>
+    <br>
+    💡 首次使用请先配置 Java 路径和 Studio JAR 路径
+  </div>
 
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
     document.getElementById('start-btn').addEventListener('click', () => {
       vscodeApi.postMessage({ type: 'startServer' });
+    });
+    document.getElementById('settings-btn').addEventListener('click', () => {
+      vscodeApi.postMessage({ type: 'openSettings' });
     });
   </script>
 </body>
@@ -239,40 +181,33 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     switch (msg.type) {
       case "startServer":
         await vscode.commands.executeCommand("novelforge.startServer");
-        // Wait a bit for server to start, then re-render
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        this._renderStudio();
-        if (this._view) {
-          this._view.webview.postMessage({ type: "serverStarted" });
-        }
+        await new Promise((r) => setTimeout(r, 3000));
+        this._render();
         break;
       case "stopServer":
         await vscode.commands.executeCommand("novelforge.stopServer");
-        this._renderStudio();
-        if (this._view) {
-          this._view.webview.postMessage({ type: "serverStopped" });
-        }
+        this._render();
+        break;
+      case "openStudio": {
+        const port = this._configManager.get<number>("serverPort");
+        const token = this._apiClient.getAuthToken();
+        const url = `http://localhost:${port}/?token=${encodeURIComponent(token)}`;
+        // Open in VSCode's Simple Browser
+        vscode.commands.executeCommand("simpleBrowser.show", url);
+        break;
+      }
+      case "openInBrowser": {
+        const port = this._configManager.get<number>("serverPort");
+        const token = this._apiClient.getAuthToken();
+        const url = `http://localhost:${port}/?token=${encodeURIComponent(token)}`;
+        vscode.env.openExternal(vscode.Uri.parse(url));
+        break;
+      }
+      case "openSettings":
+        vscode.commands.executeCommand("workbench.action.openSettings", "novelforge");
         break;
       case "refreshStudio":
-        this._renderStudio();
-        break;
-      case "openInBrowser":
-        vscode.commands.executeCommand("novelforge.openStudio");
-        break;
-      // Forward API requests from webview to StudioServer
-      case "apiRequest":
-        if (msg.method && msg.path) {
-          const result = await this._apiClient.rawRequest(
-            msg.method,
-            msg.path,
-            msg.body
-          );
-          this._view?.webview.postMessage({
-            type: "apiResponse",
-            requestId: msg.requestId,
-            data: result,
-          });
-        }
+        this._render();
         break;
     }
   }

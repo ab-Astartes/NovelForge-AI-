@@ -665,7 +665,7 @@ async function searchBookContent() {
       const loc = hit.chapter === 0 ? '大纲' : `第${hit.chapter}章 ${hit.title}`;
       html += `<div style="padding:6px 8px;border-bottom:1px solid #333;cursor:pointer" onclick="showChapterContent('${bookPath}',${hit.chapter})">`;
       html += `<span style="color:#c0392b;font-weight:bold">${loc}</span>`;
-      const snippet = hit.snippet ? hit.snippet.replace(new RegExp(`(${keyword.trim().replace(/[.*+?^${}()|[\]\]/g, '\$&')})`, 'gi'), '<span style="color:#c0392b;background:#1a0a0a;padding:0 2px">$1</span>') : '';
+      const snippet = hit.snippet ? hit.snippet.replace(new RegExp(`(${keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<span style="color:#c0392b;background:#1a0a0a;padding:0 2px">$1</span>') : '';
       html += `<div style="color:#999;font-size:0.85em;margin-top:2px">…${snippet}…</div></div>`;
     });
     resultDiv.innerHTML = html;
