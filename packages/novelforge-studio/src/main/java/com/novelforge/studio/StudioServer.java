@@ -3383,11 +3383,19 @@ public class StudioServer {
     public static void main(String[] args) throws IOException {
 
         int port = DEFAULT_PORT;
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException e) {
-                System.err.println("Invalid port number: " + args[0] + ". Using default port " + DEFAULT_PORT);
+        for (int i = 0; i < args.length; i++) {
+            if ((args[i].equals("--port") || args[i].equals("-p")) && i + 1 < args.length) {
+                try {
+                    port = Integer.parseInt(args[++i]);
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid port number: " + args[i] + ". Using default port " + DEFAULT_PORT);
+                }
+            } else if (!args[i].startsWith("-")) {
+                try {
+                    port = Integer.parseInt(args[i]);
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid port number: " + args[i] + ". Using default port " + DEFAULT_PORT);
+                }
             }
         }
 
@@ -3395,9 +3403,15 @@ public class StudioServer {
 
         studio.start();
 
-        System.out.println("Press Enter to stop...");
-
-        try { System.in.read(); } catch (IOException e) { /* ctrl+c or closed */ }
+        // Keep alive: if running in a terminal, wait for Enter; otherwise block indefinitely
+        if (System.console() != null) {
+            System.out.println("Press Enter to stop...");
+            try { System.in.read(); } catch (IOException e) { /* ctrl+c or closed */ }
+        } else {
+            // Non-interactive mode (child process): block until interrupted
+            System.out.println("Running in non-interactive mode. Send SIGTERM or close to stop.");
+            try { Thread.currentThread().join(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
 
         studio.stop();
 
