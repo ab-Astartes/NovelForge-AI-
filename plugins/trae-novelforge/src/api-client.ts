@@ -17,10 +17,24 @@ export interface ApiResponse {
 }
 
 export class StudioApiClient {
+  /** Auth token extracted from StudioServer stdout */
+  private _authToken: string = "";
+
   constructor(
     private readonly _config: ConfigManager,
     private readonly _outputChannel: vscode.OutputChannel
   ) {}
+
+  /** Set the auth token (extracted from server stdout) */
+  setAuthToken(token: string): void {
+    this._authToken = token;
+    this._outputChannel.appendLine(`[API] Auth token set: ${token.substring(0, 4)}...${token.substring(token.length - 4)}`);
+  }
+
+  /** Get the current auth token */
+  getAuthToken(): string {
+    return this._authToken;
+  }
 
   /** Check if StudioServer is reachable */
   async isServerRunning(): Promise<boolean> {
@@ -121,9 +135,14 @@ export class StudioApiClient {
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-      },
+      } as Record<string, string | number>,
       timeout: 120_000, // 2min for long ops like writing
     };
+
+    // Add auth token if available
+    if (this._authToken) {
+      (options.headers as Record<string, string>)["Authorization"] = `Bearer ${this._authToken}`;
+    }
 
     if (body) {
       const bodyStr = JSON.stringify(body);

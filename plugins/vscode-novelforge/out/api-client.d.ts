@@ -8,7 +8,13 @@ export interface ApiResponse {
 export declare class StudioApiClient {
     private readonly _config;
     private readonly _outputChannel;
+    /** Auth token extracted from StudioServer stdout */
+    private _authToken;
     constructor(_config: ConfigManager, _outputChannel: vscode.OutputChannel);
+    /** Set the auth token (extracted from server stdout) */
+    setAuthToken(token: string): void;
+    /** Get the current auth token */
+    getAuthToken(): string;
     /** Check if StudioServer is reachable */
     isServerRunning(): Promise<boolean>;
     /** Generic API request */

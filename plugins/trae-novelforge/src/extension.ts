@@ -21,7 +21,7 @@ let statusBarItem: vscode.StatusBarItem;
 
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel("NovelForge");
-  outputChannel.appendLine("[NovelForge] Trae extension activated");
+  outputChannel.appendLine("[NovelForge] Extension activated");
 
   configManager = new ConfigManager(context);
   apiClient = new StudioApiClient(configManager, outputChannel);
@@ -124,7 +124,13 @@ async function startServer(): Promise<void> {
   });
 
   serverProcess.stdout?.on("data", (data: Buffer) => {
-    outputChannel.append(data.toString());
+    const text = data.toString();
+    outputChannel.append(text);
+    // Extract auth token from server output: "Auth token: XXXXX"
+    const tokenMatch = text.match(/Auth token:\s*([A-Z0-9]+)/i);
+    if (tokenMatch && tokenMatch[1]) {
+      apiClient.setAuthToken(tokenMatch[1]);
+    }
   });
   serverProcess.stderr?.on("data", (data: Buffer) => {
     outputChannel.append("[stderr] " + data.toString());

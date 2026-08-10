@@ -52,7 +52,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
       // Proxy StudioServer frontend into webview via iframe approach
       // VSCode webviews can't directly load external URLs, so we inject
       // an iframe that communicates via postMessage bridge
-      this._view.webview.html = this._getStudioHtml(port);
+      this._view.webview.html = this._getStudioHtml(port, this._apiClient.getAuthToken());
     } else {
       this._view.webview.html = this._getOfflineHtml();
     }
@@ -64,7 +64,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
    * We use a postMessage bridge pattern instead — the webview JS fetches
    * the Studio HTML from the server and renders it inline.
    */
-  private _getStudioHtml(port: number): string {
+  private _getStudioHtml(port: number, token: string): string {
     const nonce = getNonce();
     return /*html*/ `
 <!DOCTYPE html>
@@ -76,8 +76,10 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
                  connect-src http://localhost:${port} http://localhost:${port}/api/;
                  img-src http://localhost:${port};
                  style-src 'self' 'unsafe-inline' http://localhost:${port};
-                 script-src 'self' 'nonce-${nonce}';
-                 font-src http://localhost:${port};">
+                 script-src 'self' 'unsafe-inline' 'nonce-${nonce}' http://localhost:${port};
+                 font-src http://localhost:${port};
+                 frame-src http://localhost:${port};
+                 child-src http://localhost:${port};">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NovelForge Studio</title>
   <style nonce="${nonce}">
@@ -122,7 +124,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
           document.getElementById('loading').style.display = 'none';
           const iframe = document.createElement('iframe');
           iframe.id = 'studio-frame';
-          iframe.src = 'http://localhost:' + PORT + '/';
+          iframe.src = 'http://localhost:' + PORT + '/?token=' + encodeURIComponent(TOKEN);
           document.body.appendChild(iframe);
         } else {
           showOffline();
