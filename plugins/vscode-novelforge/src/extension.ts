@@ -15,6 +15,7 @@ import { ConfigManager } from "./config-manager";
 
 let apiClient: StudioApiClient;
 let configManager: ConfigManager;
+let sidebarProvider: NovelForgeSidebarProvider;
 let serverProcess: child_process.ChildProcess | null = null;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
@@ -37,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 
   // Register sidebar webview provider
-  const sidebarProvider = new NovelForgeSidebarProvider(
+  sidebarProvider = new NovelForgeSidebarProvider(
     context.extensionUri,
     apiClient,
     configManager,
@@ -160,6 +161,7 @@ function stopServer(): Promise<void> {
     updateStatusBar("stopped");
     outputChannel.appendLine("[NovelForge] StudioServer stopped (child process killed)");
     vscode.window.showInformationMessage("NovelForge StudioServer stopped");
+    sidebarProvider?.refresh();
   } else {
     vscode.window.showInformationMessage("No managed StudioServer process to stop. If started externally, stop it manually.");
   }

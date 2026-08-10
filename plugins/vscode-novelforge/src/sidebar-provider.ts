@@ -38,6 +38,10 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     this._render();
   }
 
+  public refresh() {
+    this._render();
+  }
+
   private async _render() {
     if (!this._view) return;
 
@@ -57,8 +61,8 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline';">
-  <style nonce="${nonce}">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <style>
     :root { --red: #c0392b; --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --text: #e0e0e0; --muted: #888; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 12px; font-size: 13px; }
@@ -70,7 +74,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #27ae60; flex-shrink: 0; }
     .status .label { color: var(--muted); font-size: 12px; }
     .btn { display: block; width: 100%; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; text-align: center; margin-bottom: 8px; transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.9; }
+    .btn:hover { opacity: 0.85; }
     .btn-primary { background: var(--red); color: #fff; }
     .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
     .btn-danger { background: transparent; color: #e74c3c; border: 1px solid #e74c3c; }
@@ -123,8 +127,8 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline';">
-  <style nonce="${nonce}">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <style>
     :root { --red: #c0392b; --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --text: #e0e0e0; --muted: #888; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 12px; font-size: 13px; }
@@ -135,7 +139,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #e74c3c; flex-shrink: 0; }
     .status .label { color: var(--muted); font-size: 12px; }
     .btn { display: block; width: 100%; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; text-align: center; margin-bottom: 8px; transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.9; }
+    .btn:hover { opacity: 0.85; }
     .btn-primary { background: var(--red); color: #fff; }
     .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
     .hint { margin-top: 16px; padding: 10px; background: var(--card); border-radius: 6px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.6; }
@@ -181,6 +185,7 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
     switch (msg.type) {
       case "startServer":
         await vscode.commands.executeCommand("novelforge.startServer");
+        // Wait for server to start, then refresh
         await new Promise((r) => setTimeout(r, 3000));
         this._render();
         break;
@@ -192,8 +197,18 @@ export class NovelForgeSidebarProvider implements vscode.WebviewViewProvider {
         const port = this._configManager.get<number>("serverPort");
         const token = this._apiClient.getAuthToken();
         const url = `http://localhost:${port}/?token=${encodeURIComponent(token)}`;
-        // Open in VSCode's Simple Browser
-        vscode.commands.executeCommand("simpleBrowser.show", url);
+        // Try Simple Browser first (built-in in VSCode 1.86+)
+        try {
+          await vscode.commands.executeCommand("simpleBrowser.show", url);
+        } catch {
+          // Fallback: open in VSCode's webview editor
+          try {
+            await vscode.commands.executeCommand("vscode.open", vscode.Uri.parse(url));
+          } catch {
+            // Last fallback: system browser
+            vscode.env.openExternal(vscode.Uri.parse(url));
+          }
+        }
         break;
       }
       case "openInBrowser": {

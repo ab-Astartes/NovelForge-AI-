@@ -17,6 +17,7 @@ export declare class NovelForgeSidebarProvider implements vscode.WebviewViewProv
     private _view?;
     constructor(_extensionUri: vscode.Uri, _apiClient: StudioApiClient, _configManager: ConfigManager, _outputChannel: vscode.OutputChannel);
     resolveWebviewView(webviewView: vscode.WebviewView, _context: vscode.WebviewViewResolveContext, _token: vscode.CancellationToken): void;
+    refresh(): void;
     private _render;
     private _getControlPanelHtml;
     private _handleMessage;
