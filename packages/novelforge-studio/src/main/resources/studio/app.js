@@ -4,6 +4,11 @@ const API = '';  // same origin
 
 // 🟡-1: Auth token — auto-set on page load from startup message
 let AUTH_TOKEN = '';
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const t = params.get('token');
+  if (t) AUTH_TOKEN = t;
+})();
 
 // 🟢-1: Shared LLM config — single source for all panels
 let currentWriteJobId = null;
