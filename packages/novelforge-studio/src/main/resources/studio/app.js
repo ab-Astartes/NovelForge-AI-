@@ -1024,7 +1024,6 @@ async function saveConfig() {
     showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
   }
 }
-}
 
 // ========== 🟡-2: SSE Write Streaming + Polling Fallback ==========
 function streamWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, bookPath) {
@@ -1183,7 +1182,8 @@ async function pollWriteJob(jobId, agents, progressDiv, resultDiv, btnWrite, boo
 
       if (data.status === 'cancelled') {
         resetPipelineSteps();
-        progressDiv.textContent = '';\n        showResult(resultDiv, '✦ 已取消', true);
+        progressDiv.textContent = '';
+        showResult(resultDiv, '✦ 已取消', true);
         btnWrite.disabled = false;
         btnWrite.textContent = '落笔！';
         document.getElementById('btn-cancel').style.display = 'none';
@@ -1988,7 +1988,6 @@ async function generateChapterSynopsis() {
   const modelId = document.getElementById('write-model-id').value.trim() || 'gpt-4o';
 
   // apiKey is optional — backend will fallback to studio config
-  }
 
   showResult(resultDiv, '⏳ 正在生成章节梗概...', false);
   const btn = document.getElementById('btn-synopsis');
