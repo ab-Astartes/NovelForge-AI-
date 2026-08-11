@@ -119,7 +119,7 @@ async function startServer(): Promise<void> {
   outputChannel.appendLine(`[NovelForge] Starting StudioServer: ${javaPath} -jar ${jarPath} --port ${port}`);
   outputChannel.show(true);
 
-  serverProcess = child_process.spawn(javaPath, ["-jar", jarPath, "--port", String(port)], {
+  serverProcess = child_process.spawn(javaPath, ["-jar", jarPath, "--port", String(port), "--no-auth"], {
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });

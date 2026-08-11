@@ -82,6 +82,7 @@ public class StudioServer {
     // 🟡-1: Simple auth token for local Studio access
 
     private final String authToken;
+    private final boolean noAuth;
 
 
 
@@ -156,6 +157,10 @@ public class StudioServer {
 
 
     public StudioServer(int port) throws IOException {
+        this(port, false);
+    }
+
+    public StudioServer(int port, boolean noAuth) throws IOException {
 
         this.booksRoot = Paths.get(System.getProperty("user.home"), "NovelForge", "books");
 
@@ -181,7 +186,8 @@ public class StudioServer {
 
         // 🟡-1: Generate random auth token for local API access
 
-        this.authToken = generateToken();
+        this.authToken = noAuth ? "" : generateToken();
+        this.noAuth = noAuth;
 
         this.server = HttpServer.create(new InetSocketAddress("localhost", port), 0);
 
@@ -318,7 +324,15 @@ public class StudioServer {
         System.out.println(splash);
         log.info("{} Studio started at http://localhost:{}", Version.full(), port);
 
-        System.out.println("Auth token: " + authToken);  // 🟡-1: show token for frontend to use
+        if (noAuth) {
+            System.out.println("Auth: DISABLED (no-auth mode)");
+        } else {
+            if (noAuth) {
+            System.out.println("Auth: DISABLED (no-auth mode)");
+        } else {
+            System.out.println("Auth token: " + authToken);
+        }
+        }
 
     }
 
@@ -3018,6 +3032,7 @@ public class StudioServer {
     /** 🟡-1: Validate auth token from request header or query param */
 
     private boolean validateAuth(HttpExchange exchange) {
+        if (noAuth) return true;
 
         // Check Authorization header: Bearer <token>
 
@@ -3383,8 +3398,11 @@ public class StudioServer {
     public static void main(String[] args) throws IOException {
 
         int port = DEFAULT_PORT;
+        boolean noAuth = false;
         for (int i = 0; i < args.length; i++) {
-            if ((args[i].equals("--port") || args[i].equals("-p")) && i + 1 < args.length) {
+            if (args[i].equals("--no-auth")) {
+                noAuth = true;
+            } else if ((args[i].equals("--port") || args[i].equals("-p")) && i + 1 < args.length) {
                 try {
                     port = Integer.parseInt(args[++i]);
                 } catch (NumberFormatException e) {
@@ -3399,7 +3417,7 @@ public class StudioServer {
             }
         }
 
-        StudioServer studio = new StudioServer(port);
+        StudioServer studio = new StudioServer(port, noAuth);
 
         studio.start();
 
