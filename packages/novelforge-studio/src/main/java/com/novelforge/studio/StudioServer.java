@@ -516,6 +516,32 @@ public class StudioServer {
 
             sendJson(exchange, 200, mapper.writeValueAsString(result));
 
+        } catch (IOException e) {
+
+            if (e.getMessage() != null && e.getMessage().contains("already exists")) {
+
+                String dirName = sanitize(title);
+
+                Path existingDir = booksRoot.resolve(dirName);
+
+                ObjectNode result = mapper.createObjectNode();
+
+                result.put("status", "exists");
+
+                result.put("path", existingDir.toString());
+
+                result.put("title", title);
+
+                result.put("error", "该书籍已存在");
+
+                sendJson(exchange, 409, mapper.writeValueAsString(result));
+
+            } else {
+
+                sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+
+            }
+
         } catch (Exception e) {
 
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
@@ -2937,6 +2963,12 @@ public class StudioServer {
 
     }
 
+    private String sanitize(String title) {
+        return title.replaceAll("[\\\\/:*?\"<>|]", "_")
+                     .replaceAll("\\s+", "-")
+                     .trim();
+    }
+
 
 
     // --- Helpers ---
@@ -3436,4 +3468,3 @@ public class StudioServer {
     }
 
 }
-

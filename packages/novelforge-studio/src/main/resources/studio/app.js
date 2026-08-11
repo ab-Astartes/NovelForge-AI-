@@ -122,13 +122,18 @@ async function createBook() {
     });
     const data = await res.json();
     if (data.status === 'created') {
-      showResult(resultDiv, `✦ "${title}" 已开卷！路径: ${data.path}`, false);
+      showResult(resultDiv, '✓ 「' + title + '」已开卷！路径: ' + data.path, false);
       document.getElementById('book-title').value = '';
       document.getElementById('book-author').value = '';
       loadBooks();
       populateBookSelects();
+    } else if (data.status === 'exists') {
+      showResult(resultDiv, '⚠ 「' + title + '」已存在，路径: ' + data.path, true);
+      loadBooks();
+      populateBookSelects();
     } else {
-      showResult(resultDiv, '✗ ' + (data.error || '创建失败'), true);
+      showResult(resultDiv, '? ' + (data.error || '创建失败'), true);
+    }
     }
   } catch (e) {
     showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
@@ -227,8 +232,49 @@ async function createBookWizard() {
     });
     const createData = await createRes.json();
 
+    if (createData.status === 'exists') {
+      // Book already exists - continue with existing book
+      wizardState.bookPath = createData.path;
+      showResult(resultDiv, '⚠ 该书籍已存在，将使用现有项目继续', true);
+      loadBooks();
+      populateBookSelects();
+      wizardSetStep(2);
+      document.getElementById('wizard-outline-loading').style.display = 'flex';
+      document.getElementById('wizard-outline-result').style.display = 'none';
+      const fullPrompt = supplement ? prompt + '\n\n补充设定：' + supplement : prompt;
+      try {
+        const outlineRes = await fetch(authUrl(API + '/api/outline/generate'), {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            prompt: fullPrompt, genre: genre,
+            apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId,
+            path: createData.path
+          })
+        });
+        const outlineData = await outlineRes.json();
+        document.getElementById('wizard-outline-loading').style.display = 'none';
+        if (outlineData.status === 'ok') {
+          wizardState.outline = outlineData.outline || '';
+          document.getElementById('wizard-outline-text').value = wizardState.outline;
+          document.getElementById('wizard-book-path').textContent = createData.path;
+          document.getElementById('wizard-outline-result').style.display = 'block';
+        } else {
+          document.getElementById('wizard-outline-result').style.display = 'block';
+          document.getElementById('wizard-outline-text').value = '';
+          document.getElementById('wizard-book-path').textContent = createData.path;
+          showResult(document.getElementById('wizard-outline-result-msg'), '? 大纲生成失败: ' + (outlineData.error || '未知错误'), true);
+        }
+      } catch (e2) {
+        document.getElementById('wizard-outline-loading').style.display = 'none';
+        showResult(document.getElementById('wizard-outline-result-msg'), '? 网络错误: ' + e2.message, true);
+      }
+      btn.disabled = false;
+      btn.textContent = '开卷创作';
+      return;
+    }
     if (createData.status !== 'created') {
-      showResult(resultDiv, '✗ ' + (createData.error || '创建失败'), true);
+      showResult(resultDiv, '? ' + (createData.error || '创建失败'), true);
       btn.disabled = false;
       btn.textContent = '开卷创作';
       return;
