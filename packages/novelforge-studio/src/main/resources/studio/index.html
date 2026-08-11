@@ -11,899 +11,872 @@
 <body>
 <div class="ink-texture"></div>
 
-<div id="app">
-  <!-- Header -->
-  <header class="header">
-    <div class="logo-area">
-      <span class="logo-brush">墨</span><span class="logo-dot">·</span><span class="logo-sub">阁</span>
+<div class="layout">
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <span class="logo-brush">墨</span><span class="logo-dot">·</span><span class="logo-sub">阁</span>
+      </div>
+      <div class="sidebar-version"><span id="version-label">v0.4.0</span></div>
     </div>
-    <p class="header-desc">AI 网文创作引擎 · 九重炼章 · <span id="version-label">v0.4.0</span></p>
-    <div class="header-stats">
+
+    <nav class="sidebar-nav">
+      <button onclick="showPanel('create')" class="sidebar-nav-item active" id="nav-create">
+        <span class="nav-icon">✦</span><span class="nav-label">开卷</span>
+      </button>
+      <button onclick="showPanel('books')" class="sidebar-nav-item" id="nav-books">
+        <span class="nav-icon">📚</span><span class="nav-label">书阁</span>
+      </button>
+      <button onclick="showPanel('write')" class="sidebar-nav-item" id="nav-write">
+        <span class="nav-icon">✒️</span><span class="nav-label">落笔</span>
+      </button>
+      <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
+        <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
+      </button>
+      <button onclick="showPanel('audit')" class="sidebar-nav-item" id="nav-audit">
+        <span class="nav-icon">🔍</span><span class="nav-label">审阅</span>
+      </button>
+      <button onclick="showPanel('config')" class="sidebar-nav-item" id="nav-config">
+        <span class="nav-icon">⚙</span><span class="nav-label">设置</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
       <span class="stat-pill"><span class="stat-icon">📜</span> 9 Agent</span>
       <span class="stat-pill"><span class="stat-icon">🎯</span> 33维审计</span>
       <span class="stat-pill"><span class="stat-icon">📖</span> 10流派</span>
     </div>
-  </header>
+  </aside>
 
-  <!-- Nav -->
-  <nav class="nav-bar">
-    <button onclick="showPanel('create')" class="nav-tab active" id="nav-create">
-      <span class="nav-icon">✦</span> 开卷
-    </button>
-    <button onclick="showPanel('books')" class="nav-tab" id="nav-books">
-      <span class="nav-icon">📚</span> 书阁
-    </button>
-    <button onclick="showPanel('write')" class="nav-tab" id="nav-write">
-      <span class="nav-icon">✒️</span> 落笔
-    </button>
-    <button onclick="showPanel('audit')" class="nav-tab" id="nav-audit">
-      <span class="nav-icon">🔍</span> 审阅
-    </button>
-    <button onclick="showPanel('state')" class="nav-tab" id="nav-state">
-      <span class="nav-icon">🌐</span> 世界
-    </button>
-    <button onclick="showPanel('progress')" class="nav-tab" id="nav-progress">
-      <span class="nav-icon">📊</span> 进度
-    </button>
-    <button onclick="showPanel('config')" class="nav-tab" id="nav-config">
-      <span class="nav-icon">⚙</span> 炼炉
-    </button>
-    <button onclick="showPanel('style')" class="nav-tab" id="nav-style">
-      <span class="nav-icon">✒</span> 風格
-    </button>
-    <button onclick="showPanel('rollback')" class="nav-tab" id="nav-rollback">
-      <span class="nav-icon">↩</span> 回溯
-    </button>
-    <button onclick="showPanel('characters')" class="nav-tab" id="nav-characters">
-      <span class="nav-icon">👤</span> 人物
-    </button>
-    <button onclick="showPanel('hooks')" class="nav-tab" id="nav-hooks">
-      <span class="nav-icon">🪝</span> 伏笔
-    </button>
-  </nav>
-
-  <!-- ========== 开卷：创建新书 ========== -->
-  <section id="panel-create" class="panel active">
-    <div class="panel-header">
-      <h2 class="panel-title">开卷有益</h2>
-      <p class="panel-desc">新建一本小说项目，选择流派与题材</p>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-group wide">
-        <label class="form-label">书名</label>
-        <input type="text" id="book-title" class="input-field" placeholder="输入小说标题">
-      </div>
-      <div class="form-group">
-        <label class="form-label">题材流派</label>
-        <select id="book-genre" class="input-field">
-          <option value="xuanhuan">玄幻 · 修真升级</option>
-          <option value="xianxia">仙侠 · 仙途飞升</option>
-          <option value="urban">都市 · 逆袭崛起</option>
-          <option value="horror">恐怖 · 诡异求生</option>
-          <option value="romance-zh">言情 · 缱绻情深</option>
-          <option value="fantasy">Fantasy · 西幻征途</option>
-          <option value="thriller">Thriller · 悬疑惊悚</option>
-          <option value="romance-en">Romance · 英伦情缘</option>
-          <option value="scifi">Sci-Fi · 未来纪元</option>
-          <option value="mystery">Mystery · 探案推理</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">作者（可选）</label>
-        <input type="text" id="book-author" class="input-field" placeholder="笔名">
-      </div>
-    </div>
-
-    <button onclick="createBook()" class="btn-ink">开卷创作</button>
-    <div id="create-result" class="result-box"></div>
-  </section>
-
-  <!-- ========== 书阁：书库管理 ========== -->
-  <section id="panel-books" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">书阁藏书</h2>
-      <p class="panel-desc">管理你的小说项目</p>
-      <button onclick="loadBooks()" class="btn-ghost btn-sm">刷新 ↻</button>
-    </div>
-
-    <div id="books-list" class="books-grid"></div>
-
-    <!-- Book Detail -->
-    <div id="book-detail" style="display:none;margin-top:16px">
-      <div id="book-detail-content" class="chapter-preview"></div>
-    </div>
-
-    <!-- Book Property Edit -->
-    <div class="sub-section">
-      <h3 class="sub-title">书卷属性</h3>
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="book-edit-book" class="input-field"></select>
-      </div>
-      <div class="btn-row">
-        <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
-        <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
-      </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">书名</label>
-          <input type="text" id="book-edit-title" class="input-field" placeholder="书名">
-        </div>
-        <div class="form-group">
-          <label class="form-label">作者</label>
-          <input type="text" id="book-edit-author" class="input-field" placeholder="笔名">
-        </div>
-        <div class="form-group">
-          <label class="form-label">流派</label>
-          <select id="book-edit-genre" class="input-field">
-            <option value="xuanhuan">玄幻 · 苍穹破天</option>
-            <option value="xianxia">仙侠 · 云海修真</option>
-            <option value="urban">都市 · 都市风云</option>
-            <option value="wuxia">武侠 · 侠骨柔情</option>
-            <option value="history">历史 · 烟雨长河</option>
-            <option value="horror">恐怖 · 诡异求生</option>
-            <option value="romance-zh">言情 · 缱绻情深</option>
-            <option value="fantasy">Fantasy · 西幻征途</option>
-            <option value="thriller">Thriller · 悬疑惊悚</option>
-            <option value="romance-en">Romance · 英伦情缘</option>
-            <option value="scifi">Sci-Fi · 未来纪元</option>
-            <option value="mystery">Mystery · 探案推理</option>
-          </select>
+  <!-- ===== Main Content ===== -->
+  <div class="main-content">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <p class="header-desc">AI 网文创作引擎 · 九重炼章</p>
+        <div class="header-stats">
+          <span class="stat-pill"><span class="stat-icon">📜</span> 9 Agent</span>
+          <span class="stat-pill"><span class="stat-icon">🎯</span> 33维审计</span>
+          <span class="stat-pill"><span class="stat-icon">📖</span> 10流派</span>
         </div>
       </div>
-      <div id="book-edit-result" class="result-box"></div>
-    </div>
+    </header>
 
-    <!-- Book Search -->
-    <div class="sub-section">
-      <h3 class="sub-title">全书搜索</h3>
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="search-book" class="input-field"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">关键词</label>
-        <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容">
-      </div>
-      <div class="btn-row">
-        <button onclick="searchBookContent()" class="btn-ink btn-sm">搜</button>
-      </div>
-      <div id="search-results" class="result-box"></div>
-    </div>
+    <!-- Content Area -->
+    <div class="content-area">
 
-    <!-- Outline Editor -->
-    <div class="sub-section">
-      <h3 class="sub-title">大纲编辑</h3>
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="outline-editor-book" class="input-field"></select>
-      </div>
-      <div class="btn-row">
-        <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
-        <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
-      </div>
-      <textarea id="outline-editor-content" class="input-field" rows="10" placeholder="在此编辑大纲内容..."></textarea>
-      <div id="outline-editor-result" class="result-box"></div>
-    </div>
+      <!-- ========== 开卷：创建新书 ========== -->
+      <section id="panel-create" class="panel active">
+        <div class="panel-header">
+          <h2 class="panel-title">开卷有益</h2>
+          <p class="panel-desc">新建一本小说项目，选择流派与题材</p>
+        </div>
 
-    <!-- Author Intent Editor -->
-    <div class="sub-section">
-      <h3 class="sub-title">意图编辑</h3>
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="intent-editor-book" class="input-field"></select>
-      </div>
-      <div class="btn-row">
-        <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
-        <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
-      </div>
-      <textarea id="intent-editor-content" class="input-field" rows="6" placeholder="在此编辑创作意图..."></textarea>
-      <div id="intent-editor-result" class="result-box"></div>
-    </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="form-group wide">
+              <label class="form-label">书名</label>
+              <input type="text" id="book-title" class="input-field" placeholder="输入小说标题">
+            </div>
+            <div class="form-group">
+              <label class="form-label">题材流派</label>
+              <select id="book-genre" class="input-field">
+                <option value="xuanhuan">玄幻 · 修真升级</option>
+                <option value="xianxia">仙侠 · 仙途飞升</option>
+                <option value="urban">都市 · 逆袭崛起</option>
+                <option value="horror">恐怖 · 诡异求生</option>
+                <option value="romance-zh">言情 · 缱绻情深</option>
+                <option value="fantasy">Fantasy · 西幻征途</option>
+                <option value="thriller">Thriller · 悬疑惊悚</option>
+                <option value="romance-en">Romance · 英伦情缘</option>
+                <option value="scifi">Sci-Fi · 未来纪元</option>
+                <option value="mystery">Mystery · 探案推理</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">作者（可选）</label>
+              <input type="text" id="book-author" class="input-field" placeholder="笔名">
+            </div>
+          </div>
 
-    <!-- 🟢-4: Delete book/project -->
-    <div class="delete-section">
-      <h3 class="sub-title">焚卷销书</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">选择书籍</label>
-          <select id="delete-book" class="input-field"></select>
+          <button onclick="createBook()" class="btn-ink">开卷创作</button>
+          <div id="create-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">删除类型</label>
-          <select id="delete-type" class="input-field">
-            <option value="project">整部书（项目目录）</option>
-            <option value="chapter">最后一章</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="deleteBook()" class="btn-ink btn-sm btn-danger">确认焚卷</button>
-      <div id="delete-result" class="result-box"></div>
-    </div>
+      </section>
 
-    <div class="export-section">
-      <h3 class="sub-title">导出成书</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">选择书籍</label>
-          <select id="export-book" class="input-field"></select>
+      <!-- ========== 书阁：书库管理 ========== -->
+      <section id="panel-books" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">书阁藏书</h2>
+          <p class="panel-desc">管理你的小说项目</p>
+          <button onclick="loadBooks()" class="btn-ghost btn-sm">刷新 ↻</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">格式</label>
-          <select id="export-format" class="input-field">
-            <option value="txt">TXT · 纯文本</option>
-            <option value="md">Markdown · 标记</option>
-            <option value="epub">EPUB · 电子书</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
-      <div id="export-result" class="result-box"></div>
-    </div>
-  </section>
 
-  <!-- ========== 落笔：写作 ========== -->
-  <section id="panel-write" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">落笔成章</h2>
-      <p class="panel-desc">九重炼章流水线：构思→计划→编排→书写→观察→反思→润色→审查→修订</p>
-    </div>
+        <div id="books-list" class="books-grid"></div>
 
-    <!-- Pipeline Steps Visualization -->
-    <div id="pipeline-steps" class="pipeline-track">
-      <div class="step-node" data-agent="Architect">
-        <div class="step-icon">🏛</div>
-        <div class="step-label">构思</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Planner">
-        <div class="step-icon">📋</div>
-        <div class="step-label">计划</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Composer">
-        <div class="step-icon">🎼</div>
-        <div class="step-label">编排</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Writer">
-        <div class="step-icon">✒️</div>
-        <div class="step-label">书写</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Observer">
-        <div class="step-icon">👁</div>
-        <div class="step-label">观察</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Reflector">
-        <div class="step-icon">🪞</div>
-        <div class="step-label">反思</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Normalizer">
-        <div class="step-icon">⚖</div>
-        <div class="step-label">润色</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Auditor">
-        <div class="step-icon">🔍</div>
-        <div class="step-label">审查</div>
-        <div class="step-bar"></div>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step-node" data-agent="Reviser">
-        <div class="step-icon">🔧</div>
-        <div class="step-label">修订</div>
-        <div class="step-bar"></div>
-      </div>
-    </div>
+        <!-- Book Detail -->
+        <div id="book-detail" style="display:none;margin-top:16px">
+          <div id="book-detail-content" class="chapter-preview"></div>
+        </div>
 
-    <div class="form-grid">
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="write-book" class="input-field"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">模式</label>
-        <select id="write-mode" class="input-field">
-          <option value="next">完整九重炼章</option>
-          <option value="draft">草稿速写（4 Agent）</option>
-          <option value="batch">批量炼章（多章节）</option>
-        </select>
-      </div>
-      <div class="form-group" id="batch-count-group" style="display:none">
-        <label class="form-label">章数</label>
-        <input type="number" id="write-batch-count" class="input-field" value="3" min="1" max="20">
-      </div>
-      <div class="form-group">
-        <label class="form-label">API Key</label>
-        <input type="password" id="write-api-key" class="input-field shared-api-key" placeholder="sk-xxx">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Base URL</label>
-        <input type="text" id="write-base-url" class="input-field shared-base-url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
-      </div>
-      <div class="form-group">
-        <label class="form-label">模型</label>
-        <input type="text" id="write-model-id" class="input-field shared-model-id" value="gpt-4o" placeholder="gpt-4o">
-      </div>
-    </div>
+        <!-- Book Property Edit -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📋</span> 书卷属性</div>
+          <div class="form-group">
+            <label class="form-label">选择书籍</label>
+            <select id="book-edit-book" class="input-field"></select>
+          </div>
+          <div class="btn-row">
+            <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
+            <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">书名</label>
+              <input type="text" id="book-edit-title" class="input-field" placeholder="书名">
+            </div>
+            <div class="form-group">
+              <label class="form-label">作者</label>
+              <input type="text" id="book-edit-author" class="input-field" placeholder="笔名">
+            </div>
+            <div class="form-group">
+              <label class="form-label">流派</label>
+              <select id="book-edit-genre" class="input-field">
+                <option value="xuanhuan">玄幻 · 苍穹破天</option>
+                <option value="xianxia">仙侠 · 云海修真</option>
+                <option value="urban">都市 · 都市风云</option>
+                <option value="wuxia">武侠 · 侠骨柔情</option>
+                <option value="history">历史 · 烟雨长河</option>
+                <option value="horror">恐怖 · 诡异求生</option>
+                <option value="romance-zh">言情 · 缱绻情深</option>
+                <option value="fantasy">Fantasy · 西幻征途</option>
+                <option value="thriller">Thriller · 悬疑惊悚</option>
+                <option value="romance-en">Romance · 英伦情缘</option>
+                <option value="scifi">Sci-Fi · 未来纪元</option>
+                <option value="mystery">Mystery · 探案推理</option>
+              </select>
+            </div>
+          </div>
+          <div id="book-edit-result" class="result-box"></div>
+        </div>
 
-    <div class="btn-row">
-      <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
-      <button onclick="startBatchWrite()" class="btn-ink btn-secondary" id="btn-batch">🔥 批量炼章</button>
-      <button onclick="cancelWrite()" class="btn-ink btn-secondary" id="btn-cancel" style="display:none">✗ 取消炼章</button>
-      <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
-      <button onclick="generateOutlineSynopsis()" class="btn-ink btn-secondary" id="btn-outline">大纲梗概</button>
-      <button onclick="generateVolumeSynopsis()" class="btn-ink btn-secondary" id="btn-volume">卷纲梗概</button>
-      <button onclick="detectAiTrace()" class="btn-ink btn-secondary" id="btn-ai-trace">去AI痕</button>
-    </div>
+        <!-- Book Search -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🔎</span> 全书搜索</div>
+          <div class="form-group">
+            <label class="form-label">选择书籍</label>
+            <select id="search-book" class="input-field"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">关键词</label>
+            <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容">
+          </div>
+          <div class="btn-row">
+            <button onclick="searchBookContent()" class="btn-ink btn-sm">搜</button>
+          </div>
+          <div id="search-results" class="result-box"></div>
+        </div>
 
-    <!-- Prompt-driven Outline Generation -->
-    <div class="sub-section">
-      <h3 class="sub-title">提示词生成大纲</h3>
-      <div class="form-grid">
-        <div class="form-group wide">
-          <label class="form-label">创意提示词</label>
-          <textarea id="outline-gen-prompt" class="input-field" rows="3" placeholder="描述你的小说创意，如：一个普通少年在灵气复苏的世界中觉醒独特天赋..."></textarea>
+        <!-- Outline Editor -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📝</span> 大纲编辑</div>
+          <div class="form-group">
+            <label class="form-label">选择书籍</label>
+            <select id="outline-editor-book" class="input-field"></select>
+          </div>
+          <div class="btn-row">
+            <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
+            <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
+          </div>
+          <textarea id="outline-editor-content" class="input-field" rows="10" placeholder="在此编辑大纲内容..."></textarea>
+          <div id="outline-editor-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">题材</label>
-          <select id="outline-gen-genre" class="input-field">
-            <option value="xuanhuan">玄幻</option>
-            <option value="xianxia">仙侠</option>
-            <option value="urban">都市</option>
-            <option value="horror">恐怖</option>
-            <option value="romance-zh">言情</option>
-            <option value="fantasy">Fantasy</option>
-            <option value="thriller">Thriller</option>
-            <option value="romance-en">Romance</option>
-            <option value="scifi">Sci-Fi</option>
-            <option value="mystery">Mystery</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="generateOutlineFromPrompt()" class="btn-ink btn-sm" id="btn-outline-gen">✦ 生成大纲</button>
-      <div id="outline-gen-result" class="result-box"></div>
-    </div>
 
-    <!-- Volume Outline Generation -->
-    <div class="sub-section">
-      <h3 class="sub-title">卷纲生成</h3>
-      <div class="form-grid">
-        <div class="form-group wide">
-          <label class="form-label">补充提示词（可选）</label>
-          <textarea id="volume-gen-prompt" class="input-field" rows="2" placeholder="对卷纲结构的补充要求，如：每卷10章、升级节奏要快..."></textarea>
+        <!-- Author Intent Editor -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🎯</span> 意图编辑</div>
+          <div class="form-group">
+            <label class="form-label">选择书籍</label>
+            <select id="intent-editor-book" class="input-field"></select>
+          </div>
+          <div class="btn-row">
+            <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
+            <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
+          </div>
+          <textarea id="intent-editor-content" class="input-field" rows="6" placeholder="在此编辑创作意图..."></textarea>
+          <div id="intent-editor-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">题材</label>
-          <select id="volume-gen-genre" class="input-field">
-            <option value="xuanhuan">玄幻</option>
-            <option value="xianxia">仙侠</option>
-            <option value="urban">都市</option>
-            <option value="horror">恐怖</option>
-            <option value="romance-zh">言情</option>
-            <option value="fantasy">Fantasy</option>
-            <option value="thriller">Thriller</option>
-            <option value="romance-en">Romance</option>
-            <option value="scifi">Sci-Fi</option>
-            <option value="mystery">Mystery</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="generateVolumeOutline()" class="btn-ink btn-sm" id="btn-volume-gen">✦ 生成卷纲</button>
-      <div id="volume-gen-result" class="result-box"></div>
-    </div>
 
-    <!-- Chapter Revision -->
-    <div class="sub-section">
-      <h3 class="sub-title">章节修改</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">章节号</label>
-          <input type="number" id="revise-chapter-num" class="input-field" min="1" placeholder="如：1">
+        <!-- Export -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📤</span> 导出成书</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">选择书籍</label>
+              <select id="export-book" class="input-field"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">格式</label>
+              <select id="export-format" class="input-field">
+                <option value="txt">TXT · 纯文本</option>
+                <option value="md">Markdown · 标记</option>
+                <option value="epub">EPUB · 电子书</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
+          <div id="export-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">参考来源</label>
-          <select id="revise-source" class="input-field">
-            <option value="outline">大纲</option>
-            <option value="volume">卷纲</option>
-          </select>
-        </div>
-        <div class="form-group wide">
-          <label class="form-label">修改提示词</label>
-          <textarea id="revise-prompt" class="input-field" rows="2" placeholder="描述如何修改该章节，如：增加角色内心挣扎、加快节奏、删减冗余描写..."></textarea>
-        </div>
-      </div>
-      <button onclick="reviseChapter()" class="btn-ink btn-sm" id="btn-revise">✦ 修改章节</button>
-      <div id="revise-result" class="result-box"></div>
-    </div>
 
-    <!-- Chapter Synopsis Generation -->
-    <div class="sub-section">
-      <h3 class="sub-title">章节梗概生成</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">参考来源</label>
-          <select id="synopsis-source-type" class="input-field">
-            <option value="outline">大纲</option>
-            <option value="volume">卷纲</option>
-          </select>
+        <!-- Delete -->
+        <div class="card" style="border-color:rgba(139,0,0,0.3)">
+          <div class="card-title" style="color:#c0392b"><span class="card-icon">🔥</span> 焚卷销书</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">选择书籍</label>
+              <select id="delete-book" class="input-field"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">删除类型</label>
+              <select id="delete-type" class="input-field">
+                <option value="project">整部书（项目目录）</option>
+                <option value="chapter">最后一章</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="deleteBook()" class="btn-ink btn-sm btn-danger">确认焚卷</button>
+          <div id="delete-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">书籍（可选，自动加载大纲）</label>
-          <select id="synopsis-book" class="input-field"></select>
-        </div>
-        <div class="form-group wide">
-          <label class="form-label">大纲/卷纲内容（未选书籍时手动输入）</label>
-          <textarea id="synopsis-source" class="input-field" rows="4" placeholder="粘贴大纲或卷纲内容，或选择书籍自动加载..."></textarea>
-        </div>
-        <div class="form-group wide">
-          <label class="form-label">补充提示词（可选）</label>
-          <textarea id="synopsis-prompt" class="input-field" rows="2" placeholder="对章节梗概的补充要求，如：每章必须有战斗场景、节奏要紧凑..."></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">题材</label>
-          <select id="synopsis-genre" class="input-field">
-            <option value="xuanhuan">玄幻</option>
-            <option value="xianxia">仙侠</option>
-            <option value="urban">都市</option>
-            <option value="horror">恐怖</option>
-            <option value="romance-zh">言情</option>
-            <option value="fantasy">Fantasy</option>
-            <option value="thriller">Thriller</option>
-            <option value="romance-en">Romance</option>
-            <option value="scifi">Sci-Fi</option>
-            <option value="mystery">Mystery</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="generateChapterSynopsis()" class="btn-ink btn-sm" id="btn-synopsis">✦ 生成章节梗概</button>
-      <div id="synopsis-result" class="result-box"></div>
-    </div>
-    <div id="write-progress" class="progress-indicator"></div>
-    <div id="write-result" class="result-box"></div>
+      </section>
 
-    <!-- Chapter Preview -->
-    <div id="chapter-preview" class="chapter-preview" style="display:none">
-      <h3 class="sub-title">最新章节预览</h3>
-      <div id="chapter-title-edit" style="display:flex;gap:8px;margin-bottom:8px">
-        <input type="text" id="chapter-title-input" class="input-field" placeholder="章节标题" style="flex:1">
-        <button onclick="saveChapterTitle()" class="btn-ink btn-sm" id="btn-save-title">保存标题</button>
-      </div>
-      <div id="chapter-text" class="chapter-text-content"></div>
-      <div class="btn-row" style="margin-top:8px">
-        <button onclick="editChapterContent()" class="btn-ghost btn-sm" id="btn-edit-chapter">编辑内容</button>
-        <button onclick="saveChapterContent()" class="btn-ink btn-sm" id="btn-save-chapter" style="display:none">保存内容</button>
-        <button onclick="cancelChapterEdit()" class="btn-ghost btn-sm" id="btn-cancel-edit" style="display:none">取消</button>
-      </div>
-      <textarea id="chapter-edit-textarea" class="input-field" rows="15" style="display:none;margin-top:8px" placeholder="编辑章节正文..."></textarea>
-      <div id="chapter-stats" class="chapter-meta"></div>
-    </div>
-  </section>
+      <!-- ========== 落笔：写作 ========== -->
+      <section id="panel-write" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">落笔成章</h2>
+          <p class="panel-desc">九重炼章流水线：构思→计划→编排→书写→观察→反思→润色→审查→修订</p>
+        </div>
 
-  <!-- ========== 审阅：质量审计 ========== -->
-  <section id="panel-audit" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">审阅定稿</h2>
-      <p class="panel-desc">33维质量审计 + 修订引擎</p>
-    </div>
+        <!-- Pipeline Steps Visualization -->
+        <div id="pipeline-steps" class="pipeline-track">
+          <div class="step-node" data-agent="Architect">
+            <div class="step-icon">🏛</div>
+            <div class="step-label">构思</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Planner">
+            <div class="step-icon">📋</div>
+            <div class="step-label">计划</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Composer">
+            <div class="step-icon">🎼</div>
+            <div class="step-label">编排</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Writer">
+            <div class="step-icon">✒️</div>
+            <div class="step-label">书写</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Observer">
+            <div class="step-icon">👁</div>
+            <div class="step-label">观察</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Reflector">
+            <div class="step-icon">🪞</div>
+            <div class="step-label">反思</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Normalizer">
+            <div class="step-icon">⚖</div>
+            <div class="step-label">润色</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Auditor">
+            <div class="step-icon">🔍</div>
+            <div class="step-label">审查</div>
+            <div class="step-bar"></div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-node" data-agent="Reviser">
+            <div class="step-icon">🔧</div>
+            <div class="step-label">修订</div>
+            <div class="step-bar"></div>
+          </div>
+        </div>
 
-    <div class="form-grid">
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="audit-book" class="input-field"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">章节号（留空=最后一章）</label>
-        <input type="number" id="audit-chapter" class="input-field" placeholder="自动">
-      </div>
-      <div class="form-group">
-        <label class="form-label">API Key</label>
-        <input type="password" id="audit-api-key" class="input-field shared-api-key" placeholder="sk-xxx">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Base URL</label>
-        <input type="text" id="audit-base-url" class="input-field shared-base-url" value="https://api.openai.com/v1">
-      </div>
-      <div class="form-group">
-        <label class="form-label">模型</label>
-        <input type="text" id="audit-model-id" class="input-field shared-model-id" value="gpt-4o">
-      </div>
-    </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">选择书籍</label>
+              <select id="write-book" class="input-field"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">模式</label>
+              <select id="write-mode" class="input-field">
+                <option value="next">完整九重炼章</option>
+                <option value="draft">草稿速写（4 Agent）</option>
+                <option value="batch">批量炼章（多章节）</option>
+              </select>
+            </div>
+            <div class="form-group" id="batch-count-group" style="display:none">
+              <label class="form-label">章数</label>
+              <input type="number" id="write-batch-count" class="input-field" value="3" min="1" max="20">
+            </div>
+          </div>
 
-    <button onclick="auditChapter()" class="btn-ink">审阅</button>
-    <div id="audit-progress" class="progress-indicator"></div>
+          <div class="btn-row">
+            <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
+            <button onclick="startBatchWrite()" class="btn-ink btn-secondary" id="btn-batch">🔥 批量炼章</button>
+            <button onclick="cancelWrite()" class="btn-ink btn-secondary" id="btn-cancel" style="display:none">✗ 取消炼章</button>
+            <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
+          </div>
+          <div id="write-progress" class="progress-indicator"></div>
+          <div id="write-result" class="result-box"></div>
+        </div>
 
-    <!-- Audit Result Visualization -->
-    <div id="audit-result-area" style="display:none">
-      <div class="audit-summary-bar">
-        <div class="audit-score-display">
-          <span class="audit-score-label">总分</span>
-          <span id="audit-total-score" class="audit-score-value">0.0</span>
-          <span class="audit-score-max">/10</span>
+        <!-- Chapter Preview -->
+        <div id="chapter-preview" class="chapter-preview" style="display:none">
+          <h3 class="sub-title">最新章节预览</h3>
+          <div id="chapter-title-edit" style="display:flex;gap:8px;margin-bottom:8px">
+            <input type="text" id="chapter-title-input" class="input-field" placeholder="章节标题" style="flex:1">
+            <button onclick="saveChapterTitle()" class="btn-ink btn-sm" id="btn-save-title">保存标题</button>
+          </div>
+          <div id="chapter-text" class="chapter-text-content"></div>
+          <div class="btn-row" style="margin-top:8px">
+            <button onclick="editChapterContent()" class="btn-ghost btn-sm" id="btn-edit-chapter">编辑内容</button>
+            <button onclick="saveChapterContent()" class="btn-ink btn-sm" id="btn-save-chapter" style="display:none">保存内容</button>
+            <button onclick="cancelChapterEdit()" class="btn-ghost btn-sm" id="btn-cancel-edit" style="display:none">取消</button>
+          </div>
+          <textarea id="chapter-edit-textarea" class="input-field" rows="15" style="display:none;margin-top:8px" placeholder="编辑章节正文..."></textarea>
+          <div id="chapter-stats" class="chapter-meta"></div>
         </div>
-        <div id="audit-pass-badge" class="pass-badge">未通过</div>
-      </div>
+      </section>
 
-      <!-- Dimension Score Grid -->
-      <div id="audit-dim-grid" class="dim-grid"></div>
+      <!-- ========== 工具箱 ========== -->
+      <section id="panel-toolbox" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">工具箱</h2>
+          <p class="panel-desc">辅助生成工具、风格配置、人物台账、伏笔台账</p>
+        </div>
 
-      <!-- Critical Issues -->
-      <div id="audit-issues" class="issues-section"></div>
-    </div>
-  </section>
+        <!-- Prompt-driven Outline Generation -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">✦</span> 提示词生成大纲</div>
+          <div class="form-grid">
+            <div class="form-group wide">
+              <label class="form-label">创意提示词</label>
+              <textarea id="outline-gen-prompt" class="input-field" rows="3" placeholder="描述你的小说创意，如：一个普通少年在灵气复苏的世界中觉醒独特天赋..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">题材</label>
+              <select id="outline-gen-genre" class="input-field">
+                <option value="xuanhuan">玄幻</option>
+                <option value="xianxia">仙侠</option>
+                <option value="urban">都市</option>
+                <option value="horror">恐怖</option>
+                <option value="romance-zh">言情</option>
+                <option value="fantasy">Fantasy</option>
+                <option value="thriller">Thriller</option>
+                <option value="romance-en">Romance</option>
+                <option value="scifi">Sci-Fi</option>
+                <option value="mystery">Mystery</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="generateOutlineFromPrompt()" class="btn-ink btn-sm" id="btn-outline-gen">✦ 生成大纲</button>
+          <div id="outline-gen-result" class="result-box"></div>
+        </div>
 
-  <!-- ========== 世界：状态查看 ========== -->
-  <section id="panel-state" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">世界观</h2>
-      <p class="panel-desc">角色、世界观、悬念、时间线状态</p>
-    </div>
+        <!-- Volume Outline Generation -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📖</span> 卷纲生成</div>
+          <div class="form-grid">
+            <div class="form-group wide">
+              <label class="form-label">补充提示词（可选）</label>
+              <textarea id="volume-gen-prompt" class="input-field" rows="2" placeholder="对卷纲结构的补充要求，如：每卷10章、升级节奏要快..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">题材</label>
+              <select id="volume-gen-genre" class="input-field">
+                <option value="xuanhuan">玄幻</option>
+                <option value="xianxia">仙侠</option>
+                <option value="urban">都市</option>
+                <option value="horror">恐怖</option>
+                <option value="romance-zh">言情</option>
+                <option value="fantasy">Fantasy</option>
+                <option value="thriller">Thriller</option>
+                <option value="romance-en">Romance</option>
+                <option value="scifi">Sci-Fi</option>
+                <option value="mystery">Mystery</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="generateVolumeOutline()" class="btn-ink btn-sm" id="btn-volume-gen">✦ 生成卷纲</button>
+          <div id="volume-gen-result" class="result-box"></div>
+        </div>
 
-    <div class="form-grid">
-      <div class="form-group">
-        <label class="form-label">选择书籍</label>
-        <select id="state-book" class="input-field"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">类型</label>
-        <select id="state-type" class="input-field">
-          <option value="all">全部</option>
-          <option value="characters">角色</option>
-          <option value="world">世界观</option>
-          <option value="hooks">悬念</option>
-          <option value="timeline">时间线</option>
-        </select>
-      </div>
-    </div>
+        <!-- Chapter Synopsis Generation -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📑</span> 章节梗概生成</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">参考来源</label>
+              <select id="synopsis-source-type" class="input-field">
+                <option value="outline">大纲</option>
+                <option value="volume">卷纲</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">书籍（可选，自动加载大纲）</label>
+              <select id="synopsis-book" class="input-field"></select>
+            </div>
+            <div class="form-group wide">
+              <label class="form-label">大纲/卷纲内容（未选书籍时手动输入）</label>
+              <textarea id="synopsis-source" class="input-field" rows="4" placeholder="粘贴大纲或卷纲内容，或选择书籍自动加载..."></textarea>
+            </div>
+            <div class="form-group wide">
+              <label class="form-label">补充提示词（可选）</label>
+              <textarea id="synopsis-prompt" class="input-field" rows="2" placeholder="对章节梗概的补充要求，如：每章必须有战斗场景、节奏要紧凑..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">题材</label>
+              <select id="synopsis-genre" class="input-field">
+                <option value="xuanhuan">玄幻</option>
+                <option value="xianxia">仙侠</option>
+                <option value="urban">都市</option>
+                <option value="horror">恐怖</option>
+                <option value="romance-zh">言情</option>
+                <option value="fantasy">Fantasy</option>
+                <option value="thriller">Thriller</option>
+                <option value="romance-en">Romance</option>
+                <option value="scifi">Sci-Fi</option>
+                <option value="mystery">Mystery</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="generateChapterSynopsis()" class="btn-ink btn-sm" id="btn-synopsis">✦ 生成章节梗概</button>
+          <div id="synopsis-result" class="result-box"></div>
+        </div>
 
-    <button onclick="loadState()" class="btn-ghost">查看</button>
+        <!-- Chapter Revision -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🔧</span> 章节修改</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">章节号</label>
+              <input type="number" id="revise-chapter-num" class="input-field" min="1" placeholder="如：1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">参考来源</label>
+              <select id="revise-source" class="input-field">
+                <option value="outline">大纲</option>
+                <option value="volume">卷纲</option>
+              </select>
+            </div>
+            <div class="form-group wide">
+              <label class="form-label">修改提示词</label>
+              <textarea id="revise-prompt" class="input-field" rows="2" placeholder="描述如何修改该章节，如：增加角色内心挣扎、加快节奏、删减冗余描写..."></textarea>
+            </div>
+          </div>
+          <button onclick="reviseChapter()" class="btn-ink btn-sm" id="btn-revise">✦ 修改章节</button>
+          <div id="revise-result" class="result-box"></div>
+        </div>
 
-    <!-- Progress Stats -->
-    <div id="state-stats" class="stats-row" style="display:none">
-      <div class="stat-card"><div class="stat-num" id="stat-chapters">0</div><div class="stat-label">章节</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-words">0</div><div class="stat-label">总字数</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-audited">0</div><div class="stat-label">已审计</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-passed">0</div><div class="stat-label">已通过</div></div>
-    </div>
+        <!-- AI Trace Detection -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🕵</span> 去AI痕</div>
+          <p style="color:var(--paper-dark);font-size:13px;margin-bottom:12px">检测并去除AI写作痕迹，需先选择书籍（在落笔面板选择）</p>
+          <div class="btn-row">
+            <button onclick="generateOutlineSynopsis()" class="btn-ink btn-sm" id="btn-outline">大纲梗概</button>
+            <button onclick="generateVolumeSynopsis()" class="btn-ink btn-sm" id="btn-volume">卷纲梗概</button>
+            <button onclick="detectAiTrace()" class="btn-ink btn-sm" id="btn-ai-trace">去AI痕</button>
+          </div>
+        </div>
 
-    <pre id="state-content" class="state-scroll"></pre>
-  </section>
+        <!-- Writing Style -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">✒</span> 風格淬炼</div>
+          <div class="form-group">
+            <label class="form-label">选择项目</label>
+            <select id="style-book" class="input-field"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">风格名称</label>
+            <input type="text" id="style-name" class="input-field" placeholder="如：古龙风、金庸风">
+          </div>
+          <div class="form-group">
+            <label class="form-label">风格描述</label>
+            <textarea id="style-desc" class="input-field" rows="2" placeholder="对写作风格的总体描述"></textarea>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">用词风格</label>
+              <input type="text" id="style-vocabulary" class="input-field" placeholder="偏好词汇、频率">
+            </div>
+            <div class="form-group">
+              <label class="form-label">句式结构</label>
+              <input type="text" id="style-sentence" class="input-field" placeholder="典型句长、结构">
+            </div>
+            <div class="form-group">
+              <label class="form-label">节奏偏好</label>
+              <input type="text" id="style-pacing" class="input-field" placeholder="叙事节奏">
+            </div>
+            <div class="form-group">
+              <label class="form-label">对话风格</label>
+              <input type="text" id="style-dialogue" class="input-field" placeholder="对话标签、模式">
+            </div>
+            <div class="form-group">
+              <label class="form-label">描写风格</label>
+              <input type="text" id="style-description" class="input-field" placeholder="描写密度、焦点">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">参考样例</label>
+            <textarea id="style-sample" class="input-field" rows="4" placeholder="粘贴一段参考文本，供 LLM 学习风格"></textarea>
+          </div>
+          <button onclick="saveStyle()" class="btn-ink btn-sm">保存风格</button>
+          <div id="style-result" class="result-box"></div>
+        </div>
 
-  <!-- ========== 进度：写作统计 ========== -->
-  <section id="panel-progress" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">炼章纪事</h2>
-      <p class="panel-desc">写作进度与质量统计</p>
-    </div>
-    <div class="form-group">
-      <label class="form-label">选择项目</label>
-      <select id="progress-book" class="input-field"></select>
-    </div>
-    <div id="progress-summary" style="display:none">
-      <div style="display:flex;gap:16px;margin-bottom:16px">
-        <div class="stat-card" id="stat-chapters"><div class="stat-value">0</div><div class="stat-label">章节</div></div>
-        <div class="stat-card" id="stat-words"><div class="stat-value">0</div><div class="stat-label">字数</div></div>
-        <div class="stat-card" id="stat-score"><div class="stat-value">0</div><div class="stat-label">平均分</div></div>
-        <div class="stat-card" id="stat-time"><div class="stat-value">0s</div><div class="stat-label">总耗时</div></div>
-      </div>
-      <table id="progress-table" style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="border-bottom:2px solid #c0392b">
-          <th style="padding:6px;text-align:left">章号</th>
-          <th style="padding:6px;text-align:left">标题</th>
-          <th style="padding:6px;text-align:right">字数</th>
-          <th style="padding:6px;text-align:center">审计</th>
-          <th style="padding:6px;text-align:right">分数</th>
-          <th style="padding:6px;text-align:right">耗时</th>
-          <th style="padding:6px;text-align:center">对比</th>
-        </tr></thead>
-        <tbody id="progress-tbody"></tbody>
-      </table>
-    </div>
-    <button onclick="loadProgress()" class="btn btn-primary" style="margin-top:12px">刷新进度</button>
-  </section>
+        <!-- Characters -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">👤</span> 人物台账</div>
+          <div class="form-group">
+            <label class="form-label">选择项目</label>
+            <select id="characters-book" class="input-field"></select>
+          </div>
+          <div class="btn-row" style="margin-bottom:12px">
+            <button onclick="loadCharacters()" class="btn-ghost btn-sm">刷新 ↻</button>
+          </div>
+          <div id="characters-list" class="ledger-list">
+            <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载角色列表</p>
+          </div>
+          <div class="sub-section">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">角色名</label>
+                <input type="text" id="char-edit-name" class="input-field" placeholder="角色名">
+              </div>
+              <div class="form-group">
+                <label class="form-label">角色类型</label>
+                <select id="char-edit-role" class="input-field">
+                  <option value="主角">主角</option>
+                  <option value="配角">配角</option>
+                  <option value="反派">反派</option>
+                  <option value="中立">中立</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">实力等级</label>
+                <input type="text" id="char-edit-power" class="input-field" placeholder="如：筑基中期">
+              </div>
+              <div class="form-group">
+                <label class="form-label">当前位置</label>
+                <input type="text" id="char-edit-location" class="input-field" placeholder="如：天枢城">
+              </div>
+            </div>
+            <div class="btn-row">
+              <button onclick="saveCharacter()" class="btn-ink btn-sm">保存角色</button>
+              <button onclick="deleteCharacter()" class="btn-ink btn-sm btn-danger">删除角色</button>
+            </div>
+            <div id="characters-result" class="result-box"></div>
+          </div>
+        </div>
 
-  <!-- ========== 炼炉：配置 ========== -->
-  <section id="panel-config" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">炼炉调校</h2>
-      <p class="panel-desc">流水线参数、Agent 开关、写作风格配置</p>
-    </div>
+        <!-- Hooks -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🪝</span> 伏笔台账</div>
+          <div class="form-group">
+            <label class="form-label">选择项目</label>
+            <select id="hooks-book" class="input-field"></select>
+          </div>
+          <div class="btn-row" style="margin-bottom:12px">
+            <button onclick="loadHooks()" class="btn-ghost btn-sm">刷新 ↻</button>
+          </div>
+          <div id="hooks-list" class="ledger-list">
+            <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载伏笔列表</p>
+          </div>
+          <div class="sub-section">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">伏笔ID</label>
+                <input type="text" id="hook-edit-id" class="input-field" placeholder="如：mysterious-sword">
+              </div>
+              <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea id="hook-edit-desc" class="input-field" rows="2" placeholder="伏笔描述"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">优先级</label>
+                <select id="hook-edit-priority" class="input-field">
+                  <option value="high">高</option>
+                  <option value="medium">中</option>
+                  <option value="low">低</option>
+                </select>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button onclick="updateHook()" class="btn-ink btn-sm">更新伏笔</button>
+              <button onclick="deleteHook()" class="btn-ink btn-sm btn-danger">删除伏笔</button>
+            </div>
+            <div id="hooks-result" class="result-box"></div>
+          </div>
+        </div>
 
-    <div class="config-section">
-      <h3 class="sub-title">章节参数</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">最小字数</label>
-          <input type="number" id="cfg-min-words" class="input-field" value="2000">
+        <!-- Progress (World State + Writing Stats) -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🌐</span> 世界观与进度</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">选择书籍</label>
+              <select id="state-book" class="input-field"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">类型</label>
+              <select id="state-type" class="input-field">
+                <option value="all">全部</option>
+                <option value="characters">角色</option>
+                <option value="world">世界观</option>
+                <option value="hooks">悬念</option>
+                <option value="timeline">时间线</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button onclick="loadState()" class="btn-ghost btn-sm">查看</button>
+            <button onclick="loadProgress()" class="btn-ghost btn-sm">刷新进度</button>
+          </div>
+          <div id="state-stats" class="stats-row" style="display:none">
+            <div class="stat-card"><div class="stat-num" id="stat-chapters">0</div><div class="stat-label">章节</div></div>
+            <div class="stat-card"><div class="stat-num" id="stat-words">0</div><div class="stat-label">总字数</div></div>
+            <div class="stat-card"><div class="stat-num" id="stat-audited">0</div><div class="stat-label">已审计</div></div>
+            <div class="stat-card"><div class="stat-num" id="stat-passed">0</div><div class="stat-label">已通过</div></div>
+          </div>
+          <pre id="state-content" class="state-scroll"></pre>
+          <div id="progress-summary" style="display:none;margin-top:16px">
+            <div style="display:flex;gap:16px;margin-bottom:16px">
+              <div class="stat-card" id="pstat-chapters"><div class="stat-value">0</div><div class="stat-label">章节</div></div>
+              <div class="stat-card" id="pstat-words"><div class="stat-value">0</div><div class="stat-label">字数</div></div>
+              <div class="stat-card" id="pstat-score"><div class="stat-value">0</div><div class="stat-label">平均分</div></div>
+              <div class="stat-card" id="pstat-time"><div class="stat-value">0s</div><div class="stat-label">总耗时</div></div>
+            </div>
+            <table id="progress-table" style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead><tr style="border-bottom:2px solid #c0392b">
+                <th style="padding:6px;text-align:left">章号</th>
+                <th style="padding:6px;text-align:left">标题</th>
+                <th style="padding:6px;text-align:right">字数</th>
+                <th style="padding:6px;text-align:center">审计</th>
+                <th style="padding:6px;text-align:right">分数</th>
+                <th style="padding:6px;text-align:right">耗时</th>
+                <th style="padding:6px;text-align:center">对比</th>
+              </tr></thead>
+              <tbody id="progress-tbody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">最大字数</label>
-          <input type="number" id="cfg-max-words" class="input-field" value="4000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">审计通过阈值</label>
-          <input type="number" id="cfg-audit-threshold" class="input-field" value="7.0" step="0.1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">最大修订轮次</label>
-          <input type="number" id="cfg-max-revisions" class="input-field" value="1">
-        </div>
-      </div>
-    </div>
+      </section>
 
-    <div class="config-section">
-      <h3 class="sub-title">Agent 开关</h3>
-      <div class="toggle-grid">
-        <div class="toggle-item">
-          <label class="toggle-label">构思 Architect</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runArchitect">✓</button>
+      <!-- ========== 审阅：质量审计 + 回溯 ========== -->
+      <section id="panel-audit" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">审阅定稿</h2>
+          <p class="panel-desc">33维质量审计 + 修订引擎 + 状态回溯</p>
         </div>
-        <div class="toggle-item">
-          <label class="toggle-label">计划 Planner</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runPlanner">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">编排 Composer</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runComposer">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">书写 Writer</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runWriter">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">观察 Observer</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runObserver">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">反思 Reflector</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReflector">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">润色 Normalizer</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runNormalizer">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">审查 Auditor</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runAuditor">✓</button>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label">修订 Reviser</label>
-          <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReviser">✓</button>
-        </div>
-      </div>
-    </div>
 
-    <!-- API 配置区 -->
-    <div class="config-section">
-      <h3 class="sub-title">API 配置</h3>
-      <div class="form-group" style="margin-bottom:8px">
-        <label class="form-label">预设切换</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select id="cfg-preset" class="input-field" style="flex:1" onchange="applyPreset(this.value)">
-            <option value="">自定义</option>
-            <option value="economy">💰 省钱模式</option>
-            <option value="quality">👑 高质量模式</option>
-            <option value="fast">⚡ 快速模式</option>
-          </select>
-          <button onclick="showSampleConfig()" class="btn-ink" style="padding:6px 12px;font-size:12px">参考样例</button>
-        </div>
-        <div id="sample-config-box" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.08);font-size:12px;line-height:1.6;color:rgba(255,255,255,0.6)"></div>
-      </div>
-      <h4 style="font-size:13px;color:var(--accent);margin:8px 0 6px">全局默认</h4>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Provider</label>
-          <select id="cfg-global-provider" class="input-field">
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="custom">自定义</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Model</label>
-          <input type="text" id="cfg-global-model" class="input-field" value="gpt-4o">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Base URL</label>
-          <input type="text" id="cfg-global-baseurl" class="input-field" value="https://api.openai.com/v1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">API Key</label>
-          <input type="password" id="cfg-global-apikey" class="input-field" placeholder="sk-...">
-        </div>
-      </div>
-      <h4 style="font-size:13px;color:var(--accent);margin:10px 0 6px">Agent 独立配置 <span style="color:rgba(255,255,255,0.3);font-size:11px">留空则跟随全局</span></h4>
-      <div id="agent-api-configs" style="display:flex;flex-direction:column;gap:4px"></div>
-    </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">选择书籍</label>
+              <select id="audit-book" class="input-field"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">章节号（留空=最后一章）</label>
+              <input type="number" id="audit-chapter" class="input-field" placeholder="自动">
+            </div>
+          </div>
 
-    <button onclick="saveConfig()" class="btn-ink">保存配置</button>
-    <div id="config-result" class="result-box"></div>
-  </section>
+          <button onclick="auditChapter()" class="btn-ink">审阅</button>
+          <div id="audit-progress" class="progress-indicator"></div>
 
-  <!-- ========== 風格：写作风格导入 ========== -->
-  <section id="panel-style" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">風格淬炼</h2>
-      <p class="panel-desc">导入写作风格，克隆大师笔触</p>
-    </div>
-    <div class="form-group">
-      <label class="form-label">选择项目</label>
-      <select id="style-book" class="input-field"></select>
-    </div>
-    <div class="config-section">
-      <div class="form-group">
-        <label class="form-label">风格名称</label>
-        <input type="text" id="style-name" class="input-field" placeholder="如：古龙风、金庸风">
-      </div>
-      <div class="form-group">
-        <label class="form-label">风格描述</label>
-        <textarea id="style-desc" class="input-field" rows="2" placeholder="对写作风格的总体描述"></textarea>
-      </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">用词风格</label>
-          <input type="text" id="style-vocabulary" class="input-field" placeholder="偏好词汇、频率">
-        </div>
-        <div class="form-group">
-          <label class="form-label">句式结构</label>
-          <input type="text" id="style-sentence" class="input-field" placeholder="典型句长、结构">
-        </div>
-        <div class="form-group">
-          <label class="form-label">节奏偏好</label>
-          <input type="text" id="style-pacing" class="input-field" placeholder="叙事节奏">
-        </div>
-        <div class="form-group">
-          <label class="form-label">对话风格</label>
-          <input type="text" id="style-dialogue" class="input-field" placeholder="对话标签、模式">
-        </div>
-        <div class="form-group">
-          <label class="form-label">描写风格</label>
-          <input type="text" id="style-description" class="input-field" placeholder="描写密度、焦点">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">参考样例</label>
-        <textarea id="style-sample" class="input-field" rows="4" placeholder="粘贴一段参考文本，供 LLM 学习风格"></textarea>
-      </div>
-    </div>
-    <button onclick="saveStyle()" class="btn-ink">保存风格</button>
-    <div id="style-result" class="result-box"></div>
-  </section>
+          <!-- Audit Result Visualization -->
+          <div id="audit-result-area" style="display:none">
+            <div class="audit-summary-bar">
+              <div class="audit-score-display">
+                <span class="audit-score-label">总分</span>
+                <span id="audit-total-score" class="audit-score-value">0.0</span>
+                <span class="audit-score-max">/10</span>
+              </div>
+              <div id="audit-pass-badge" class="pass-badge">未通过</div>
+            </div>
 
-  <!-- ========== 回溯：状态备份回滚 ========== -->
-  <section id="panel-rollback" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">回溯寻真</h2>
-      <p class="panel-desc">TruthState 增量备份与回滚，安全守护世界观一致性</p>
-    </div>
-    <div class="form-group">
-      <label class="form-label">选择项目</label>
-      <select id="rollback-book" class="input-field"></select>
-    </div>
-    <div class="btn-row">
-      <button onclick="listBackups()" class="btn-ink btn-sm">列出备份</button>
-      <button onclick="rollbackState()" class="btn-ink btn-secondary btn-sm">回滚</button>
-    </div>
-    <div id="rollback-list" style="margin-top:12px"></div>
-    <div id="rollback-result" class="result-box"></div>
-  </section>
+            <!-- Dimension Score Grid -->
+            <div id="audit-dim-grid" class="dim-grid"></div>
 
-  <!-- ========== 人物台账 ========== -->
-  <section id="panel-characters" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">人物台账</h2>
-      <p class="panel-desc">角色档案管理 — 查看、编辑、删除角色</p>
-      <button onclick="loadCharacters()" class="btn-ghost btn-sm">刷新 ↻</button>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">选择项目</label>
-      <select id="characters-book" class="input-field"></select>
-    </div>
-
-    <!-- Character List -->
-    <div id="characters-list" class="ledger-list" style="margin-top:16px">
-      <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载角色列表</p>
-    </div>
-
-    <!-- Character Edit Form -->
-    <div class="sub-section">
-      <h3 class="sub-title">编辑角色</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">角色名</label>
-          <input type="text" id="char-edit-name" class="input-field" placeholder="角色名">
+            <!-- Critical Issues -->
+            <div id="audit-issues" class="issues-section"></div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">角色类型</label>
-          <select id="char-edit-role" class="input-field">
-            <option value="主角">主角</option>
-            <option value="配角">配角</option>
-            <option value="反派">反派</option>
-            <option value="中立">中立</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">实力等级</label>
-          <input type="text" id="char-edit-power" class="input-field" placeholder="如：筑基中期">
-        </div>
-        <div class="form-group">
-          <label class="form-label">当前位置</label>
-          <input type="text" id="char-edit-location" class="input-field" placeholder="如：天枢城">
-        </div>
-      </div>
-      <div class="btn-row">
-        <button onclick="saveCharacter()" class="btn-ink btn-sm">保存角色</button>
-        <button onclick="deleteCharacter()" class="btn-ink btn-sm btn-danger">删除角色</button>
-      </div>
-      <div id="characters-result" class="result-box"></div>
-    </div>
-  </section>
 
-  <!-- ========== 伏笔台账 ========== -->
-  <section id="panel-hooks" class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title">伏笔台账</h2>
-      <p class="panel-desc">悬念/伏笔管理 — 查看、编辑、删除伏笔</p>
-      <button onclick="loadHooks()" class="btn-ghost btn-sm">刷新 ↻</button>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">选择项目</label>
-      <select id="hooks-book" class="input-field"></select>
-    </div>
-
-    <!-- Hooks List -->
-    <div id="hooks-list" class="ledger-list" style="margin-top:16px">
-      <p style="color:var(--paper-dark);text-align:center;padding:24px">选择项目后加载伏笔列表</p>
-    </div>
-
-    <!-- Hook Edit Form -->
-    <div class="sub-section">
-      <h3 class="sub-title">编辑伏笔</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">伏笔ID</label>
-          <input type="text" id="hook-edit-id" class="input-field" placeholder="如：mysterious-sword">
+        <!-- Rollback -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">↩</span> 回溯寻真</div>
+          <p style="color:var(--paper-dark);font-size:13px;margin-bottom:12px">TruthState 增量备份与回滚，安全守护世界观一致性</p>
+          <div class="form-group">
+            <label class="form-label">选择项目</label>
+            <select id="rollback-book" class="input-field"></select>
+          </div>
+          <div class="btn-row">
+            <button onclick="listBackups()" class="btn-ink btn-sm">列出备份</button>
+            <button onclick="rollbackState()" class="btn-ink btn-secondary btn-sm">回滚</button>
+          </div>
+          <div id="rollback-list" style="margin-top:12px"></div>
+          <div id="rollback-result" class="result-box"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">描述</label>
-          <textarea id="hook-edit-desc" class="input-field" rows="2" placeholder="伏笔描述"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">优先级</label>
-          <select id="hook-edit-priority" class="input-field">
-            <option value="high">高</option>
-            <option value="medium">中</option>
-            <option value="low">低</option>
-          </select>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button onclick="updateHook()" class="btn-ink btn-sm">更新伏笔</button>
-        <button onclick="deleteHook()" class="btn-ink btn-sm btn-danger">删除伏笔</button>
-      </div>
-      <div id="hooks-result" class="result-box"></div>
-    </div>
-  </section>
+      </section>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="footer-ink-line"></div>
-    <p class="footer-text">墨阁 NovelForge · 九重炼章 · 三十三维审计 · 十流派 · <span id="footer-version"></span></p>
-  </footer>
-</div>
+      <!-- ========== 设置 ========== -->
+      <section id="panel-config" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">炼炉调校</h2>
+          <p class="panel-desc">全局 API 配置、Agent 独立配置、预设切换、章节参数</p>
+        </div>
+
+        <!-- Global API Config -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🔑</span> 全局 API 配置</div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label">预设切换</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="cfg-preset" class="input-field" style="flex:1" onchange="applyPreset(this.value)">
+                <option value="">自定义</option>
+                <option value="economy">💰 省钱模式</option>
+                <option value="quality">👑 高质量模式</option>
+                <option value="fast">⚡ 快速模式</option>
+              </select>
+              <button onclick="showSampleConfig()" class="btn-ink" style="padding:6px 12px;font-size:12px">参考样例</button>
+            </div>
+            <div id="sample-config-box" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.08);font-size:12px;line-height:1.6;color:rgba(255,255,255,0.6)"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Provider</label>
+              <select id="cfg-global-provider" class="input-field">
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="custom">自定义</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Model</label>
+              <input type="text" id="cfg-global-model" class="input-field" value="gpt-4o">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Base URL</label>
+              <input type="text" id="cfg-global-baseurl" class="input-field" value="https://api.openai.com/v1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">API Key</label>
+              <input type="password" id="cfg-global-apikey" class="input-field" placeholder="sk-...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Config Cards -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🤖</span> Agent 独立配置</div>
+          <p style="color:var(--paper-dark);font-size:12px;margin-bottom:12px">点击展开配置，留空则跟随全局默认</p>
+          <div id="agent-api-configs"></div>
+        </div>
+
+        <!-- Agent Toggles -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">🔌</span> Agent 开关</div>
+          <div class="toggle-grid">
+            <div class="toggle-item">
+              <label class="toggle-label">构思 Architect</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runArchitect">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">计划 Planner</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runPlanner">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">编排 Composer</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runComposer">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">书写 Writer</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runWriter">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">观察 Observer</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runObserver">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">反思 Reflector</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReflector">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">润色 Normalizer</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runNormalizer">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">审查 Auditor</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runAuditor">✓</button>
+            </div>
+            <div class="toggle-item">
+              <label class="toggle-label">修订 Reviser</label>
+              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReviser">✓</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter Parameters -->
+        <div class="card">
+          <div class="card-title"><span class="card-icon">📐</span> 章节参数</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">最小字数</label>
+              <input type="number" id="cfg-min-words" class="input-field" value="2000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">最大字数</label>
+              <input type="number" id="cfg-max-words" class="input-field" value="4000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">审计通过阈值</label>
+              <input type="number" id="cfg-audit-threshold" class="input-field" value="7.0" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">最大修订轮次</label>
+              <input type="number" id="cfg-max-revisions" class="input-field" value="1">
+            </div>
+          </div>
+        </div>
+
+        <button onclick="saveConfig()" class="btn-ink">保存配置</button>
+        <div id="config-result" class="result-box"></div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <div class="footer-ink-line"></div>
+        <p class="footer-text">墨阁 NovelForge · 九重炼章 · 三十三维审计 · 十流派 · <span id="footer-version"></span></p>
+      </footer>
+
+    </div><!-- /content-area -->
+  </div><!-- /main-content -->
+</div><!-- /layout -->
 
 <!-- Diff Modal -->
 <div id="diff-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000">
