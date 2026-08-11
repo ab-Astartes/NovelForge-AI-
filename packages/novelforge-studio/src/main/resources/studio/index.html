@@ -66,43 +66,133 @@
     <!-- Content Area -->
     <div class="content-area">
 
-      <!-- ========== 开卷：创建新书 ========== -->
+      <!-- ========== 开卷：创作向导 ========== -->
       <section id="panel-create" class="panel active">
         <div class="panel-header">
           <h2 class="panel-title">开卷有益</h2>
-          <p class="panel-desc">新建一本小说项目，选择流派与题材</p>
+          <p class="panel-desc">从创意到完整大纲，一站式创作向导</p>
         </div>
 
-        <div class="card">
-          <div class="form-grid">
-            <div class="form-group wide">
-              <label class="form-label">书名</label>
-              <input type="text" id="book-title" class="input-field" placeholder="输入小说标题">
-            </div>
-            <div class="form-group">
-              <label class="form-label">题材流派</label>
-              <select id="book-genre" class="input-field">
-                <option value="xuanhuan">玄幻 · 修真升级</option>
-                <option value="xianxia">仙侠 · 仙途飞升</option>
-                <option value="urban">都市 · 逆袭崛起</option>
-                <option value="horror">恐怖 · 诡异求生</option>
-                <option value="romance-zh">言情 · 缱绻情深</option>
-                <option value="fantasy">Fantasy · 西幻征途</option>
-                <option value="thriller">Thriller · 悬疑惊悚</option>
-                <option value="romance-en">Romance · 英伦情缘</option>
-                <option value="scifi">Sci-Fi · 未来纪元</option>
-                <option value="mystery">Mystery · 探案推理</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">作者（可选）</label>
-              <input type="text" id="book-author" class="input-field" placeholder="笔名">
-            </div>
+        <!-- Step Indicator -->
+        <div class="wizard-steps">
+          <div class="wizard-step active" id="wizard-step-1" onclick="wizardGoToStep(1)">
+            <div class="wizard-step-number">1</div>
+            <div class="wizard-step-label">基本信息</div>
           </div>
-
-          <button onclick="createBook()" class="btn-ink">开卷创作</button>
-          <div id="create-result" class="result-box"></div>
+          <div class="wizard-step-line" id="wizard-line-1"></div>
+          <div class="wizard-step" id="wizard-step-2" onclick="wizardGoToStep(2)">
+            <div class="wizard-step-number">2</div>
+            <div class="wizard-step-label">生成大纲</div>
+          </div>
+          <div class="wizard-step-line" id="wizard-line-2"></div>
+          <div class="wizard-step" id="wizard-step-3" onclick="wizardGoToStep(3)">
+            <div class="wizard-step-number">3</div>
+            <div class="wizard-step-label">生成卷纲</div>
+          </div>
         </div>
+
+        <!-- Step 1: Basic Info -->
+        <div class="wizard-content" id="wizard-step-content-1">
+          <div class="card">
+            <div class="card-title"><span class="card-icon">✦</span> 基本信息</div>
+            <div class="form-grid">
+              <div class="form-group wide">
+                <label class="form-label">书名 <span style="color:var(--cinnabar-light)">*</span></label>
+                <input type="text" id="book-title" class="input-field" placeholder="输入小说标题">
+              </div>
+              <div class="form-group">
+                <label class="form-label">题材流派 <span style="color:var(--cinnabar-light)">*</span></label>
+                <select id="book-genre" class="input-field">
+                  <option value="xuanhuan">玄幻 · 修真升级</option>
+                  <option value="xianxia">仙侠 · 仙途飞升</option>
+                  <option value="urban">都市 · 逆袭崛起</option>
+                  <option value="horror">恐怖 · 诡异求生</option>
+                  <option value="romance-zh">言情 · 缱绻情深</option>
+                  <option value="fantasy">Fantasy · 西幻征途</option>
+                  <option value="thriller">Thriller · 悬疑惊悚</option>
+                  <option value="romance-en">Romance · 英伦情缘</option>
+                  <option value="scifi">Sci-Fi · 未来纪元</option>
+                  <option value="mystery">Mystery · 探案推理</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">作者/笔名</label>
+                <input type="text" id="book-author" class="input-field" placeholder="笔名（可选）">
+              </div>
+              <div class="form-group wide">
+                <label class="form-label">创意提示词 <span style="color:var(--cinnabar-light)">*</span></label>
+                <textarea id="book-prompt" class="input-field wizard-textarea-lg" rows="5" placeholder="描述你的小说核心创意，如：一个普通少年在灵气复苏的世界中觉醒独特天赋，却发现背后隐藏着远古文明的秘密..."></textarea>
+              </div>
+              <div class="form-group wide">
+                <label class="form-label">补充设定 <span style="color:var(--paper-dark);font-weight:normal">（可选）</span></label>
+                <textarea id="book-supplement" class="input-field" rows="3" placeholder="世界观设定、特殊规则、角色关系等补充信息..."></textarea>
+              </div>
+            </div>
+            <button onclick="createBookWizard()" class="btn-ink" id="btn-wizard-create">开卷创作</button>
+            <div id="create-result" class="result-box"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Generate Outline -->
+        <div class="wizard-content" id="wizard-step-content-2" style="display:none">
+          <div class="card">
+            <div class="card-title"><span class="card-icon">📝</span> 大纲生成</div>
+
+            <!-- Loading state -->
+            <div id="wizard-outline-loading" class="wizard-loading" style="display:none">
+              <div class="wizard-spinner"></div>
+              <div class="wizard-loading-text">正在构思大纲…</div>
+              <div class="wizard-loading-sub">AI 正在根据你的创意生成小说大纲</div>
+            </div>
+
+            <!-- Result -->
+            <div id="wizard-outline-result" style="display:none">
+              <div class="wizard-info-bar">
+                <span class="wizard-info-label">✦ 书籍已创建</span>
+                <span id="wizard-book-path" class="wizard-info-path"></span>
+              </div>
+              <div class="form-group" style="margin-top:12px">
+                <label class="form-label">大纲内容（可编辑）</label>
+                <textarea id="wizard-outline-text" class="input-field wizard-textarea-lg" rows="16" placeholder="大纲内容将在此显示…"></textarea>
+              </div>
+              <div class="btn-row">
+                <button onclick="wizardSaveOutline()" class="btn-ink btn-sm" id="btn-wizard-save-outline">保存大纲</button>
+                <button onclick="wizardNextStep(3)" class="btn-ink btn-secondary btn-sm">继续深化 →</button>
+              </div>
+            </div>
+
+            <div id="wizard-outline-result-msg" class="result-box"></div>
+          </div>
+        </div>
+
+        <!-- Step 3: Generate Volume Outline -->
+        <div class="wizard-content" id="wizard-step-content-3" style="display:none">
+          <div class="card">
+            <div class="card-title"><span class="card-icon">📖</span> 卷纲生成 <span style="color:var(--paper-dark);font-weight:normal;font-size:13px">（可选）</span></div>
+
+            <!-- Loading state -->
+            <div id="wizard-volume-loading" class="wizard-loading" style="display:none">
+              <div class="wizard-spinner"></div>
+              <div class="wizard-loading-text">正在构思卷纲…</div>
+              <div class="wizard-loading-sub">AI 正在基于大纲生成详细卷纲结构</div>
+            </div>
+
+            <!-- Result -->
+            <div id="wizard-volume-result" style="display:none">
+              <div class="form-group">
+                <label class="form-label">卷纲内容（可编辑）</label>
+                <textarea id="wizard-volume-text" class="input-field wizard-textarea-lg" rows="16" placeholder="卷纲内容将在此显示…"></textarea>
+              </div>
+              <div class="btn-row">
+                <button onclick="wizardSaveVolume()" class="btn-ink btn-sm" id="btn-wizard-save-volume">保存卷纲</button>
+                <button onclick="wizardGoToWrite()" class="btn-ink btn-secondary btn-sm">开始写作 ✒️</button>
+              </div>
+            </div>
+
+            <div id="wizard-volume-result-msg" class="result-box"></div>
+          </div>
+        </div>
+
       </section>
 
       <!-- ========== 书阁：书库管理 ========== -->

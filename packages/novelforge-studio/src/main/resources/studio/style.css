@@ -1135,6 +1135,153 @@ body {
   letter-spacing: 2px;
 }
 
+/* --- Wizard Steps --- */
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  padding: 20px 0;
+  gap: 0;
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.wizard-step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--paper-dark);
+  background: var(--ink-card);
+  border: 2px solid var(--ink-border);
+  transition: all 0.4s ease;
+}
+
+.wizard-step-label {
+  font-size: 12px;
+  color: var(--paper-dark);
+  letter-spacing: 1px;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+}
+
+.wizard-step.active .wizard-step-number {
+  background: var(--cinnabar);
+  border-color: var(--cinnabar);
+  color: #fff;
+  box-shadow: 0 0 12px var(--cinnabar-glow), 0 0 24px var(--cinnabar-glow);
+}
+
+.wizard-step.active .wizard-step-label {
+  color: var(--cinnabar-light);
+}
+
+.wizard-step.completed .wizard-step-number {
+  background: var(--success-glow);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.wizard-step.completed .wizard-step-label {
+  color: var(--success);
+}
+
+.wizard-step-line {
+  width: 60px;
+  height: 2px;
+  background: var(--ink-border);
+  margin: 0 12px;
+  margin-bottom: 24px;
+  transition: background 0.4s ease;
+  flex-shrink: 0;
+}
+
+.wizard-step-line.active {
+  background: var(--success);
+}
+
+/* --- Wizard Content --- */
+.wizard-content {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.wizard-textarea-lg {
+  min-height: 200px;
+  font-size: 14px;
+  line-height: 1.8;
+  resize: vertical;
+}
+
+/* --- Wizard Loading --- */
+.wizard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+}
+
+.wizard-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--ink-border);
+  border-top: 3px solid var(--cinnabar);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.wizard-loading-text {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--cinnabar-light);
+  letter-spacing: 2px;
+}
+
+.wizard-loading-sub {
+  font-size: 13px;
+  color: var(--paper-dark);
+}
+
+/* --- Wizard Info Bar --- */
+.wizard-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--success-glow);
+  border: 1px solid var(--success);
+  border-radius: var(--radius);
+}
+
+.wizard-info-label {
+  color: var(--success);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wizard-info-path {
+  color: var(--paper-dark);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  background: var(--ink-dark);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
 /* --- Animations --- */
 @keyframes slideInLeft {
   from { transform: translateX(-100%); opacity: 0; }

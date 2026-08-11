@@ -135,6 +135,268 @@ async function createBook() {
   }
 }
 
+// ========== Wizard: Create Book + Generate Outline + Generate Volume Outline ==========
+
+let wizardState = {
+  currentStep: 1,
+  bookPath: '',
+  bookTitle: '',
+  bookGenre: '',
+  outline: '',
+  volumeOutline: ''
+};
+
+function wizardSetStep(step) {
+  wizardState.currentStep = step;
+  // Update step indicators
+  for (let i = 1; i <= 3; i++) {
+    const stepEl = document.getElementById('wizard-step-' + i);
+    const contentEl = document.getElementById('wizard-step-content-' + i);
+    if (!stepEl) continue;
+    if (i === step) {
+      stepEl.classList.add('active');
+      stepEl.classList.remove('completed');
+      if (contentEl) {
+        contentEl.style.display = 'block';
+        contentEl.style.opacity = '0';
+        contentEl.style.transform = 'translateY(12px)';
+        requestAnimationFrame(() => {
+          contentEl.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          contentEl.style.opacity = '1';
+          contentEl.style.transform = 'translateY(0)';
+        });
+      }
+    } else if (i < step) {
+      stepEl.classList.remove('active');
+      stepEl.classList.add('completed');
+      if (contentEl) contentEl.style.display = 'none';
+    } else {
+      stepEl.classList.remove('active');
+      stepEl.classList.remove('completed');
+      if (contentEl) contentEl.style.display = 'none';
+    }
+  }
+  // Update step lines
+  for (let i = 1; i <= 2; i++) {
+    const lineEl = document.getElementById('wizard-line-' + i);
+    if (lineEl) {
+      if (i < step) lineEl.classList.add('active');
+      else lineEl.classList.remove('active');
+    }
+  }
+}
+
+function wizardGoToStep(step) {
+  // Only allow going back to completed steps or current step
+  if (step > wizardState.currentStep) return;
+  wizardSetStep(step);
+}
+
+function wizardNextStep(step) {
+  wizardSetStep(step);
+  // Auto-trigger actions for step 2→3
+  if (step === 3) {
+    wizardGenerateVolume();
+  }
+}
+
+async function createBookWizard() {
+  const title = document.getElementById('book-title').value.trim();
+  const genre = document.getElementById('book-genre').value;
+  const author = document.getElementById('book-author').value.trim();
+  const prompt = document.getElementById('book-prompt').value.trim();
+  const supplement = document.getElementById('book-supplement').value.trim();
+  const resultDiv = document.getElementById('create-result');
+
+  if (!title) { showResult(resultDiv, '请输入书名', true); return; }
+  if (!prompt) { showResult(resultDiv, '请输入创意提示词', true); return; }
+
+  const btn = document.getElementById('btn-wizard-create');
+  btn.disabled = true;
+  btn.textContent = '开卷中…';
+
+  wizardState.bookTitle = title;
+  wizardState.bookGenre = genre;
+
+  try {
+    // Step 1: Create book
+    const createRes = await fetch(authUrl(API + '/api/book/create'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ title, genre, author })
+    });
+    const createData = await createRes.json();
+
+    if (createData.status !== 'created') {
+      showResult(resultDiv, '✗ ' + (createData.error || '创建失败'), true);
+      btn.disabled = false;
+      btn.textContent = '开卷创作';
+      return;
+    }
+
+    wizardState.bookPath = createData.path;
+    loadBooks();
+    populateBookSelects();
+
+    // Move to step 2
+    wizardSetStep(2);
+
+    // Show loading
+    document.getElementById('wizard-outline-loading').style.display = 'flex';
+    document.getElementById('wizard-outline-result').style.display = 'none';
+
+    // Step 2: Generate outline
+    const fullPrompt = supplement ? prompt + '\n\n补充设定：' + supplement : prompt;
+    const outlineRes = await fetch(authUrl(API + '/api/outline/generate'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        prompt: fullPrompt,
+        genre: genre,
+        apiKey: sharedConfig.apiKey,
+        baseUrl: sharedConfig.baseUrl,
+        model: sharedConfig.modelId,
+        path: createData.path
+      })
+    });
+    const outlineData = await outlineRes.json();
+
+    // Hide loading
+    document.getElementById('wizard-outline-loading').style.display = 'none';
+
+    if (outlineData.status === 'ok') {
+      wizardState.outline = outlineData.outline || '';
+      document.getElementById('wizard-outline-text').value = wizardState.outline;
+      document.getElementById('wizard-book-path').textContent = createData.path;
+      document.getElementById('wizard-outline-result').style.display = 'block';
+      showResult(resultDiv, `✦ "${title}" 已开卷，大纲已生成！`, false);
+    } else {
+      document.getElementById('wizard-outline-result').style.display = 'block';
+      document.getElementById('wizard-outline-text').value = '';
+      document.getElementById('wizard-book-path').textContent = createData.path;
+      showResult(document.getElementById('wizard-outline-result-msg'),
+        '✗ 大纲生成失败: ' + (outlineData.error || '未知错误') + '，可手动编辑后保存', true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '开卷创作';
+  }
+}
+
+async function wizardSaveOutline() {
+  const outline = document.getElementById('wizard-outline-text').value;
+  const resultDiv = document.getElementById('wizard-outline-result-msg');
+  const btn = document.getElementById('btn-wizard-save-outline');
+
+  if (!wizardState.bookPath) { showResult(resultDiv, '请先创建书籍', true); return; }
+
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/book/outline'), {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: wizardState.bookPath, outline })
+    });
+    const data = await res.json();
+    if (data.status === 'ok' || data.status === 'saved') {
+      wizardState.outline = outline;
+      showResult(resultDiv, '✦ 大纲已保存 (' + outline.length + ' 字)', false);
+    } else {
+      showResult(resultDiv, '✗ 保存失败: ' + (data.error || '未知错误'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存大纲';
+  }
+}
+
+async function wizardGenerateVolume() {
+  if (!wizardState.bookPath) return;
+
+  const resultDiv = document.getElementById('wizard-volume-result-msg');
+
+  // Show loading
+  document.getElementById('wizard-volume-loading').style.display = 'flex';
+  document.getElementById('wizard-volume-result').style.display = 'none';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/volume/generate'), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        path: wizardState.bookPath,
+        prompt: '',
+        genre: wizardState.bookGenre,
+        apiKey: sharedConfig.apiKey,
+        baseUrl: sharedConfig.baseUrl,
+        model: sharedConfig.modelId
+      })
+    });
+    const data = await res.json();
+
+    document.getElementById('wizard-volume-loading').style.display = 'none';
+
+    if (data.status === 'ok') {
+      wizardState.volumeOutline = data.volumeOutline || '';
+      document.getElementById('wizard-volume-text').value = wizardState.volumeOutline;
+      document.getElementById('wizard-volume-result').style.display = 'block';
+    } else {
+      document.getElementById('wizard-volume-result').style.display = 'block';
+      document.getElementById('wizard-volume-text').value = '';
+      showResult(resultDiv, '✗ 卷纲生成失败: ' + (data.error || '未知错误') + '，可手动编辑后保存', true);
+    }
+  } catch (e) {
+    document.getElementById('wizard-volume-loading').style.display = 'none';
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
+async function wizardSaveVolume() {
+  const volumeOutline = document.getElementById('wizard-volume-text').value;
+  const resultDiv = document.getElementById('wizard-volume-result-msg');
+  const btn = document.getElementById('btn-wizard-save-volume');
+
+  if (!wizardState.bookPath) { showResult(resultDiv, '请先创建书籍', true); return; }
+
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+
+  try {
+    const res = await fetch(authUrl(API + '/api/book/outline'), {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ path: wizardState.bookPath, outline: volumeOutline })
+    });
+    const data = await res.json();
+    if (data.status === 'ok' || data.status === 'saved') {
+      wizardState.volumeOutline = volumeOutline;
+      showResult(resultDiv, '✦ 卷纲已保存 (' + volumeOutline.length + ' 字)', false);
+    } else {
+      showResult(resultDiv, '✗ 保存失败: ' + (data.error || '未知错误'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存卷纲';
+  }
+}
+
+function wizardGoToWrite() {
+  // Set the book in the write panel's select
+  const writeSelect = document.getElementById('write-book');
+  if (writeSelect && wizardState.bookPath) {
+    writeSelect.value = wizardState.bookPath;
+  }
+  showPanel('write');
+}
+
 // ========== Books List ==========
 
 const GENRE_LABELS = {
