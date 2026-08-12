@@ -134,10 +134,85 @@ async function createBook() {
     } else {
       showResult(resultDiv, '? ' + (data.error || '创建失败'), true);
     }
-    }
   } catch (e) {
     showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
   }
+}
+
+
+// ========== SSE Streaming Helper ==========
+async function streamLlmRequest(url, body, resultDiv, textareaId, btnId, btnText) {
+  const btn = btnId ? document.getElementById(btnId) : null;
+  if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
+
+  const textarea = textareaId ? document.getElementById(textareaId) : null;
+  if (textarea) textarea.value = '';
+
+  let fullText = '';
+  try {
+    const res = await fetch(authUrl(API + url), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        let currentEvent = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            const data = line.substring(6);
+            if (currentEvent === 'chunk') {
+              fullText += data.replace(/\\n/g, '\n');
+              if (textarea) textarea.value = fullText;
+              if (resultDiv) {
+                const preview = fullText.substring(0, 500);
+                showResult(resultDiv, '⏳ 生成中...\n\n' + preview + (fullText.length > 500 ? '...' : ''), false);
+              }
+            } else if (currentEvent === 'done') {
+              if (textarea) textarea.value = fullText;
+              if (resultDiv) {
+                const preview = fullText.substring(0, 2000);
+                showResult(resultDiv, '✓ 生成完成\n\n' + preview + (fullText.length > 2000 ? '\n...(完整内容见编辑器)' : ''), false);
+              }
+            } else if (currentEvent === 'error') {
+              if (resultDiv) showResult(resultDiv, '✗ ' + data, true);
+            }
+          }
+        }
+      }
+    }
+    // Handle any remaining data in buffer
+    if (buffer.trim()) {
+      let currentEvent = '';
+      for (const line of buffer.split('\n')) {
+        if (line.startsWith('event: ')) currentEvent = line.substring(7).trim();
+        else if (line.startsWith('data: ') && currentEvent === 'chunk') {
+          fullText += line.substring(6).replace(/\\n/g, '\n');
+          if (textarea) textarea.value = fullText;
+        }
+      }
+    }
+  } catch (e) {
+    if (resultDiv) showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btnText; }
+  }
+  return fullText;
 }
 
 // ========== Wizard: Create Book + Generate Outline + Generate Volume Outline ==========
@@ -243,17 +318,38 @@ async function createBookWizard() {
       document.getElementById('wizard-outline-result').style.display = 'none';
       const fullPrompt = supplement ? prompt + '\n\n补充设定：' + supplement : prompt;
       try {
-        const outlineRes = await fetch(authUrl(API + '/api/outline/generate'), {
+        const outlineRes = await fetch(authUrl(API + '/api/outline/generate/stream'), {
           method: 'POST',
-          headers: authHeaders(),
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt: fullPrompt, genre: genre,
             apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId,
             path: createData.path
           })
         });
-        const outlineData = await outlineRes.json();
-        document.getElementById('wizard-outline-loading').style.display = 'none';
+        // Read SSE stream
+        const dupReader = outlineRes.body.getReader();
+        const dupDecoder = new TextDecoder();
+        let dupBuffer = '';
+        let outlineFullText = '';
+        while (true) {
+          const { done, value } = await dupReader.read();
+          if (done) break;
+          dupBuffer += dupDecoder.decode(value, { stream: true });
+          const parts = dupBuffer.split('\n\n');
+          dupBuffer = parts.pop() || '';
+          for (const part of parts) {
+            let evt = '';
+            for (const line of part.split('\n')) {
+              if (line.startsWith('event: ')) evt = line.substring(7).trim();
+              else if (line.startsWith('data: ') && evt === 'chunk') {
+                outlineFullText += line.substring(6).replace(/\\\\n/g, '\n');
+                document.getElementById('wizard-outline-text').value = outlineFullText;
+              }
+            }
+          }
+        }
+        const outlineData = { status: 'ok', outline: outlineFullText };
         if (outlineData.status === 'ok') {
           wizardState.outline = outlineData.outline || '';
           document.getElementById('wizard-outline-text').value = wizardState.outline;
@@ -293,19 +389,37 @@ async function createBookWizard() {
 
     // Step 2: Generate outline
     const fullPrompt = supplement ? prompt + '\n\n补充设定：' + supplement : prompt;
-    const outlineRes = await fetch(authUrl(API + '/api/outline/generate'), {
+    const outlineRes = await fetch(authUrl(API + '/api/outline/generate/stream'), {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: fullPrompt,
-        genre: genre,
-        apiKey: sharedConfig.apiKey,
-        baseUrl: sharedConfig.baseUrl,
-        model: sharedConfig.modelId,
+        prompt: fullPrompt, genre: genre,
+        apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId,
         path: createData.path
       })
     });
-    const outlineData = await outlineRes.json();
+    // Read SSE stream for wizard outline
+    const oReader = outlineRes.body.getReader();
+    const oDecoder = new TextDecoder();
+    let oBuffer = ''; let outlineFullText = '';
+    while (true) {
+      const { done, value } = await oReader.read();
+      if (done) break;
+      oBuffer += oDecoder.decode(value, { stream: true });
+      const parts = oBuffer.split('\n\n');
+      oBuffer = parts.pop() || '';
+      for (const part of parts) {
+        let evt = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) evt = line.substring(7).trim();
+          else if (line.startsWith('data: ') && evt === 'chunk') {
+            outlineFullText += line.substring(6).replace(/\\n/g, '\n');
+            document.getElementById('wizard-outline-text').value = outlineFullText;
+          }
+        }
+      }
+    }
+    const outlineData = { status: 'ok', outline: outlineFullText };
 
     // Hide loading
     document.getElementById('wizard-outline-loading').style.display = 'none';
@@ -372,19 +486,36 @@ async function wizardGenerateVolume() {
   document.getElementById('wizard-volume-result').style.display = 'none';
 
   try {
-    const res = await fetch(authUrl(API + '/api/volume/generate'), {
+    const res = await fetch(authUrl(API + '/api/volume/generate/stream'), {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: wizardState.bookPath,
-        prompt: '',
-        genre: wizardState.bookGenre,
-        apiKey: sharedConfig.apiKey,
-        baseUrl: sharedConfig.baseUrl,
-        model: sharedConfig.modelId
+        path: wizardState.bookPath, prompt: '', genre: wizardState.bookGenre,
+        apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId
       })
     });
-    const data = await res.json();
+    // Read SSE stream for wizard volume
+    const vReader = res.body.getReader();
+    const vDecoder = new TextDecoder();
+    let vBuffer = ''; let volFullText = '';
+    while (true) {
+      const { done, value } = await vReader.read();
+      if (done) break;
+      vBuffer += vDecoder.decode(value, { stream: true });
+      const parts = vBuffer.split('\n\n');
+      vBuffer = parts.pop() || '';
+      for (const part of parts) {
+        let evt = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) evt = line.substring(7).trim();
+          else if (line.startsWith('data: ') && evt === 'chunk') {
+            volFullText += line.substring(6).replace(/\\n/g, '\n');
+            document.getElementById('wizard-volume-text').value = volFullText;
+          }
+        }
+      }
+    }
+    const data = { status: 'ok', volumeOutline: volFullText };
 
     document.getElementById('wizard-volume-loading').style.display = 'none';
 
@@ -395,11 +526,11 @@ async function wizardGenerateVolume() {
     } else {
       document.getElementById('wizard-volume-result').style.display = 'block';
       document.getElementById('wizard-volume-text').value = '';
-      showResult(resultDiv, '✗ 卷纲生成失败: ' + (data.error || '未知错误') + '，可手动编辑后保存', true);
+      showResult(document.getElementById('wizard-volume-result-msg'), '? 卷纲生成失败: ' + (data.error || '未知错误'), true);
     }
   } catch (e) {
     document.getElementById('wizard-volume-loading').style.display = 'none';
-    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+    showResult(document.getElementById('wizard-volume-result-msg'), '? 网络错误: ' + e.message, true);
   }
 }
 
@@ -1811,35 +1942,13 @@ async function generateOutlineFromPrompt() {
   const bookPath = document.getElementById('write-book')?.value;
   const prompt = document.getElementById('outline-gen-prompt')?.value?.trim();
   const genre = document.getElementById('outline-gen-genre')?.value || 'xuanhuan';
-  const apiKey = sharedConfig.apiKey;
-  const baseUrl = sharedConfig.baseUrl;
-  const modelId = sharedConfig.modelId;
   const resultDiv = document.getElementById('outline-gen-result');
 
   if (!prompt) { showResult(resultDiv, '请输入创意提示词', true); return; }
 
-  const btn = document.getElementById('btn-outline-gen');
-  btn.disabled = true; btn.textContent = '生成中...';
-
-  try {
-    const body = { prompt, genre, apiKey, baseUrl, model: modelId };
-    if (bookPath) body.path = bookPath;
-    const res = await fetch(authUrl(API + '/api/outline/generate'), {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body)
-    });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      showResult(resultDiv, '✅ 大纲已生成\n\n' + (data.outline || '').substring(0, 2000), false);
-    } else {
-      showResult(resultDiv, '❌ ' + (data.error || '生成失败'), true);
-    }
-  } catch (e) {
-    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
-  } finally {
-    btn.disabled = false; btn.textContent = '✦ 生成大纲';
-  }
+  const body = { prompt, genre, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  if (bookPath) body.path = bookPath;
+  await streamLlmRequest('/api/outline/generate/stream', body, resultDiv, null, 'btn-outline-gen', '✒ 生成大纲');
 }
 
 // ========== Volume Outline Generation ==========
@@ -1848,33 +1957,12 @@ async function generateVolumeOutline() {
   const bookPath = document.getElementById('write-book')?.value;
   const prompt = document.getElementById('volume-gen-prompt')?.value?.trim() || '';
   const genre = document.getElementById('volume-gen-genre')?.value || 'xuanhuan';
-  const apiKey = sharedConfig.apiKey;
-  const baseUrl = sharedConfig.baseUrl;
-  const modelId = sharedConfig.modelId;
   const resultDiv = document.getElementById('volume-gen-result');
 
   if (!bookPath) { showResult(resultDiv, '请选择书籍（需有大纲）', true); return; }
 
-  const btn = document.getElementById('btn-volume-gen');
-  btn.disabled = true; btn.textContent = '生成中...';
-
-  try {
-    const res = await fetch(authUrl(API + '/api/volume/generate'), {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ path: bookPath, prompt, genre, apiKey, baseUrl, model: modelId })
-    });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      showResult(resultDiv, '✅ 卷纲已生成\n\n' + (data.volumeOutline || '').substring(0, 2000), false);
-    } else {
-      showResult(resultDiv, '❌ ' + (data.error || '生成失败'), true);
-    }
-  } catch (e) {
-    showResult(resultDiv, '❌ 网络错误: ' + e.message, true);
-  } finally {
-    btn.disabled = false; btn.textContent = '✦ 生成卷纲';
-  }
+  const body = { path: bookPath, prompt, genre, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  await streamLlmRequest('/api/volume/generate/stream', body, resultDiv, null, 'btn-volume-gen', '✒ 生成卷纲');
 }
 
 // ========== Chapter Revision ==========
@@ -2138,31 +2226,9 @@ async function deleteHook() {
 async function generateOutlineSynopsis() {
   const bookPath = document.getElementById('write-book')?.value;
   if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
-  const apiKey = sharedConfig.apiKey;
-  const baseUrl = sharedConfig.baseUrl;
-  const modelId = sharedConfig.modelId;
 
-  const btn = document.getElementById('btn-outline');
-  btn.disabled = true; btn.textContent = '生成中...';
-  clearResult(document.getElementById('write-result'));
-
-  try {
-    const resp = await fetch(authUrl(API + '/api/outline/synopsis'), {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: bookPath, apiKey: apiKey, baseUrl: baseUrl, model: modelId })
-    });
-    const data = await resp.json();
-    if (data.status === 'ok') {
-      showResult(document.getElementById('write-result'), '✅ 大纲梗概已生成并保存\n\n' + data.outline, false);
-    } else {
-      showResult(document.getElementById('write-result'), '❌ ' + (data.error || '生成失败'), true);
-    }
-  } catch (e) {
-    showResult(document.getElementById('write-result'), '❌ 网络错误: ' + e.message, true);
-  } finally {
-    btn.disabled = false; btn.textContent = '大纲梗概';
-  }
+  const body = { path: bookPath, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  await streamLlmRequest('/api/outline/synopsis/stream', body, document.getElementById('write-result'), null, 'btn-outline', '大纲梗概');
 }
 
 // ========== 卷纲梗概生成 ==========
@@ -2170,9 +2236,6 @@ async function generateOutlineSynopsis() {
 async function generateVolumeSynopsis() {
   const bookPath = document.getElementById('write-book')?.value;
   if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
-  const apiKey = sharedConfig.apiKey;
-  const baseUrl = sharedConfig.baseUrl;
-  const modelId = sharedConfig.modelId;
 
   let volumeStart = 1, volumeEnd = 10;
   try {
@@ -2184,28 +2247,8 @@ async function generateVolumeSynopsis() {
     }
   } catch (e) { /* use defaults */ }
 
-  const btn = document.getElementById('btn-volume');
-  btn.disabled = true; btn.textContent = '生成中...';
-  clearResult(document.getElementById('write-result'));
-
-  try {
-    const resp = await fetch(authUrl(API + '/api/volume/synopsis'), {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: bookPath, apiKey: apiKey, baseUrl: baseUrl, model: modelId, volumeStart, volumeEnd })
-    });
-    const data = await resp.json();
-    if (data.status === 'ok') {
-      showResult(document.getElementById('write-result'),
-        `✅ 卷纲梗概已生成（第${data.volumeStart}章~第${data.volumeEnd}章）\n\n` + data.synopsis, false);
-    } else {
-      showResult(document.getElementById('write-result'), '❌ ' + (data.error || '生成失败'), true);
-    }
-  } catch (e) {
-    showResult(document.getElementById('write-result'), '❌ 网络错误: ' + e.message, true);
-  } finally {
-    btn.disabled = false; btn.textContent = '卷纲梗概';
-  }
+  const body = { path: bookPath, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId, volumeStart, volumeEnd };
+  await streamLlmRequest('/api/volume/synopsis/stream', body, document.getElementById('write-result'), null, 'btn-volume', '卷纲梗概');
 }
 
 // ========== AI痕迹检测去除 ==========

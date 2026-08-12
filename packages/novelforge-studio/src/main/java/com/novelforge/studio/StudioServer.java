@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novelforge.core.genre.GenreManager;
 import com.novelforge.core.llm.LlmClient;
 import com.novelforge.core.llm.ModelRouter;
+import com.novelforge.core.llm.StreamHandler;
 import com.novelforge.core.models.AgentApiConfig;
 import com.novelforge.core.models.AuditResult;
 import com.novelforge.core.models.Book;
@@ -255,6 +256,11 @@ public class StudioServer {
         server.createContext("/api/characters", corsWrap(this::handleCharactersApi));
         server.createContext("/api/hooks", corsWrap(this::handleHooksApi));
         server.createContext("/api/chapter/synopsis", corsWrap(this::handleChapterSynopsisApi));
+        server.createContext("/api/outline/generate/stream", corsWrap(this::handleOutlineGenerateStreamApi));
+        server.createContext("/api/volume/generate/stream", corsWrap(this::handleVolumeGenerateStreamApi));
+        server.createContext("/api/outline/synopsis/stream", corsWrap(this::handleOutlineSynopsisStreamApi));
+        server.createContext("/api/volume/synopsis/stream", corsWrap(this::handleVolumeSynopsisStreamApi));
+        server.createContext("/api/chapter/synopsis/stream", corsWrap(this::handleChapterSynopsisStreamApi));
         server.createContext("/api/book/references", corsWrap(this::handleBookReferencesApi));
         server.createContext("/api/book/inspirations", corsWrap(this::handleBookInspirationsApi));
 
@@ -3417,6 +3423,246 @@ public class StudioServer {
 
 
     // --- CORS wrapper: generic lambda handles OPTIONS preflight + auth check ---
+    // --- SSE Streaming Helpers ---
+    private void sendSseHeaders(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        addCorsHeaders(exchange);
+        exchange.sendResponseHeaders(200, 0);
+    }
+
+    private void sendSseEvent(OutputStream os, String event, String data) throws IOException {
+        String msg = "event: " + event + "\ndata: " + data.replace("\n", "\\n") + "\n\n";
+        os.write(msg.getBytes(StandardCharsets.UTF_8));
+        os.flush();
+    }
+
+    // --- SSE Stream: Outline Generate ---
+    private void handleOutlineGenerateStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : null;
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        final ModelRouter router = resolveModelRouter(body);
+        if (prompt == null || router == null) { sendJson(exchange, 400, "{\"error\":\"prompt and apiKey required\"}"); return; }
+        if (bookPath != null && !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        try {
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre);
+            client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.6, 8000, new StreamHandler() {
+                @Override public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
+                }
+                @Override public void onComplete(String text) {
+                    try {
+                        if (bookPath != null) {
+                            Book book = BookProject.loadBook(Paths.get(bookPath));
+                            book.setOutline(text);
+                            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                        }
+                        sendSseEvent(os, "done", "{\"status\":\"ok\"}");
+                    } catch (Exception e) { /* ignore */ }
+                }
+                @Override public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // --- SSE Stream: Volume Generate ---
+    private void handleVolumeGenerateStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String outline = body.has("outline") ? body.get("outline").asText() : null;
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        final ModelRouter router = resolveModelRouter(body);
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
+            try { outline = BookProject.loadBook(Paths.get(bookPath)).getOutline(); } catch (Exception e) { outline = ""; }
+        }
+        if (outline == null || outline.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"outline required\"}"); return; }
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        final String outlineText = outline;
+        try {
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outlineText, prompt, genre);
+            client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.5, 8000, new StreamHandler() {
+                @Override public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
+                }
+                @Override public void onComplete(String text) {
+                    try { sendSseEvent(os, "done", "{\"status\":\"ok\"}"); } catch (IOException ignored) {}
+                }
+                @Override public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // --- SSE Stream: Outline Synopsis ---
+    private void handleOutlineSynopsisStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        final ModelRouter router = resolveModelRouter(body);
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path and apiKey required\"}"); return;
+        }
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState state = new TruthState(Paths.get(bookPath));
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildOutlineSynopsisPrompt(book, state);
+            client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.5, 8000, new StreamHandler() {
+                @Override public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
+                }
+                @Override public void onComplete(String text) {
+                    try {
+                        Book b = BookProject.loadBook(Paths.get(bookPath));
+                        b.setOutline(text);
+                        BookProject.saveBookMetadata(Paths.get(bookPath), b);
+                        sendSseEvent(os, "done", "{\"status\":\"ok\"}");
+                    } catch (Exception ignored) {}
+                }
+                @Override public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // --- SSE Stream: Volume Synopsis ---
+    private void handleVolumeSynopsisStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        int volumeStart = body.has("volumeStart") ? body.get("volumeStart").asInt() : 1;
+        int volumeEnd = body.has("volumeEnd") ? body.get("volumeEnd").asInt() : 10;
+        final ModelRouter router = resolveModelRouter(body);
+        if (bookPath == null || router == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path and apiKey required\"}"); return;
+        }
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        try {
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            TruthState state = new TruthState(Paths.get(bookPath));
+            if (book.getChapters().isEmpty()) {
+                sendSseEvent(os, "error", "No chapters written yet; write chapters first");
+                return;
+            }
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildVolumeSynopsisPrompt(book, state, volumeStart, volumeEnd);
+            client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.4, 6000, new StreamHandler() {
+                @Override public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
+                }
+                @Override public void onComplete(String text) {
+                    try { sendSseEvent(os, "done", "{\"status\":\"ok\"}"); } catch (IOException ignored) {}
+                }
+                @Override public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    // --- SSE Stream: Chapter Synopsis ---
+    private void handleChapterSynopsisStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String outlineOrVolume = body.has("source") ? body.get("source").asText() : null;
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+        String genre = body.has("genre") ? body.get("genre").asText() : "xuanhuan";
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        final ModelRouter router = resolveModelRouter(body);
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
+        if (outlineOrVolume == null || outlineOrVolume.isEmpty()) {
+            if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
+                try { outlineOrVolume = BookProject.loadBook(Paths.get(bookPath)).getOutline(); } catch (Exception e) { outlineOrVolume = ""; }
+            } else { outlineOrVolume = ""; }
+        }
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        final String sourceText = outlineOrVolume;
+        try {
+            LlmClient client = router.getClientForAgent("Architect");
+            PromptBuilder pb = new PromptBuilder();
+            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(sourceText, prompt, genre);
+            client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.7, 8000, new StreamHandler() {
+                @Override public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
+                }
+                @Override public void onComplete(String text) {
+                    try {
+                        if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
+                            Book book = BookProject.loadBook(Paths.get(bookPath));
+                            String existingOutline = book.getOutline() != null ? book.getOutline() : "";
+                            String updatedOutline = existingOutline + "\n\n--- 章节梗概 ---\n" + text;
+                            book.setOutline(updatedOutline);
+                            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+                        }
+                        sendSseEvent(os, "done", "{\"status\":\"ok\"}");
+                    } catch (Exception ignored) {}
+                }
+                @Override public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", sanitizeForJson(e.getMessage())); } catch (IOException ignored) {}
+        } finally {
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
     private HttpHandler corsWrap(HttpHandler handler) {
         return ex -> {
             if (ex.getRequestMethod().equals("OPTIONS")) { handleCorsPreflight(ex); return; }
