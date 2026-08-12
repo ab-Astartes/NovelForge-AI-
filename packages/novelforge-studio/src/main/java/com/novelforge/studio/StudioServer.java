@@ -2712,8 +2712,10 @@ public class StudioServer {
         try {
             // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
+            java.util.List<Reference> vRefs2 = null; java.util.List<Reference> vInsps2 = null;
+            if (bookPath != null) { try { Book _b = BookProject.loadBook(Paths.get(bookPath)); vRefs2 = _b.getReferences(); vInsps2 = _b.getInspirations(); } catch (Exception ignored) {} }
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outline, prompt, genre);
+            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outline, prompt, genre, vRefs2, vInsps2);
             String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.5, 8000);
             ObjectNode response = mapper.createObjectNode();
             response.put("status", "ok");
@@ -3454,8 +3456,18 @@ public class StudioServer {
         StringBuilder fullText = new StringBuilder();
         try {
             LlmClient client = router.getClientForAgent("Architect");
+            // Load references/inspirations from book for context injection
+            java.util.List<Reference> refs = null;
+            java.util.List<Reference> insps = null;
+            if (bookPath != null) {
+                try {
+                    Book _b = BookProject.loadBook(Paths.get(bookPath));
+                    refs = _b.getReferences();
+                    insps = _b.getInspirations();
+                } catch (Exception ignored) {}
+            }
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre);
+            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre, refs, insps);
             client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.6, 8000, new StreamHandler() {
                 @Override public void onChunk(String chunk) {
                     fullText.append(chunk);
@@ -3503,8 +3515,11 @@ public class StudioServer {
         final String outlineText = outline;
         try {
             LlmClient client = router.getClientForAgent("Architect");
+            // Load references/inspirations from book for context injection
+            java.util.List<Reference> vRefs = null; java.util.List<Reference> vInsps = null;
+            if (bookPath != null) { try { Book _b = BookProject.loadBook(Paths.get(bookPath)); vRefs = _b.getReferences(); vInsps = _b.getInspirations(); } catch (Exception ignored) {} }
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outlineText, prompt, genre);
+            List<Map<String, String>> messages = pb.buildVolumeOutlinePrompt(outlineText, prompt, genre, vRefs, vInsps);
             client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.5, 8000, new StreamHandler() {
                 @Override public void onChunk(String chunk) {
                     fullText.append(chunk);
@@ -3633,8 +3648,18 @@ public class StudioServer {
         final String sourceText = outlineOrVolume;
         try {
             LlmClient client = router.getClientForAgent("Architect");
+            // Load references/inspirations from book for context injection
+            java.util.List<Reference> csRefs = null;
+            java.util.List<Reference> csInsps = null;
+            if (bookPath != null) {
+                try {
+                    Book _b = BookProject.loadBook(Paths.get(bookPath));
+                    csRefs = _b.getReferences();
+                    csInsps = _b.getInspirations();
+                } catch (Exception ignored) {}
+            }
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(sourceText, prompt, genre);
+            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(sourceText, prompt, genre, csRefs, csInsps);
             client.chatCompleteStream(messages, router.getModelForAgent("Architect"), 0.7, 8000, new StreamHandler() {
                 @Override public void onChunk(String chunk) {
                     fullText.append(chunk);

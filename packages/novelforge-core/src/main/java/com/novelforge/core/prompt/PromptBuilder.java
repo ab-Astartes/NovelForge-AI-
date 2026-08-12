@@ -43,6 +43,8 @@ public class PromptBuilder {
             - 遵守题材特定规则和套路
             """;
 
+        String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
+
         String user = String.format("""
             ## 作者意图
             %s
@@ -55,13 +57,14 @@ public class PromptBuilder {
             
             ## 已写章数
             %d
-            
+            %s
             请构建/更新大纲，并为第 %d 章生成详细章节计划。
             """,
                 nullSafe(book.getAuthorIntent()),
                 nullSafe(book.getGenre()),
                 nullSafe(book.getOutline()),
                 book.getChapters().size(),
+                refContext,
                 book.nextChapterNumber()
         );
 
@@ -602,13 +605,15 @@ public class PromptBuilder {
             ## 已有角色
             %s
             
+            %s
+
             请生成完整的卷纲梗概，包含分卷结构和章节梗概。
             """,
                 nullSafe(book.getAuthorIntent()),
                 nullSafe(book.getGenre()),
-                state != null ? state.characters().getSummary() : "无"
+                state != null ? state.characters().getSummary() : "无",
+                formatReferencesContext(book.getReferences(), book.getInspirations())
         );
-
         return messages(system, user);
     }
 
@@ -657,6 +662,8 @@ public class PromptBuilder {
             ## 当前角色状态
             %s
             
+            %s
+
             请为本卷（第%d章~第%d章）生成卷纲梗概。
             """,
                 nullSafe(book.getTitle()),
@@ -664,9 +671,9 @@ public class PromptBuilder {
                 volumeStart, volumeEnd,
                 chapterSummaries.toString(),
                 state != null ? state.characters().getSummary() : "无",
+                formatReferencesContext(book.getReferences(), book.getInspirations()),
                 volumeStart, volumeEnd
         );
-
         return messages(system, user);
     }
 
@@ -675,6 +682,13 @@ public class PromptBuilder {
      * Pure prompt-driven: user provides a creative prompt and genre, LLM generates a complete outline.
      */
     public List<Map<String, String>> buildOutlineFromPromptPrompt(String prompt, String genre) {
+        return buildOutlineFromPromptPrompt(prompt, genre, null, null);
+    }
+
+    public List<Map<String, String>> buildOutlineFromPromptPrompt(String prompt, String genre,
+            java.util.List<Reference> references, java.util.List<Reference> inspirations) {
+        String refContext = formatReferencesContext(references, inspirations);
+
         String system = """
             你是小说大纲架构师。根据用户的创意提示和题材，生成完整的小说大纲。
 
@@ -697,11 +711,12 @@ public class PromptBuilder {
 
             ## 题材
             %s
-
+            %s
             请基于以上提示和题材，生成完整的卷纲大纲。
             """,
                 nullSafe(prompt),
-                nullSafe(genre)
+                nullSafe(genre),
+                refContext
         );
 
         return messages(system, user);
@@ -712,6 +727,13 @@ public class PromptBuilder {
      * Takes an existing book outline and a user prompt to generate a detailed volume/chapter structure.
      */
     public List<Map<String, String>> buildVolumeOutlinePrompt(String outline, String prompt, String genre) {
+        return buildVolumeOutlinePrompt(outline, prompt, genre, null, null);
+    }
+
+    public List<Map<String, String>> buildVolumeOutlinePrompt(String outline, String prompt, String genre,
+            java.util.List<Reference> references, java.util.List<Reference> inspirations) {
+        String refContext = formatReferencesContext(references, inspirations);
+
         String system = """
             你是小说分卷架构师。根据已有的整书大纲和用户的补充提示，生成详细的分卷结构和章节规划。
 
@@ -737,12 +759,13 @@ public class PromptBuilder {
 
             ## 题材
             %s
-
+            %s
             请基于以上大纲和提示，生成详细的分卷结构和章节规划。
             """,
                 truncateShort(outline, 6000),
                 nullSafe(prompt),
-                nullSafe(genre)
+                nullSafe(genre),
+                refContext
         );
 
         return messages(system, user);
@@ -815,6 +838,11 @@ public class PromptBuilder {
      * and user's creative prompts.
      */
     public List<Map<String, String>> buildChapterSynopsisPrompt(String outlineOrVolume, String prompt, String genre) {
+        return buildChapterSynopsisPrompt(outlineOrVolume, prompt, genre, null, null);
+    }
+
+    public List<Map<String, String>> buildChapterSynopsisPrompt(String outlineOrVolume, String prompt, String genre,
+            java.util.List<Reference> references, java.util.List<Reference> inspirations) {
         String system = """
             你是小说章节架构师。根据大纲或卷纲的结构，生成每章的梗概描述。
 
@@ -841,16 +869,18 @@ public class PromptBuilder {
             ## 题材
             %s
 
+            %s
+
             请基于以上大纲/卷纲和提示，生成每一章的梗概描述。
             """,
                 truncateShort(outlineOrVolume, 6000),
                 nullSafe(prompt),
-                nullSafe(genre)
-        );
+                nullSafe(genre),
+                formatReferencesContext(references, inspirations)
 
+        );
         return messages(system, user);
     }
-
     /**
      * Build prompt for AI trace detection and removal.
      * Detects AI writing patterns and proposes natural revisions.
@@ -893,5 +923,41 @@ public class PromptBuilder {
         );
 
         return messages(system, user);
+    }
+
+    /**
+     * Format references and inspirations into a context block for prompt injection.
+     * Returns a formatted string that can be inserted into prompts, or empty string if no materials.
+     */
+    public static String formatReferencesContext(java.util.List<Reference> references, java.util.List<Reference> inspirations) {
+        StringBuilder sb = new StringBuilder();
+        boolean hasRefs = references != null && !references.isEmpty();
+        boolean hasInsps = inspirations != null && !inspirations.isEmpty();
+        if (!hasRefs && !hasInsps) return "";
+
+        if (hasRefs) {
+            sb.append("## 参考素材\n");
+            for (Reference ref : references) {
+                sb.append("- ").append(ref.getTitle());
+                if (ref.getAuthor() != null && !ref.getAuthor().isEmpty()) sb.append(" · ").append(ref.getAuthor());
+                if (ref.getType() != null) sb.append(" [").append(ref.getType()).append("]");
+                sb.append("\n");
+                if (ref.getSummary() != null && !ref.getSummary().isEmpty()) sb.append("  摘要: ").append(ref.getSummary()).append("\n");
+                if (ref.getNotes() != null && !ref.getNotes().isEmpty()) sb.append("  参考要点: ").append(ref.getNotes()).append("\n");
+            }
+        }
+        if (hasInsps) {
+            sb.append("## 参照作品/灵感来源\n");
+            for (Reference insp : inspirations) {
+                sb.append("- ").append(insp.getTitle());
+                if (insp.getAuthor() != null && !insp.getAuthor().isEmpty()) sb.append(" · ").append(insp.getAuthor());
+                if (insp.getType() != null) sb.append(" [").append(insp.getType()).append("]");
+                sb.append("\n");
+                if (insp.getSummary() != null && !insp.getSummary().isEmpty()) sb.append("  摘要: ").append(insp.getSummary()).append("\n");
+                if (insp.getNotes() != null && !insp.getNotes().isEmpty()) sb.append("  对标要点: ").append(insp.getNotes()).append("\n");
+            }
+        }
+        sb.append("\n请在创作中充分参考以上素材，保持风格和元素的一致性。\n");
+        return sb.toString();
     }
 }
