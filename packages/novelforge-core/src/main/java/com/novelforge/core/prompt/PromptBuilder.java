@@ -144,6 +144,7 @@ public class PromptBuilder {
                 truncateShort(prevChapter.getFinalText() != null ? prevChapter.getFinalText() : prevChapter.getDraftText(), 500) :
                 "（这是第一章，无前文衔接）";
 
+        String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
         String user = String.format("""
             ## 规划师输出
             %s
@@ -159,6 +160,8 @@ public class PromptBuilder {
             
             ## 题材: %s
             
+            %s
+
             请组装第 %d 章的完整写作上下文包。
             """,
                 truncateShort(plannerOutput, 4000),
@@ -166,6 +169,7 @@ public class PromptBuilder {
                 state.characters().getSummary(),
                 state.world().getSummary(),
                 nullSafe(book.getGenre()),
+                refContext,
                 book.nextChapterNumber()
         );
 
@@ -234,13 +238,17 @@ public class PromptBuilder {
 
         String formattedSystem = system;
 
+        String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
         String user = String.format("""
             ## 写作上下文包
             %s
             
+            %s
+
             请创作第 %d 章完整内容。
             """,
                 truncate(composedContext),
+                refContext,
                 book.nextChapterNumber()
         );
 
@@ -531,6 +539,7 @@ public class PromptBuilder {
             - 如大纲无需修正，直接输出章节计划即可
             """;
 
+        String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
         String user = String.format("""
             ## 作者意图
             %s
@@ -550,6 +559,8 @@ public class PromptBuilder {
             ## 当前悬念
             %s
             
+            %s
+
             请为第 %d 章生成详细章节计划，并检查大纲是否需要微调。
             """,
                 nullSafe(book.getAuthorIntent()),
@@ -558,6 +569,7 @@ public class PromptBuilder {
                 book.getChapters().size(),
                 state.characters().getSummary(),
                 state.hooks().getMustAdvanceSummary(),
+                refContext,
                 book.nextChapterNumber()
         );
 
@@ -803,6 +815,7 @@ public class PromptBuilder {
             输出：直接输出修订后的完整章节文本（不要加注释或说明）。
             """;
 
+        String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
         String user = String.format("""
             ## 大纲/卷纲参考
             %s
@@ -818,6 +831,8 @@ public class PromptBuilder {
 
             ## 题材: %s
 
+            %s
+
             请根据大纲/卷纲的规划和修改提示，修订第 %d 章。
             """,
                 truncateShort(sourceContent, 4000),
@@ -826,6 +841,7 @@ public class PromptBuilder {
                 truncateShort(chapterText, 6000),
                 state != null ? state.characters().getSummary() : "无",
                 nullSafe(book.getGenre()),
+                refContext,
                 chapterNum
         );
 

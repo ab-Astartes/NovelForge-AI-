@@ -2671,7 +2671,9 @@ public class StudioServer {
             // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre);
+            java.util.List<Reference> oRefs = null; java.util.List<Reference> oInsps = null;
+            if (bookPath != null) { try { Book _b = BookProject.loadBook(Paths.get(bookPath)); oRefs = _b.getReferences(); oInsps = _b.getInspirations(); } catch (Exception ignored) {} }
+            List<Map<String, String>> messages = pb.buildOutlineFromPromptPrompt(prompt, genre, oRefs, oInsps);
             String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.6, 8000);
             // Optionally save to book if path provided
             if (bookPath != null) {
@@ -2880,7 +2882,9 @@ public class StudioServer {
             // Use resolved router
             LlmClient client = router.getClientForAgent("Architect");
             PromptBuilder pb = new PromptBuilder();
-            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(outlineOrVolume, prompt, genre);
+            java.util.List<Reference> cRefs = null; java.util.List<Reference> cInsps = null;
+            if (bookPath != null) { try { Book _b = BookProject.loadBook(Paths.get(bookPath)); cRefs = _b.getReferences(); cInsps = _b.getInspirations(); } catch (Exception ignored) {} }
+            List<Map<String, String>> messages = pb.buildChapterSynopsisPrompt(outlineOrVolume, prompt, genre, cRefs, cInsps);
             String result = client.chatComplete(messages, router.getModelForAgent("Architect"), 0.7, 8000);
             // If book path provided, save synopsis into book outline (append chapter synopsis section)
             if (bookPath != null && isPathWithinBooksRoot(bookPath)) {

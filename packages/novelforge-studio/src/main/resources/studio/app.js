@@ -1936,6 +1936,22 @@ async function loadProgress() {
   }
 }
 
+
+async function showRefIndicator(bookPath, resultDiv) {
+  if (!bookPath) return;
+  try {
+    const info = await (await fetch(authUrl(API + '/api/book/info?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() })).json();
+    const refCount = info.referencesCount || 0;
+    const inspCount = info.inspirationsCount || 0;
+    if (refCount > 0 || inspCount > 0) {
+      const badge = document.createElement('div');
+      badge.style.cssText = 'padding:4px 8px;margin-bottom:6px;background:#1a1a1a;border:1px solid #c9a961;border-radius:4px;font-size:12px;color:#c9a961';
+      badge.innerHTML = `\u{1F4DA} 已引用素材：${refCount > 0 ? refCount + '篇参考文献' : ''}${refCount > 0 && inspCount > 0 ? '、' : ''}${inspCount > 0 ? inspCount + '部参照作品' : ''}，生成内容将融入参考要点`;
+      resultDiv.prepend(badge);
+    }
+  } catch (e) {}
+}
+
 // ========== Prompt-driven Outline Generation ==========
 
 async function generateOutlineFromPrompt() {
@@ -1948,6 +1964,7 @@ async function generateOutlineFromPrompt() {
 
   const body = { prompt, genre, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
   if (bookPath) body.path = bookPath;
+  showRefIndicator(bookPath, resultDiv);
   await streamLlmRequest('/api/outline/generate/stream', body, resultDiv, null, 'btn-outline-gen', '✒ 生成大纲');
 }
 
@@ -1962,6 +1979,7 @@ async function generateVolumeOutline() {
   if (!bookPath) { showResult(resultDiv, '请选择书籍（需有大纲）', true); return; }
 
   const body = { path: bookPath, prompt, genre, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  showRefIndicator(bookPath, resultDiv);
   await streamLlmRequest('/api/volume/generate/stream', body, resultDiv, null, 'btn-volume-gen', '✒ 生成卷纲');
 }
 
@@ -2228,6 +2246,7 @@ async function generateOutlineSynopsis() {
   if (!bookPath) { showResult(document.getElementById('write-result'), '请先选择书籍', true); return; }
 
   const body = { path: bookPath, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  showRefIndicator(bookPath, document.getElementById('write-result'));
   await streamLlmRequest('/api/outline/synopsis/stream', body, document.getElementById('write-result'), null, 'btn-outline', '大纲梗概');
 }
 
@@ -2248,6 +2267,7 @@ async function generateVolumeSynopsis() {
   } catch (e) { /* use defaults */ }
 
   const body = { path: bookPath, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId, volumeStart, volumeEnd };
+  showRefIndicator(bookPath, document.getElementById('write-result'));
   await streamLlmRequest('/api/volume/synopsis/stream', body, document.getElementById('write-result'), null, 'btn-volume', '卷纲梗概');
 }
 
