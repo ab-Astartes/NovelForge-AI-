@@ -431,6 +431,13 @@
             <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
           </div>
           <div id="write-progress" class="progress-indicator"></div>
+          <div id="write-stats" class="write-stats" style="display:none">
+            <div class="stat-card"><div class="stat-value" id="ws-chapters">0</div><div class="stat-label">已写章节</div></div>
+            <div class="stat-card"><div class="stat-value" id="ws-words">0</div><div class="stat-label">总字数</div></div>
+            <div class="stat-card"><div class="stat-value" id="ws-avg-score">—</div><div class="stat-label">平均审阅分</div></div>
+            <div class="stat-card"><div class="stat-value" id="ws-passed">0</div><div class="stat-label">已通过</div></div>
+            <div class="stat-card"><div class="stat-value" id="ws-coverage">0%</div><div class="stat-label">大纲覆盖</div></div>
+          </div>
           <div id="write-result" class="result-box"></div>
         </div>
 

@@ -88,6 +88,7 @@ function showPanel(name) {
   // Auto-refresh relevant panels
   if (targetName === 'books') loadBooks();
   if (targetName === 'write' || targetName === 'toolbox') populateBookSelects();
+  if (targetName === 'write') { const wb = document.getElementById('write-book')?.value; if (wb) updateWriteStats(wb); }
   if (targetName === 'toolbox') { populateBookSelects(); loadStyle(); loadCharacters(); loadHooks(); }
 }
 
@@ -1936,6 +1937,42 @@ async function loadProgress() {
   }
 }
 
+
+// ========== Write Progress Statistics ==========
+
+async function updateWriteStats(bookPath) {
+  if (!bookPath) return;
+  const statsDiv = document.getElementById('write-stats');
+  if (!statsDiv) return;
+  try {
+    const info = await (await fetch(authUrl(API + '/api/book/info?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() })).json();
+    const chs = info.chapterDetails || [];
+    const totalWords = chs.reduce((s, c) => s + c.wordCount, 0);
+    const scored = chs.filter(c => c.auditScore != null);
+    const avgScore = scored.length > 0 ? (scored.reduce((s, c) => s + c.auditScore, 0) / scored.length).toFixed(1) : '—';
+    const passed = chs.filter(c => c.passed).length;
+    // Outline coverage: if outline mentions chapters, estimate coverage
+    let coverage = '—';
+    if (info.outlinePreview) {
+      const outlineChapters = (info.outlinePreview.match(/第[一二三四五六七八九十百千\d]+章/g) || []).length;
+      if (outlineChapters > 0) {
+        coverage = Math.min(100, Math.round(chs.length / outlineChapters * 100)) + '%';
+      }
+    }
+    document.getElementById('ws-chapters').textContent = chs.length;
+    document.getElementById('ws-words').textContent = totalWords.toLocaleString();
+    document.getElementById('ws-avg-score').textContent = avgScore;
+    document.getElementById('ws-passed').textContent = passed;
+    document.getElementById('ws-coverage').textContent = coverage;
+    // Color the avg score
+    const avgEl = document.getElementById('ws-avg-score');
+    if (avgScore !== '—') {
+      const score = parseFloat(avgScore);
+      avgEl.style.color = score >= 7 ? 'var(--success)' : score >= 5 ? 'var(--warning)' : 'var(--cinnabar-light)';
+    }
+    statsDiv.style.display = 'flex';
+  } catch (e) {}
+}
 
 async function showRefIndicator(bookPath, resultDiv) {
   if (!bookPath) return;

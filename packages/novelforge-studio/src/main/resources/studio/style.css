@@ -1349,3 +1349,31 @@ body {
   .header-stats { flex-wrap: wrap; }
   .toggle-grid { grid-template-columns: 1fr; }
 }
+
+/* Write Stats Cards */
+.write-stats {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.write-stats .stat-card {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  padding: 10px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.write-stats .stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cinnabar-light);
+  font-family: 'Noto Serif SC', serif;
+}
+.write-stats .stat-label {
+  font-size: 11px;
+  color: var(--paper-dark);
+  margin-top: 4px;
+}
