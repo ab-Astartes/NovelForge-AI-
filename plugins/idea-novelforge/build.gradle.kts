@@ -1,10 +1,10 @@
-plugins {
+﻿plugins {
     id("java")
     id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = "com.novelforge"
-version = "0.4.4"
+version = "0.5.0"
 
 repositories {
     mavenCentral()

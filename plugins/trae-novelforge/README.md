@@ -1,4 +1,4 @@
-# NovelForge Studio — Trae IDE Extension
+﻿# NovelForge Studio — Trae IDE Extension
 
 > 在Trae IDE侧边栏内嵌NovelForge Studio面板，一键启动/管理本地StudioServer。
 
