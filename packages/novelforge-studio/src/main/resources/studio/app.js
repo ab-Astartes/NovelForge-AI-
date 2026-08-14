@@ -1,4 +1,4 @@
-// 墨阁 · NovelForge Studio — Frontend v2 (Sidebar Layout)
+﻿// 墨阁 · NovelForge Studio — Frontend v2 (Sidebar Layout)
 
 const API = '';  // same origin
 
@@ -1433,15 +1433,17 @@ async function saveConfig() {
     const modelEl = document.getElementById('cfg-agent-model-' + name);
     const baseUrlEl = document.getElementById('cfg-agent-baseurl-' + name);
     const apiKeyEl = document.getElementById('cfg-agent-apikey-' + name);
+    const providerEl = document.getElementById('cfg-agent-provider-' + name);
     const model = modelEl ? modelEl.value.trim() : '';
     const baseUrl = baseUrlEl ? baseUrlEl.value.trim() : '';
     const apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
-    if (model || baseUrl || apiKey) {
+    const provider = providerEl ? providerEl.value : '';
+    if (model || baseUrl || apiKey || provider) {
       const override = {};
       if (model) override.model = model;
       if (baseUrl) override.baseUrl = baseUrl;
       if (apiKey) override.apiKey = apiKey;
-      override.provider = document.getElementById('cfg-global-provider').value;
+      if (provider) override.provider = provider;
       body.agentOverrides[name] = override;
     }
   });
@@ -1723,11 +1725,18 @@ function renderAgentApiConfigs(overrides) {
       </div>
       <div class="agent-config-body" ${hasOverride ? '' : 'style="display:none"'}>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">Provider</label>
+            <select id="cfg-agent-provider-${name}" class="input-field" style="width:100%;font-size:12px">
+              <option value="" ${!ov.provider?'selected':''}>跟随全局</option>
+              <option value="openai" ${ov.provider==='openai'?'selected':''}>OpenAI</option>
+              <option value="anthropic" ${ov.provider==='anthropic'?'selected':''}>Anthropic</option>
+              <option value="custom" ${ov.provider==='custom'?'selected':''}>自定义</option>
+            </select></div>
           <div><label style="color:rgba(255,255,255,0.3);font-size:10px">模型</label>
             <input type="text" id="cfg-agent-model-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.model||'')}"></div>
           <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API地址</label>
             <input type="text" id="cfg-agent-baseurl-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.baseUrl||'')}"></div>
-          <div style="grid-column:span 2"><label style="color:rgba(255,255,255,0.3);font-size:10px">API Key</label>
+          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API Key</label>
             <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="${ov.apiKey ? escapeHtml(ov.apiKey)+'（留空保留）' : '默认'}" value=""></div>
         </div>
       </div>

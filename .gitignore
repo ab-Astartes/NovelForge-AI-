@@ -41,3 +41,5 @@ npm-err.txt
 npm-out.txt
 compile-err.txt
 compile-out.txt
+
+*.vsix
