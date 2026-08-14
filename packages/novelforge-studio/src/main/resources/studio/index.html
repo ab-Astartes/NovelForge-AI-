@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -888,57 +888,14 @@
           </div>
         </div>
 
-        <!-- Agent Config Cards -->
+        <!-- Agent Pipeline (Unified) -->
         <div class="card">
-          <div class="card-title"><span class="card-icon">🤖</span> Agent 独立配置</div>
-          <p style="color:var(--paper-dark);font-size:12px;margin-bottom:12px">点击展开配置，留空则跟随全局默认</p>
-          <div id="agent-api-configs"></div>
+          <div class="card-title"><span class="card-icon">⚙</span> 九重炼章 · 智能体配置</div>
+          <p class="agent-section-desc">全局默认配置已覆盖全部智能体，点击 <span class="override-hint">自定义</span> 可为单个智能体指定不同模型</p>
+          <div id="agent-pipeline-config"></div>
         </div>
 
-        <!-- Agent Toggles -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">🔌</span> Agent 开关</div>
-          <div class="toggle-grid">
-            <div class="toggle-item">
-              <label class="toggle-label">构思 Architect</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runArchitect">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">计划 Planner</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runPlanner">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">编排 Composer</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runComposer">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">书写 Writer</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runWriter">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">观察 Observer</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runObserver">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">反思 Reflector</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReflector">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">润色 Normalizer</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runNormalizer">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">审查 Auditor</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runAuditor">✓</button>
-            </div>
-            <div class="toggle-item">
-              <label class="toggle-label">修订 Reviser</label>
-              <button onclick="toggleAgent(this)" class="toggle-btn active" data-key="runReviser">✓</button>
-            </div>
-          </div>
-        </div>
 
-        <!-- Chapter Parameters -->
         <div class="card">
           <div class="card-title"><span class="card-icon">📐</span> 章节参数</div>
           <div class="form-grid">

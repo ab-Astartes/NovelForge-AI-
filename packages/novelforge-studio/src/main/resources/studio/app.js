@@ -1664,6 +1664,9 @@ async function loadConfig() {
     });
     updatePipelineStepVisibility();
 
+    // Render unified agent pipeline config
+    renderAgentPipelineConfig(data.agentOverrides || {});
+
     if (data.globalDefault) {
       document.getElementById('cfg-global-provider').value = data.globalDefault.provider || 'openai';
       document.getElementById('cfg-global-model').value = data.globalDefault.model || 'gpt-4o';
@@ -1695,7 +1698,6 @@ async function loadConfig() {
       presetSelect.value = data.activePreset;
     }
 
-    renderAgentApiConfigs(data.agentOverrides || {});
 
   } catch (e) {
     // Use defaults
@@ -1704,55 +1706,81 @@ async function loadConfig() {
 
 // ========== Agent Config Cards (new card-based UI) ==========
 
-function renderAgentApiConfigs(overrides) {
-  const container = document.getElementById('agent-api-configs');
+function renderAgentPipelineConfig(overrides) {
+  const container = document.getElementById('agent-pipeline-config');
   if (!container) return;
   const agentNames = ['Architect','Planner','Composer','Writer','Observer','Reflector','Normalizer','Auditor','Reviser'];
   const agentLabels = ['构思','计划','编排','书写','观察','反思','润色','审查','修订'];
-  const agentIcons = ['🏛','📋','🎼','✒️','👁','🪞','⚖','🔍','🔧'];
+  const agentIcons = ['🏗','📋','🎼','✍','👁','🪞','✨','🔍','🔧'];
+  const toggleKeys = ['runArchitect','runPlanner','runComposer','runWriter','runObserver','runReflector','runNormalizer','runAuditor','runReviser'];
   let html = '';
   agentNames.forEach((name, i) => {
     const ov = overrides[name] || {};
-    const hasOverride = ov.model || ov.baseUrl || ov.apiKey;
+    const hasOverride = ov.model || ov.baseUrl || ov.apiKey || ov.provider;
+    const isActive = agentToggles[toggleKeys[i]] !== false;
     const statusClass = hasOverride ? 'custom' : 'global';
-    const statusText = hasOverride ? '自定义' : '跟随全局';
-    html += `<div class="agent-config-card ${hasOverride ? 'open' : ''}" id="agent-card-${name}">
-      <div class="agent-config-header" onclick="toggleAgentCard('${name}')">
-        <div class="agent-config-icon">${agentIcons[i]}</div>
-        <div class="agent-config-name">${agentLabels[i]}<span class="agent-config-name-en">${name}</span></div>
-        <span class="agent-config-status ${statusClass}">${statusText}</span>
-        <span class="agent-config-toggle">▶</span>
+    const statusText = hasOverride ? '自定义' : '全局';
+    const modelDisplay = hasOverride ? (ov.provider ? ov.provider + '/' : '') + (ov.model || '—') : '跟随全局';
+    html += `<div class="agent-pipeline-card ${hasOverride ? 'has-override' : ''} ${isActive ? '' : 'disabled-agent'}" id="agent-card-${name}">
+      <div class="agent-pipeline-icon">${agentIcons[i]}</div>
+      <div class="agent-pipeline-info">
+        <div class="agent-pipeline-name">${agentLabels[i]}<span class="agent-pipeline-name-en">${name}</span></div>
+        <div class="agent-pipeline-model">${modelDisplay}</div>
       </div>
-      <div class="agent-config-body" ${hasOverride ? '' : 'style="display:none"'}>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">Provider</label>
-            <select id="cfg-agent-provider-${name}" class="input-field" style="width:100%;font-size:12px">
-              <option value="" ${!ov.provider?'selected':''}>跟随全局</option>
-              <option value="openai" ${ov.provider==='openai'?'selected':''}>OpenAI</option>
-              <option value="anthropic" ${ov.provider==='anthropic'?'selected':''}>Anthropic</option>
-              <option value="custom" ${ov.provider==='custom'?'selected':''}>自定义</option>
-            </select></div>
-          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">模型</label>
-            <input type="text" id="cfg-agent-model-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.model||'')}"></div>
-          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API地址</label>
-            <input type="text" id="cfg-agent-baseurl-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="默认" value="${escapeHtml(ov.baseUrl||'')}"></div>
-          <div><label style="color:rgba(255,255,255,0.3);font-size:10px">API Key</label>
-            <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%;font-size:12px" placeholder="${ov.apiKey ? escapeHtml(ov.apiKey)+'（留空保留）' : '默认'}" value=""></div>
+      <span class="agent-pipeline-status ${statusClass}">${statusText}</span>
+      <label class="agent-toggle-switch">
+        <input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleAgentPipeline(this, '${toggleKeys[i]}')">
+        <span class="agent-toggle-slider"></span>
+      </label>
+      <button class="agent-expand-btn" onclick="toggleAgentCard('${name}')">▶</button>
+    </div>
+    <div class="agent-pipeline-body" id="agent-body-${name}">
+      <div class="agent-override-grid">
+        <div class="form-group">
+          <label>Provider</label>
+          <select id="cfg-agent-provider-${name}" class="input-field" style="width:100%">
+            <option value="" ${!ov.provider?'selected':''}>跟随全局</option>
+            <option value="openai" ${ov.provider==='openai'?'selected':''}>OpenAI</option>
+            <option value="anthropic" ${ov.provider==='anthropic'?'selected':''}>Anthropic</option>
+            <option value="custom" ${ov.provider==='custom'?'selected':''}>自定义</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>模型</label>
+          <input type="text" id="cfg-agent-model-${name}" class="input-field" style="width:100%" placeholder="默认" value="${escapeHtml(ov.model||'')}">
+        </div>
+        <div class="form-group">
+          <label>API地址</label>
+          <input type="text" id="cfg-agent-baseurl-${name}" class="input-field" style="width:100%" placeholder="默认" value="${escapeHtml(ov.baseUrl||'')}">
+        </div>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="cfg-agent-apikey-${name}" class="input-field" style="width:100%" placeholder="${ov.apiKey ? escapeHtml(ov.apiKey)+'（留空保留）' : '默认'}" value="">
         </div>
       </div>
+      <div class="agent-override-tip">留空则跟随全局默认配置</div>
     </div>`;
   });
   container.innerHTML = html;
 }
 
+
 function toggleAgentCard(agentName) {
   const card = document.getElementById('agent-card-' + agentName);
-  if (!card) return;
+  const body = document.getElementById('agent-body-' + agentName);
+  if (!card || !body) return;
   card.classList.toggle('open');
-  const body = card.querySelector('.agent-config-body');
-  if (body) {
-    body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  // body visibility is handled by CSS: .agent-pipeline-card.open + .agent-pipeline-body
+}
+
+function toggleAgentPipeline(checkbox, key) {
+  const active = checkbox.checked;
+  agentToggles[key] = active;
+  const card = checkbox.closest('.agent-pipeline-card');
+  if (card) {
+    card.classList.toggle('disabled-agent', !active);
   }
+  updatePipelineStepVisibility();
 }
 
 async function applyPreset(presetName) {

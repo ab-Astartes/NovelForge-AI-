@@ -920,148 +920,239 @@ body {
 }
 
 /* Toggle Grid */
-.toggle-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+/* --- Agent Pipeline (Unified) --- */
+.agent-section-desc {
+  color: var(--paper-dark);
+  font-size: 12px;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+.override-hint {
+  color: var(--gold);
+  font-weight: 600;
 }
 
-.toggle-item {
+.agent-pipeline-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: var(--ink-card);
-  border: 1px solid var(--ink-border);
-  border-radius: var(--radius-sm);
+  gap: 12px;
   padding: 10px 14px;
-}
-
-.toggle-label {
-  font-size: 13px;
-  color: var(--paper-dim);
-}
-
-.toggle-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid var(--ink-border);
-  background: var(--ink-dark);
-  color: var(--paper-dark);
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.toggle-btn.active {
-  border-color: var(--success);
-  background: var(--success-glow);
-  color: var(--success);
-}
-
-.toggle-btn:not(.active) {
-  border-color: var(--ink-border);
-  background: var(--ink-dark);
-  color: var(--paper-dark);
-}
-
-.toggle-btn:hover { transform: scale(1.1); }
-
-/* --- Agent Config Card --- */
-.agent-config-card {
   background: var(--ink-card);
   border: 1px solid var(--ink-border);
   border-radius: var(--radius);
-  margin-bottom: 8px;
-  overflow: hidden;
-  transition: border-color 0.2s;
+  margin-bottom: 6px;
+  transition: all 0.2s;
+  position: relative;
 }
 
-.agent-config-card:hover {
+.agent-pipeline-card:hover {
   border-color: var(--ink-hover);
-}
-
-.agent-config-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s;
-}
-
-.agent-config-header:hover {
   background: var(--sidebar-hover);
 }
 
-.agent-config-icon {
+.agent-pipeline-card.has-override {
+  border-left: 3px solid var(--gold);
+}
+
+.agent-pipeline-card.disabled-agent {
+  opacity: 0.45;
+}
+
+.agent-pipeline-icon {
   font-size: 20px;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--ink-dark);
   border-radius: 50%;
   flex-shrink: 0;
+  border: 1px solid var(--ink-border);
 }
 
-.agent-config-name {
+.agent-pipeline-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-pipeline-name {
   font-size: 14px;
   color: var(--paper);
   font-weight: 600;
   letter-spacing: 1px;
 }
 
-.agent-config-name-en {
+.agent-pipeline-name-en {
   font-size: 11px;
   color: var(--paper-dark);
-  margin-left: 4px;
+  margin-left: 6px;
+  font-weight: 400;
 }
 
-.agent-config-status {
-  margin-left: auto;
+.agent-pipeline-model {
   font-size: 11px;
+  color: var(--paper-dark);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-pipeline-status {
+  font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
   letter-spacing: 1px;
+  flex-shrink: 0;
 }
 
-.agent-config-status.global {
+.agent-pipeline-status.global {
   background: var(--cyan-glow);
   color: var(--cyan-ink);
 }
 
-.agent-config-status.custom {
+.agent-pipeline-status.custom {
   background: var(--gold-glow);
   color: var(--gold);
 }
 
-.agent-config-toggle {
-  font-size: 12px;
-  color: var(--paper-dark);
-  margin-left: 8px;
-  transition: transform 0.2s;
+/* Toggle switch */
+.agent-toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
-.agent-config-card.open .agent-config-toggle {
+.agent-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.agent-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--ink-dark);
+  border: 1px solid var(--ink-border);
+  border-radius: 11px;
+  transition: 0.3s;
+}
+
+.agent-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--paper-dark);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.agent-toggle-switch input:checked + .agent-toggle-slider {
+  background: var(--success-glow);
+  border-color: var(--success);
+}
+
+.agent-toggle-switch input:checked + .agent-toggle-slider:before {
+  transform: translateX(18px);
+  background: var(--success);
+}
+
+/* Expand button */
+.agent-expand-btn {
+  background: none;
+  border: 1px solid var(--ink-border);
+  color: var(--paper-dark);
+  font-size: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.agent-expand-btn:hover {
+  border-color: var(--cinnabar);
+  color: var(--cinnabar);
+}
+
+.agent-pipeline-card.open .agent-expand-btn {
+  background: var(--cinnabar-glow);
+  border-color: var(--cinnabar);
+  color: var(--cinnabar);
   transform: rotate(90deg);
 }
 
-.agent-config-body {
+/* Override config body */
+.agent-pipeline-body {
   display: none;
-  padding: 12px 16px 16px;
-  border-top: 1px solid var(--ink-border);
+  padding: 14px 16px 16px 62px;
+  margin-bottom: 6px;
   background: var(--ink-dark);
+  border: 1px solid var(--ink-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  margin-top: -6px;
 }
 
-.agent-config-card.open .agent-config-body {
+.agent-pipeline-card.open + .agent-pipeline-body {
   display: block;
+}
+
+.agent-override-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.agent-override-grid .form-group {
+  margin-bottom: 0;
+}
+
+.agent-override-grid label {
+  color: var(--paper-dark);
+  font-size: 10px;
+  display: block;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.agent-override-grid .input-field {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.agent-override-tip {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--paper-dark);
+  font-style: italic;
+}
+
+/* Pipeline connector line */
+.agent-pipeline-card:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 31px;
+  bottom: -7px;
+  width: 2px;
+  height: 7px;
+  background: var(--ink-border);
+}
+
+.agent-pipeline-card.disabled-agent::after {
+  background: var(--ink-border);
+  opacity: 0.3;
 }
 
 /* --- Export Section --- */
