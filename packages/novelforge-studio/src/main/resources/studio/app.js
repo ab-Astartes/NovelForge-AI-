@@ -672,6 +672,34 @@ async function showBookDetail(bookPath) {
   }
 }
 
+function onGlobalBookChange(val) {
+  const ids = ['write-book','audit-book','synopsis-book','style-book','characters-book','hooks-book','state-book','rollback-book','toolbox-book'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
+  const detailCard = document.getElementById('book-detail-card');
+  if (detailCard) {
+    detailCard.style.display = val ? 'block' : 'none';
+    if (val) loadBookEdit();
+  }
+}
+
+function onToolboxBookChange(val) {
+  const g = document.getElementById('global-book');
+  if (g) g.value = val;
+  onGlobalBookChange(val);
+}
+
+function switchDetailTab(tabName) {
+  document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.detail-tab-content').forEach(t => t.classList.remove('active'));
+  const tab = document.querySelector(`.detail-tab[onclick="switchDetailTab('${tabName}')"]`);
+  const content = document.getElementById('tab-' + tabName);
+  if (tab) tab.classList.add('active');
+  if (content) content.classList.add('active');
+}
+
 // ========== Populate Book Selects ==========
 
 async function populateBookSelects(books) {
@@ -681,7 +709,7 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book', 'search-book'];
+  const selects = ['global-book','toolbox-book','write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book', 'search-book'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -972,7 +1000,7 @@ function startBatchWrite() {
 // ========== Outline/Intent Editors ==========
 
 async function loadOutlineEditor() {
-  const bookPath = document.getElementById('outline-editor-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const textarea = document.getElementById('outline-editor-content');
   const resultDiv = document.getElementById('outline-editor-result');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
@@ -985,7 +1013,7 @@ async function loadOutlineEditor() {
 }
 
 async function saveOutlineEditor() {
-  const bookPath = document.getElementById('outline-editor-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const outline = document.getElementById('outline-editor-content').value;
   const resultDiv = document.getElementById('outline-editor-result');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
@@ -1001,7 +1029,7 @@ async function saveOutlineEditor() {
 }
 
 async function loadIntentEditor() {
-  const bookPath = document.getElementById('intent-editor-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const textarea = document.getElementById('intent-editor-content');
   const resultDiv = document.getElementById('intent-editor-result');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
@@ -1014,7 +1042,7 @@ async function loadIntentEditor() {
 }
 
 async function saveIntentEditor() {
-  const bookPath = document.getElementById('intent-editor-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const intent = document.getElementById('intent-editor-content').value;
   const resultDiv = document.getElementById('intent-editor-result');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
@@ -1096,7 +1124,7 @@ async function saveChapterContent() {
 // ========== Book Search ==========
 
 async function searchBookContent() {
-  const bookPath = document.getElementById('search-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const keyword = document.getElementById('search-keyword').value;
   const resultDiv = document.getElementById('search-results');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
@@ -1124,7 +1152,7 @@ async function searchBookContent() {
 // ========== Book Property Edit ==========
 
 async function loadBookEdit() {
-  const bookPath = document.getElementById('book-edit-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const resultDiv = document.getElementById('book-edit-result');
   if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
   try {
@@ -1138,7 +1166,7 @@ async function loadBookEdit() {
 }
 
 async function saveBookEdit() {
-  const bookPath = document.getElementById('book-edit-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const title = document.getElementById('book-edit-title').value.trim();
   const author = document.getElementById('book-edit-author').value.trim();
   const genre = document.getElementById('book-edit-genre').value;
@@ -1312,7 +1340,7 @@ async function quickDeleteBook(bookPath, title) {
 }
 
 async function deleteBook() {
-  const bookPath = document.getElementById('delete-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const type = document.getElementById('delete-type').value;
   const resultDiv = document.getElementById('delete-result');
 
@@ -1347,7 +1375,7 @@ async function deleteBook() {
 // ========== Export Book ==========
 
 async function exportBook() {
-  const bookPath = document.getElementById('export-book').value;
+  const bookPath = document.getElementById('global-book').value;
   const format = document.getElementById('export-format').value;
   const resultDiv = document.getElementById('export-result');
 

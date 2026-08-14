@@ -43,9 +43,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span class="stat-pill"><span class="stat-icon">📜</span> 9 Agent</span>
-      <span class="stat-pill"><span class="stat-icon">🎯</span> 33维审计</span>
-      <span class="stat-pill"><span class="stat-icon">📖</span> 10流派</span>
+      <span class="footer-version-label"><span id="footer-version"></span></span>
     </div>
   </aside>
 
@@ -54,11 +52,16 @@
     <!-- Header -->
     <header class="header">
       <div class="header-inner">
-        <p class="header-desc">AI 网文创作引擎 · 九重炼章</p>
-        <div class="header-stats">
-          <span class="stat-pill"><span class="stat-icon">📜</span> 9 Agent</span>
-          <span class="stat-pill"><span class="stat-icon">🎯</span> 33维审计</span>
-          <span class="stat-pill"><span class="stat-icon">📖</span> 10流派</span>
+        <div class="header-left">
+          <p class="header-desc">AI 网文创作引擎 · 九重炼章</p>
+        </div>
+        <div class="header-right">
+          <div class="global-book-selector">
+            <span class="gbs-label">当前书目</span>
+            <select id="global-book" class="input-field gbs-select" onchange="onGlobalBookChange(this.value)">
+              <option value="">选择书籍…</option>
+            </select>
+          </div>
         </div>
       </div>
     </header>
@@ -210,123 +213,104 @@
           <div id="book-detail-content" class="chapter-preview"></div>
         </div>
 
-        <!-- Book Property Edit -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">📋</span> 书卷属性</div>
-          <div class="form-group">
-            <label class="form-label">选择书籍</label>
-            <select id="book-edit-book" class="input-field"></select>
+        <!-- Book Detail Tabs -->
+        <div class="card" id="book-detail-card" style="display:none">
+          <div class="detail-tabs">
+            <button class="detail-tab active" onclick="switchDetailTab('props')">属性</button>
+            <button class="detail-tab" onclick="switchDetailTab('outline')">大纲</button>
+            <button class="detail-tab" onclick="switchDetailTab('intent')">意图</button>
+            <button class="detail-tab" onclick="switchDetailTab('search')">搜索</button>
+            <button class="detail-tab" onclick="switchDetailTab('export')">导出</button>
           </div>
-          <div class="btn-row">
-            <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
-            <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
+
+          <!-- Tab: Properties -->
+          <div class="detail-tab-content active" id="tab-props">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">书名</label>
+                <input type="text" id="book-edit-title" class="input-field" placeholder="书名">
+              </div>
+              <div class="form-group">
+                <label class="form-label">作者</label>
+                <input type="text" id="book-edit-author" class="input-field" placeholder="笔名">
+              </div>
+              <div class="form-group">
+                <label class="form-label">流派</label>
+                <select id="book-edit-genre" class="input-field">
+                  <option value="xuanhuan">玄幻</option>
+                  <option value="xianxia">仙侠</option>
+                  <option value="urban">都市</option>
+                  <option value="wuxia">武侠</option>
+                  <option value="history">历史</option>
+                  <option value="horror">恐怖</option>
+                  <option value="romance-zh">言情</option>
+                  <option value="fantasy">Fantasy</option>
+                  <option value="thriller">Thriller</option>
+                  <option value="romance-en">Romance</option>
+                  <option value="scifi">Sci-Fi</option>
+                  <option value="mystery">Mystery</option>
+                </select>
+              </div>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
+              <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
+            </div>
+            <div id="book-edit-result" class="result-box"></div>
           </div>
+
+          <!-- Tab: Outline -->
+          <div class="detail-tab-content" id="tab-outline">
+            <div class="btn-row" style="margin-bottom:8px">
+              <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
+              <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
+            </div>
+            <textarea id="outline-editor-content" class="input-field" rows="10" placeholder="在此编辑大纲内容..."></textarea>
+            <div id="outline-editor-result" class="result-box"></div>
+          </div>
+
+          <!-- Tab: Intent -->
+          <div class="detail-tab-content" id="tab-intent">
+            <div class="btn-row" style="margin-bottom:8px">
+              <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
+              <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
+            </div>
+            <textarea id="intent-editor-content" class="input-field" rows="6" placeholder="在此编辑创作意图..."></textarea>
+            <div id="intent-editor-result" class="result-box"></div>
+          </div>
+
+          <!-- Tab: Search -->
+          <div class="detail-tab-content" id="tab-search">
+            <div class="form-group" style="margin-bottom:8px">
+              <div style="display:flex;gap:8px">
+                <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容" style="flex:1">
+                <button onclick="searchBookContent()" class="btn-ink btn-sm">搜索</button>
+              </div>
+            </div>
+            <div id="search-results" class="result-box"></div>
+          </div>
+
+          <!-- Tab: Export -->
+          <div class="detail-tab-content" id="tab-export">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">格式</label>
+                <select id="export-format" class="input-field">
+                  <option value="txt">TXT · 纯文本</option>
+                  <option value="md">Markdown · 标记</option>
+                  <option value="epub">EPUB · 电子书</option>
+                </select>
+              </div>
+            </div>
+            <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
+            <div id="export-result" class="result-box"></div>
+          </div>
+        </div>
+
+        <!-- Delete (danger zone) -->
+        <div class="card card-danger" style="margin-top:8px">
+          <div class="card-title"><span class="card-icon">💀</span> 焚卷销书</div>
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">书名</label>
-              <input type="text" id="book-edit-title" class="input-field" placeholder="书名">
-            </div>
-            <div class="form-group">
-              <label class="form-label">作者</label>
-              <input type="text" id="book-edit-author" class="input-field" placeholder="笔名">
-            </div>
-            <div class="form-group">
-              <label class="form-label">流派</label>
-              <select id="book-edit-genre" class="input-field">
-                <option value="xuanhuan">玄幻 · 苍穹破天</option>
-                <option value="xianxia">仙侠 · 云海修真</option>
-                <option value="urban">都市 · 都市风云</option>
-                <option value="wuxia">武侠 · 侠骨柔情</option>
-                <option value="history">历史 · 烟雨长河</option>
-                <option value="horror">恐怖 · 诡异求生</option>
-                <option value="romance-zh">言情 · 缱绻情深</option>
-                <option value="fantasy">Fantasy · 西幻征途</option>
-                <option value="thriller">Thriller · 悬疑惊悚</option>
-                <option value="romance-en">Romance · 英伦情缘</option>
-                <option value="scifi">Sci-Fi · 未来纪元</option>
-                <option value="mystery">Mystery · 探案推理</option>
-              </select>
-            </div>
-          </div>
-          <div id="book-edit-result" class="result-box"></div>
-        </div>
-
-        <!-- Book Search -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">🔎</span> 全书搜索</div>
-          <div class="form-group">
-            <label class="form-label">选择书籍</label>
-            <select id="search-book" class="input-field"></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">关键词</label>
-            <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容">
-          </div>
-          <div class="btn-row">
-            <button onclick="searchBookContent()" class="btn-ink btn-sm">搜</button>
-          </div>
-          <div id="search-results" class="result-box"></div>
-        </div>
-
-        <!-- Outline Editor -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">📝</span> 大纲编辑</div>
-          <div class="form-group">
-            <label class="form-label">选择书籍</label>
-            <select id="outline-editor-book" class="input-field"></select>
-          </div>
-          <div class="btn-row">
-            <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
-            <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
-          </div>
-          <textarea id="outline-editor-content" class="input-field" rows="10" placeholder="在此编辑大纲内容..."></textarea>
-          <div id="outline-editor-result" class="result-box"></div>
-        </div>
-
-        <!-- Author Intent Editor -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">🎯</span> 意图编辑</div>
-          <div class="form-group">
-            <label class="form-label">选择书籍</label>
-            <select id="intent-editor-book" class="input-field"></select>
-          </div>
-          <div class="btn-row">
-            <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
-            <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
-          </div>
-          <textarea id="intent-editor-content" class="input-field" rows="6" placeholder="在此编辑创作意图..."></textarea>
-          <div id="intent-editor-result" class="result-box"></div>
-        </div>
-
-        <!-- Export -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">📤</span> 导出成书</div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">选择书籍</label>
-              <select id="export-book" class="input-field"></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">格式</label>
-              <select id="export-format" class="input-field">
-                <option value="txt">TXT · 纯文本</option>
-                <option value="md">Markdown · 标记</option>
-                <option value="epub">EPUB · 电子书</option>
-              </select>
-            </div>
-          </div>
-          <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
-          <div id="export-result" class="result-box"></div>
-        </div>
-
-        <!-- Delete -->
-        <div class="card" style="border-color:rgba(139,0,0,0.3)">
-          <div class="card-title" style="color:#c0392b"><span class="card-icon">🔥</span> 焚卷销书</div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">选择书籍</label>
-              <select id="delete-book" class="input-field"></select>
-            </div>
             <div class="form-group">
               <label class="form-label">删除类型</label>
               <select id="delete-type" class="input-field">
@@ -338,7 +322,7 @@
           <button onclick="deleteBook()" class="btn-ink btn-sm btn-danger">确认焚卷</button>
           <div id="delete-result" class="result-box"></div>
         </div>
-      </section>
+</section>
 
       <!-- ========== 落笔：写作 ========== -->
       <section id="panel-write" class="panel">
@@ -464,6 +448,16 @@
         <div class="panel-header">
           <h2 class="panel-title">工具箱</h2>
           <p class="panel-desc">辅助生成工具、风格配置、人物台账、伏笔台账</p>
+        </div>
+
+        <!-- Global Book Context -->
+        <div class="card card-compact">
+          <div class="context-bar">
+            <span class="context-label">当前书目</span>
+            <select id="toolbox-book" class="input-field gbs-select" onchange="onToolboxBookChange(this.value)">
+              <option value="">选择书籍…</option>
+            </select>
+          </div>
         </div>
 
         <!-- Prompt-driven Outline Generation -->
@@ -894,7 +888,6 @@
           <p class="agent-section-desc">全局默认配置已覆盖全部智能体，点击 <span class="override-hint">自定义</span> 可为单个智能体指定不同模型</p>
           <div id="agent-pipeline-config"></div>
         </div>
-
 
         <div class="card">
           <div class="card-title"><span class="card-icon">📐</span> 章节参数</div>
