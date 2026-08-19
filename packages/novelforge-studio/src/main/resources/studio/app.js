@@ -1049,9 +1049,9 @@ async function cancelWrite() {
       document.getElementById('write-progress').textContent = '✗ 已取消';
       showResult(document.getElementById('write-result'), '✗ 写作已取消', true);
     } else {
-      alert('取消失败: ' + (data.error || '未知错误'));
+      showToast('取消失败: ' + (data.error || '未知错误'), 'error');
     }
-  } catch (e) { alert('网络错误: ' + e.message); }
+  } catch (e) { showToast('网络错误: ' + e.message, 'error'); }
 }
 
 function startBatchWrite() {
@@ -1132,12 +1132,12 @@ async function saveChapterTitle() {
     });
     const data = await res.json();
     if (data.status === 'saved') {
-      alert(`第 ${chapterNum} 章标题已更新为: ${title}`);
+      showToast(`第 ${chapterNum} 章标题已更新为: ${title}`, 'info');
       showChapterContent(bookPath, chapterNum);
     } else {
-      alert('保存失败: ' + (data.error || '未知'));
+      showToast('保存失败: ' + (data.error || '未知'), 'error');
     }
-  } catch (e) { alert('网络错误: ' + e.message); }
+  } catch (e) { showToast('网络错误: ' + e.message, 'error'); }
 }
 
 // ========== Chapter Content Edit ==========
@@ -1175,13 +1175,13 @@ async function saveChapterContent() {
     });
     const data = await res.json();
     if (data.status === 'saved') {
-      alert(`第 ${chapterNum} 章内容已保存 (${data.wordCount} 字)`);
+      showToast(`第 ${chapterNum} 章内容已保存 (${data.wordCount} 字, 'info')`);
       cancelChapterEdit();
       await showChapterContent(bookPath, chapterNum);
     } else {
-      alert('保存失败: ' + (data.error || '未知'));
+      showToast('保存失败: ' + (data.error || '未知'), 'error');
     }
-  } catch (e) { alert('网络错误: ' + e.message); }
+  } catch (e) { showToast('网络错误: ' + e.message, 'error'); }
 }
 
 // ========== Book Search ==========
@@ -1395,10 +1395,10 @@ async function quickDeleteBook(bookPath, title) {
       loadBooks();
       populateBookSelects();
     } else {
-      alert('删除失败: ' + (data.error || '未知错误'));
+      showToast('删除失败: ' + (data.error || '未知错误'), 'error');
     }
   } catch (e) {
-    alert('网络错误: ' + e.message);
+    showToast('网络错误: ' + e.message, 'error');
   }
 }
 
@@ -2661,9 +2661,9 @@ async function submitReference(bookPath) {
     if (data.status === 'ok') {
       loadReferences(bookPath);
     } else {
-      alert('保存失败: ' + (data.error || ''));
+      showToast('保存失败: ' + (data.error || ''), 'error');
     }
-  } catch (e) { alert('保存失败: ' + e.message); }
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 
 async function deleteReference(bookPath, refId) {
@@ -2676,9 +2676,9 @@ async function deleteReference(bookPath, refId) {
     if (data.status === 'deleted') {
       loadReferences(bookPath);
     } else {
-      alert('删除失败: ' + (data.error || ''));
+      showToast('删除失败: ' + (data.error || ''), 'error');
     }
-  } catch (e) { alert('删除失败: ' + e.message); }
+  } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
 function addInspiration(bookPath) {
@@ -2725,9 +2725,9 @@ async function submitInspiration(bookPath) {
     if (data.status === 'ok') {
       loadInspirations(bookPath);
     } else {
-      alert('保存失败: ' + (data.error || ''));
+      showToast('保存失败: ' + (data.error || ''), 'error');
     }
-  } catch (e) { alert('保存失败: ' + e.message); }
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 
 async function deleteInspiration(bookPath, inspId) {
@@ -2740,9 +2740,9 @@ async function deleteInspiration(bookPath, inspId) {
     if (data.status === 'deleted') {
       loadInspirations(bookPath);
     } else {
-      alert('删除失败: ' + (data.error || ''));
+      showToast('删除失败: ' + (data.error || ''), 'error');
     }
-  } catch (e) { alert('删除失败: ' + e.message); }
+  } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
 // ========== Version ==========
