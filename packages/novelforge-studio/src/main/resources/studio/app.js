@@ -267,6 +267,221 @@ async function loadWorldBuilding() {
   }
 }
 
+
+// ========== Chapter Confirmation Workflow ==========
+async function confirmChapterToFinal(bookPath, chapterTitle) {
+  if (!bookPath || !chapterTitle) return;
+  try {
+    // Get current draft
+    const draftResp = await fetch(authUrl(API + '/api/book/chapter?path=' + encodeURIComponent(bookPath) + '&title=' + encodeURIComponent(chapterTitle) + '&type=draft'), { headers: authHeaders() });
+    const draftData = await draftResp.json();
+    const draftText = draftData.content || '';
+    if (!draftText.trim()) { showToast('初稿为空，无法确认', 'error'); return; }
+    // Confirm: save draft as final
+    const resp = await fetch(authUrl(API + '/api/book/edit'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, title: chapterTitle, field: 'finalText', value: draftText })
+    });
+    const result = await resp.json();
+    if (result.status === 'updated' || result.status === 'ok') {
+      showToast('✅ 章节已确认入终稿', 'success');
+      // Refresh chapter view
+      if (typeof showChapterContent === 'function') showChapterContent(bookPath, chapterTitle);
+    } else {
+      showToast('确认失败: ' + (result.error || '未知错误'), 'error');
+    }
+  } catch(e) {
+    showToast('确认失败: ' + e.message, 'error');
+  }
+}
+
+function rejectChapterDraft(bookPath, chapterTitle) {
+  showToast('已退回初稿，请继续修改', 'info');
+}
+
+// ========== Immersive Writing Mode ==========
+let immersiveMode = false;
+let autoSaveTimer = null;
+
+function toggleImmersiveMode() {
+  immersiveMode = !immersiveMode;
+  document.body.classList.toggle('immersive-mode', immersiveMode);
+  const btn = document.getElementById('btn-immersive');
+  if (btn) btn.textContent = immersiveMode ? '退出沉浸' : '沉浸模式';
+  if (immersiveMode) {
+    // Start auto-save
+    startAutoSave();
+    showToast('已进入沉浸写作模式 · 自动保存已开启', 'success', 3000);
+  } else {
+    stopAutoSave();
+    showToast('已退出沉浸模式', 'info');
+  }
+}
+
+function startAutoSave() {
+  stopAutoSave();
+  autoSaveTimer = setInterval(() => {
+    autoSaveCurrentDraft();
+  }, 30000); // 30s
+}
+
+function stopAutoSave() {
+  if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null; }
+}
+
+async function autoSaveCurrentDraft() {
+  const bookPath = document.getElementById('global-book')?.value;
+  const chapterTitle = document.querySelector('.chapter-editor-title')?.textContent;
+  const editor = document.querySelector('.chapter-editor-textarea');
+  if (!bookPath || !chapterTitle || !editor) return;
+  try {
+    await fetch(authUrl(API + '/api/book/edit'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, title: chapterTitle, field: 'draftText', value: editor.value })
+    });
+    // Show subtle save indicator
+    const indicator = document.getElementById('auto-save-indicator');
+    if (indicator) { indicator.textContent = '已自动保存'; indicator.style.opacity = '1'; setTimeout(() => { indicator.style.opacity = '0.5'; }, 1500); }
+  } catch(e) { /* silent fail */ }
+}
+
+function updateWordCount() {
+  const editor = document.querySelector('.chapter-editor-textarea');
+  const counter = document.getElementById('word-count-display');
+  if (!editor || !counter) return;
+  const text = editor.value;
+  const chars = text.length;
+  // Chinese word count: chars - spaces
+  const words = text.replace(/\s/g, '').length;
+  counter.textContent = words + ' 字';
+}
+
+// ========== Selection-based AI Tools ==========
+function getSelectedText() {
+  const editor = document.querySelector('.chapter-editor-textarea');
+  if (!editor) return null;
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  if (start === end) return null;
+  return { text: editor.value.substring(start, end), start, end };
+}
+
+async function aiExpandSelection() {
+  const sel = getSelectedText();
+  if (!sel) { showToast('请先选中要扩写的段落', 'info'); return; }
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { showToast('请先选择书籍', 'info'); return; }
+  const resultDiv = document.querySelector('.ai-result-panel') || createAiResultPanel();
+  resultDiv.innerHTML = '<div class="loading-spinner"></div><span>AI 扩写中...</span>';
+  resultDiv.style.display = 'block';
+  try {
+    const body = { path: bookPath, text: sel.text, action: 'expand', apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+    const resp = await fetch(authUrl(API + '/api/chapter/revise'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.revisedText) {
+      resultDiv.innerHTML = '<div class="ai-result-label">AI 扩写结果</div><div class="ai-result-text">' + data.revisedText.replace(/\n/g, '<br>') + '</div><div class="ai-result-actions"><button class="btn-ink btn-sm" onclick="applyAiResult(' + sel.start + ',' + sel.end + ',this)">采用</button><button class="btn-ghost btn-sm" onclick="this.parentElement.parentElement.style.display=\'none\'">关闭</button></div>';
+    } else {
+      resultDiv.innerHTML = '<div class="empty-hint">扩写失败</div>';
+    }
+  } catch(e) { resultDiv.innerHTML = '<div class="empty-hint">扩写失败: ' + e.message + '</div>'; }
+}
+
+async function aiPolishSelection() {
+  const sel = getSelectedText();
+  if (!sel) { showToast('请先选中要润色的段落', 'info'); return; }
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { showToast('请先选择书籍', 'info'); return; }
+  const resultDiv = document.querySelector('.ai-result-panel') || createAiResultPanel();
+  resultDiv.innerHTML = '<div class="loading-spinner"></div><span>AI 润色中...</span>';
+  resultDiv.style.display = 'block';
+  try {
+    const body = { path: bookPath, text: sel.text, action: 'polish', apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+    const resp = await fetch(authUrl(API + '/api/chapter/revise'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.revisedText) {
+      resultDiv.innerHTML = '<div class="ai-result-label">AI 润色结果</div><div class="ai-result-text">' + data.revisedText.replace(/\n/g, '<br>') + '</div><div class="ai-result-actions"><button class="btn-ink btn-sm" onclick="applyAiResult(' + sel.start + ',' + sel.end + ',this)">采用</button><button class="btn-ghost btn-sm" onclick="this.parentElement.parentElement.style.display=\'none\'">关闭</button></div>';
+    } else {
+      resultDiv.innerHTML = '<div class="empty-hint">润色失败</div>';
+    }
+  } catch(e) { resultDiv.innerHTML = '<div class="empty-hint">润色失败: ' + e.message + '</div>'; }
+}
+
+function applyAiResult(start, end, btn) {
+  const editor = document.querySelector('.chapter-editor-textarea');
+  if (!editor) return;
+  const newText = btn.closest('.ai-result-panel').querySelector('.ai-result-text').innerText;
+  editor.value = editor.value.substring(0, start) + newText + editor.value.substring(end);
+  btn.closest('.ai-result-panel').style.display = 'none';
+  showToast('已应用AI修改', 'success');
+  updateWordCount();
+}
+
+function createAiResultPanel() {
+  const panel = document.createElement('div');
+  panel.className = 'ai-result-panel';
+  panel.style.display = 'none';
+  const editorArea = document.querySelector('.chapter-editor-area') || document.querySelector('#chapter-editor');
+  if (editorArea) editorArea.parentElement.appendChild(panel);
+  else document.body.appendChild(panel);
+  return panel;
+}
+
+
+// Post-render hook for chapter editor enhancements
+function enhanceChapterEditor(bookPath, chapterTitle) {
+  // Add word count bar
+  const editor = document.querySelector('.chapter-editor-textarea');
+  if (!editor) return;
+  
+  // Remove existing enhancements
+  document.querySelectorAll('.writing-status-bar, .chapter-confirm-bar, .ai-selection-toolbar').forEach(el => el.remove());
+  
+  // Word count + auto-save indicator
+  const statusBar = document.createElement('div');
+  statusBar.className = 'writing-status-bar';
+  statusBar.innerHTML = '<span id="auto-save-indicator">自动保存</span><span id="word-count-display">0 字</span>';
+  editor.parentElement.appendChild(statusBar);
+  
+  // Update word count on input
+  editor.addEventListener('input', updateWordCount);
+  updateWordCount();
+  
+  // Chapter confirmation bar
+  const confirmBar = document.createElement('div');
+  confirmBar.className = 'chapter-confirm-bar';
+  confirmBar.innerHTML = '<span class="confirm-label">章节确认工作流</span>' +
+    '<button class="btn-confirm" onclick="confirmChapterToFinal(\'' + bookPath.replace(/'/g, "\\'") + '\', \'' + chapterTitle.replace(/'/g, "\\'") + '\')">✅ 确认入终稿</button>' +
+    '<button class="btn-reject" onclick="rejectChapterDraft()">退回修改</button>';
+  editor.parentElement.appendChild(confirmBar);
+  
+  // AI selection toolbar (only if text selected)
+  const aiToolbar = document.createElement('div');
+  aiToolbar.className = 'ai-selection-toolbar';
+  aiToolbar.style.cssText = 'display:none; position:fixed; top:0; right:20px; background:var(--ink-dark); border:1px solid var(--ink-border); border-radius:var(--radius); padding:6px; z-index:200; display:flex; gap:4px;';
+  aiToolbar.innerHTML = '<button class="btn-ink btn-sm" onclick="aiExpandSelection()">扩写</button><button class="btn-ink btn-sm" onclick="aiPolishSelection()">润色</button>';
+  document.body.appendChild(aiToolbar);
+  
+  // Show/hide AI toolbar on selection
+  editor.addEventListener('mouseup', () => {
+    const sel = getSelectedText();
+    aiToolbar.style.display = sel ? 'flex' : 'none';
+  });
+  editor.addEventListener('keyup', () => {
+    const sel = getSelectedText();
+    aiToolbar.style.display = sel ? 'flex' : 'none';
+  });
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
@@ -3025,3 +3240,14 @@ document.querySelectorAll('.shared-api-key, .shared-base-url, .shared-model-id')
     syncConfigToUI();
   });
 });
+
+
+// Wrap showChapterContent to add enhancements
+const _origShowChapter = typeof showChapterContent === 'function' ? showChapterContent : null;
+if (_origShowChapter) {
+  showChapterContent = async function(bookPath, chapterTitle) {
+    await _origShowChapter(bookPath, chapterTitle);
+    setTimeout(() => enhanceChapterEditor(bookPath, chapterTitle), 100);
+  };
+}
+

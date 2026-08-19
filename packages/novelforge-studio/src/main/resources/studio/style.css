@@ -1873,6 +1873,50 @@ body {
 .world-field { margin-bottom: 12px; padding: 12px; background: var(--ink-dark); border-radius: var(--radius); border: 1px solid var(--ink-border); }
 .world-field label { display: block; font-size: 12px; color: var(--cyan-ink); margin-bottom: 6px; font-weight: 600; }
 .world-field .world-value { font-size: 13px; color: var(--paper); line-height: 1.6; }
+
+/* --- Immersive Writing Mode --- */
+.immersive-mode .sidebar { transform: translateX(-100%); }
+.immersive-mode .main-content { margin-left: 0; }
+.immersive-mode .panel { max-width: 860px; margin: 0 auto; padding: 40px 60px; }
+.immersive-mode .chapter-editor-textarea {
+  font-size: 18px; line-height: 2; min-height: 80vh; background: var(--ink-black);
+  border: none; padding: 20px; caret-color: var(--cinnabar);
+}
+.immersive-mode .writing-toolbar {
+  position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink-dark);
+  border-top: 1px solid var(--ink-border); padding: 8px 24px;
+  display: flex; align-items: center; justify-content: space-between; z-index: 100;
+}
+.immersive-mode #word-count-display { color: var(--paper-dark); font-size: 13px; }
+.immersive-mode #auto-save-indicator { color: var(--cyan-ink); font-size: 12px; transition: opacity 0.3s; }
+
+/* --- AI Result Panel --- */
+.ai-result-panel {
+  background: var(--ink-dark); border: 1px solid var(--ink-border); border-left: 3px solid var(--gold);
+  border-radius: var(--radius); padding: 16px; margin-top: 12px;
+}
+.ai-result-label { font-size: 13px; color: var(--gold); font-weight: 600; margin-bottom: 8px; }
+.ai-result-text { font-size: 14px; color: var(--paper); line-height: 1.8; white-space: pre-wrap; }
+.ai-result-actions { margin-top: 12px; display: flex; gap: 8px; }
+
+/* --- Chapter Confirmation Buttons --- */
+.chapter-confirm-bar {
+  display: flex; gap: 8px; align-items: center; padding: 8px 0;
+  border-top: 1px solid var(--ink-border); margin-top: 12px;
+}
+.chapter-confirm-bar .confirm-label { font-size: 12px; color: var(--paper-dark); margin-right: auto; }
+.btn-confirm { background: #27ae60; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-confirm:hover { background: #2ecc71; }
+.btn-reject { background: transparent; color: var(--paper-dark); border: 1px solid var(--ink-border); padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-reject:hover { border-color: var(--cinnabar); color: var(--cinnabar); }
+
+/* --- Word Count & Auto-save --- */
+.writing-status-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 12px; font-size: 12px; color: var(--paper-dark);
+  background: var(--ink-dark); border-radius: 0 0 var(--radius) var(--radius);
+  border: 1px solid var(--ink-border); border-top: none;
+}
 @media (max-width: 768px) {
   .usage-summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
