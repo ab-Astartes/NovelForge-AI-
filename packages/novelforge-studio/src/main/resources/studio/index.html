@@ -45,6 +45,10 @@
     <div class="sidebar-footer">
       <span class="footer-version-label"><span id="footer-version"></span></span>
     </div>
+            <div class="nav-item" onclick="showPanel('usage')" title="用量">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">用量</span>
+            </div>
   </aside>
 
   <!-- ===== Main Content ===== -->
@@ -607,6 +611,18 @@
             <button onclick="detectAiTrace()" class="btn-ink btn-sm" id="btn-ai-trace">去AI痕</button>
           </div>
         </div>
+            <div class="tool-card">
+              <div class="tool-card-icon">✍️</div>
+              <div class="tool-card-body">
+                <div class="tool-card-title">章节续写</div>
+                <div class="tool-card-desc">在当前章节末尾自然续写新内容</div>
+                <div class="form-group">
+                  <label>续写要求（可选）</label>
+                  <input type="text" id="continue-chapter-prompt" class="input-field" placeholder="如：增加对话、推进悬念...">
+                </div>
+                <button id="btn-continue-chapter" class="btn-ink" onclick="continueChapterTool()">✍️ 续写</button>
+              </div>
+            </div>
 
         <!-- Writing Style -->
         <div class="card">
@@ -878,7 +894,18 @@
             <div id="sample-config-box" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.08);font-size:12px;line-height:1.6;color:rgba(255,255,255,0.6)"></div>
           </div>
           <div class="form-grid">
-            <div class="form-group">
+            
+              <div class="provider-quick-select">
+                <span class="provider-label">快速切换：</span>
+                <button class="provider-btn" onclick="applyProviderPreset('openai')">OpenAI</button>
+                <button class="provider-btn" onclick="applyProviderPreset('anthropic')">Anthropic</button>
+                <button class="provider-btn" onclick="applyProviderPreset('deepseek')">DeepSeek</button>
+                <button class="provider-btn" onclick="applyProviderPreset('qwen')">通义千问</button>
+                <button class="provider-btn" onclick="applyProviderPreset('glm')">智谱GLM</button>
+                <button class="provider-btn" onclick="applyProviderPreset('kimi')">Moonshot</button>
+                <button class="provider-btn" onclick="applyProviderPreset('minimax')">MiniMax</button>
+              </div>
+<div class="form-group">
               <label class="form-label">Provider</label>
               <select id="cfg-global-provider" class="input-field">
                 <option value="openai">OpenAI</option>

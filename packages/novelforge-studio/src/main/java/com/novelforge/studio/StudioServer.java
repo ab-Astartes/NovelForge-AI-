@@ -85,6 +85,55 @@ public class StudioServer {
     private final String authToken;
     private final boolean noAuth;
 
+    // ========== Token Usage Tracking ==========
+    private static final Object usageLock = new Object();
+    private static long totalCalls = 0;
+    private static long totalInputTokens = 0;
+    private static long totalOutputTokens = 0;
+    private static long totalCostCents = 0;
+    private static final java.util.Map<String, long[]> perModelUsage = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void recordUsage(String model, int inTokens, int outTokens, long costCents) {
+        synchronized (usageLock) {
+            totalCalls++; totalInputTokens += inTokens; totalOutputTokens += outTokens; totalCostCents += costCents;
+            long[] v = perModelUsage.getOrDefault(model, new long[4]);
+            v[0]++; v[1] += inTokens; v[2] += outTokens; v[3] += costCents;
+            perModelUsage.put(model, v);
+        }
+    }
+
+    private static int estimateTokens(Object text) {
+        if (text == null) return 0;
+        String s = text.toString();
+        int cn = 0, en = 0;
+        for (char c : s.toCharArray()) { if (c >= 0x4E00 && c <= 0x9FFF) cn++; else en++; }
+        return (int)(cn / 1.5 + en / 4.0);
+    }
+
+    private static String getUsageJson() {
+        synchronized (usageLock) {
+            try {
+                var o = mapper.createObjectNode();
+                o.put("totalCalls", totalCalls); o.put("totalInputTokens", totalInputTokens);
+                o.put("totalOutputTokens", totalOutputTokens); o.put("totalCostCents", totalCostCents);
+                var m = o.putObject("models");
+                for (var e : perModelUsage.entrySet()) {
+                    var n = m.putObject(e.getKey()); long[] v = e.getValue();
+                    n.put("calls", v[0]); n.put("inputTokens", v[1]); n.put("outputTokens", v[2]); n.put("costCents", v[3]);
+                }
+                return mapper.writeValueAsString(o);
+            } catch (Exception e) { return "{}"; }
+        }
+    }
+
+    private static String resetUsageJson() {
+        synchronized (usageLock) {
+            totalCalls = 0; totalInputTokens = 0; totalOutputTokens = 0; totalCostCents = 0;
+            perModelUsage.clear();
+            return "{\"status\":\"reset\"}";
+        }
+    }
+
 
 
     // Pipeline components (configured per-request based on user's API key)
@@ -248,6 +297,13 @@ public class StudioServer {
         server.createContext("/api/style", corsWrap(this::handleStyleApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
+            server.createContext("/api/usage", corsWrap(ex -> {
+                if ("GET".equals(ex.getRequestMethod())) { sendJson(ex, 200, getUsageJson()); }
+                else if ("DELETE".equals(ex.getRequestMethod())) { sendJson(ex, 200, resetUsageJson()); }
+                else { sendJson(ex, 405, "{\"error\":\"Method not allowed\"}"); }
+            }));
+server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapterContinueStreamApi));
+
         server.createContext("/api/volume/synopsis", corsWrap(this::handleVolumeSynopsisApi));
         server.createContext("/api/ai-trace", corsWrap(this::handleAiTraceApi));
         server.createContext("/api/outline/generate", corsWrap(this::handleOutlineGenerateApi));
@@ -3478,6 +3534,7 @@ public class StudioServer {
                     try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
                 }
                 @Override public void onComplete(String text) {
+                    recordUsage("stream", estimateTokens(messages), estimateTokens(fullText), 0);
                     try {
                         if (bookPath != null) {
                             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -3530,6 +3587,7 @@ public class StudioServer {
                     try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
                 }
                 @Override public void onComplete(String text) {
+                    recordUsage("stream", estimateTokens(messages), estimateTokens(fullText), 0);
                     try { sendSseEvent(os, "done", "{\"status\":\"ok\"}"); } catch (IOException ignored) {}
                 }
                 @Override public void onError(Exception e) {
@@ -3568,6 +3626,7 @@ public class StudioServer {
                     try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
                 }
                 @Override public void onComplete(String text) {
+                    recordUsage("stream", estimateTokens(messages), estimateTokens(fullText), 0);
                     try {
                         Book b = BookProject.loadBook(Paths.get(bookPath));
                         b.setOutline(text);
@@ -3617,6 +3676,7 @@ public class StudioServer {
                     try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
                 }
                 @Override public void onComplete(String text) {
+                    recordUsage("stream", estimateTokens(messages), estimateTokens(fullText), 0);
                     try { sendSseEvent(os, "done", "{\"status\":\"ok\"}"); } catch (IOException ignored) {}
                 }
                 @Override public void onError(Exception e) {
@@ -3670,6 +3730,7 @@ public class StudioServer {
                     try { sendSseEvent(os, "chunk", chunk); } catch (IOException e) { /* stream closed */ }
                 }
                 @Override public void onComplete(String text) {
+                    recordUsage("stream", estimateTokens(messages), estimateTokens(fullText), 0);
                     try {
                         if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
                             Book book = BookProject.loadBook(Paths.get(bookPath));
@@ -3691,6 +3752,73 @@ public class StudioServer {
             try { os.close(); } catch (Exception ignored) {}
         }
     }
+    private void handleChapterContinueStreamApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        JsonNode body = readBody(exchange);
+        String bookPath = body.has("path") ? body.get("path").asText() : null;
+        String chapterTitle = body.has("chapterTitle") ? body.get("chapterTitle").asText() : null;
+        String currentText = body.has("currentText") ? body.get("currentText").asText() : "";
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+        int maxWords = body.has("maxWords") ? body.get("maxWords").asInt() : 2000;
+        final ModelRouter router = resolveModelRouter(body);
+        if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey or model required\"}"); return; }
+        if (bookPath != null && !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+
+        // Try to load chapter text from book if not provided
+        if (currentText.isEmpty() && bookPath != null && chapterTitle != null) {
+            try {
+                Book _b = BookProject.loadBook(Paths.get(bookPath));
+                if (_b != null) {
+                    for (var ch : _b.getChapters()) {
+                        if (chapterTitle.equals(ch.getTitle())) {
+                            currentText = ch.getFinalText() != null ? ch.getFinalText() : ch.getDraftText();
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (currentText.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"No chapter text provided or found\"}"); return; }
+
+        String context = currentText.length() > 6000 ? currentText.substring(currentText.length() - 6000) : currentText;
+        String sysPrompt = "你是一个专业的小说续写助手。根据已有内容，自然地续写故事。保持风格、人物性格和情节发展的一致性。只输出续写内容，不要重复已有内容。";
+        String userPrompt = "请续写以下内容的后续部分";
+        if (!prompt.isEmpty()) userPrompt += "，要求：" + prompt;
+        userPrompt += "（续写约" + maxWords + "字）：\n\n--- 已有内容 ---\n" + context + "\n\n--- 续写 ---\n";
+
+        var systemMsg = new java.util.LinkedHashMap<String, String>();
+        systemMsg.put("role", "system");
+        systemMsg.put("content", sysPrompt);
+        var userMsg = new java.util.LinkedHashMap<String, String>();
+        userMsg.put("role", "user");
+        userMsg.put("content", userPrompt);
+        var messages = new java.util.ArrayList<java.util.Map<String, String>>();
+        messages.add(systemMsg);
+        messages.add(userMsg);
+
+        sendSseHeaders(exchange);
+        OutputStream os = exchange.getResponseBody();
+        StringBuilder fullText = new StringBuilder();
+        try {
+            LlmClient client = router.getClientForAgent("Writer");
+            client.chatCompleteStream(messages, router.getModelForAgent("Writer"), 0.8, 4096, new StreamHandler() {
+                public void onChunk(String chunk) {
+                    fullText.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (java.io.IOException ignored) {}
+                }
+                public void onComplete(String result) {
+                    try { sendSseEvent(os, "done", fullText.toString()); } catch (java.io.IOException ignored) {}
+                    recordUsage(router.getModelForAgent("Writer"), estimateTokens(messages), estimateTokens(fullText), 0);
+                }
+                public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", e.getMessage()); } catch (java.io.IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            try { sendSseEvent(os, "error", e.getMessage()); } catch (java.io.IOException ignored) {}
+        }
+    }
+
 
     private HttpHandler corsWrap(HttpHandler handler) {
         return ex -> {

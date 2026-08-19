@@ -42,6 +42,137 @@ function showToast(message, type, duration) {
   }, duration);
 }
 
+
+// ========== Token Usage ==========
+async function refreshUsage() {
+  try {
+    const resp = await fetch(authUrl(API + '/api/usage'));
+    const data = await resp.json();
+    document.getElementById('usage-total-calls').textContent = (data.totalCalls || 0).toLocaleString();
+    document.getElementById('usage-total-input').textContent = (data.totalInputTokens || 0).toLocaleString();
+    document.getElementById('usage-total-output').textContent = (data.totalOutputTokens || 0).toLocaleString();
+    const cost = (data.totalCostCents || 0) / 100;
+    document.getElementById('usage-total-cost').textContent = cost < 0.01 ? '$0.00' : '$' + cost.toFixed(2);
+    
+    const modelsDiv = document.getElementById('usage-models-list');
+    if (data.models && Object.keys(data.models).length > 0) {
+      let html = '<table class="usage-table"><thead><tr><th>模型</th><th>调用</th><th>输入</th><th>输出</th><th>费用</th></tr></thead><tbody>';
+      for (const [model, v] of Object.entries(data.models)) {
+        const mCost = (v.costCents || 0) / 100;
+        html += '<tr><td>' + model + '</td><td>' + (v.calls||0) + '</td><td>' + (v.inputTokens||0).toLocaleString() + '</td><td>' + (v.outputTokens||0).toLocaleString() + '</td><td>' + (mCost < 0.01 ? '$0.00' : '$' + mCost.toFixed(2)) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      modelsDiv.innerHTML = html;
+    } else {
+      modelsDiv.innerHTML = '<div class="usage-empty">暂无数据</div>';
+    }
+    showToast('用量已刷新', 'info', 1500);
+  } catch(e) {
+    showToast('获取用量失败: ' + e.message, 'error');
+  }
+}
+
+async function resetUsage() {
+  if (!confirm('确定要重置所有用量统计？此操作不可撤销。')) return;
+  try {
+    await fetch(authUrl(API + '/api/usage'), { method: 'DELETE' });
+    await refreshUsage();
+    showToast('统计已重置', 'success');
+  } catch(e) {
+    showToast('重置失败: ' + e.message, 'error');
+  }
+}
+
+
+// ========== Chapter Continuation (续写) ==========
+async function continueChapter() {
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { showToast('请先选择书籍', 'warning'); return; }
+  const chapterTitle = document.getElementById('chapter-edit-title')?.value;
+  const currentText = document.getElementById('chapter-editor')?.value || '';
+  if (!currentText.trim()) { showToast('章节内容为空，无法续写', 'warning'); return; }
+  
+  const prompt = document.getElementById('continue-prompt')?.value || '';
+  const maxWords = 2000;
+  const resultDiv = document.getElementById('chapter-continue-result') || document.getElementById('write-result');
+  const body = { path: bookPath, chapterTitle, currentText, prompt, maxWords, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  await streamLlmRequest('/api/chapter/continue/stream', body, resultDiv, 'chapter-editor', 'btn-continue-chapter', '续写');
+}
+
+function appendContinuation() {
+  const editor = document.getElementById('chapter-editor');
+  const resultDiv = document.getElementById('chapter-continue-result') || document.getElementById('write-result');
+  const continuedText = resultDiv?.innerText || '';
+  if (continuedText && editor) {
+    editor.value += '\n\n' + continuedText;
+    showToast('续写内容已追加到编辑器', 'success');
+  }
+}
+
+
+// ========== Chapter Continuation from Toolbox ==========
+async function continueChapterTool() {
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { showToast('请先选择书籍', 'warning'); return; }
+  const prompt = document.getElementById('continue-chapter-prompt')?.value || '';
+  const resultDiv = document.getElementById('write-result') || document.getElementById('synopsis-result');
+  if (!resultDiv) { showToast('请切换到落笔面板查看结果', 'info'); return; }
+  
+  // Get current chapter content from the book info
+  let currentText = '';
+  try {
+    const info = await (await fetch(authUrl(API + '/api/book/info?path=' + encodeURIComponent(bookPath)))).json();
+    if (info.chapters && info.chapters.length > 0) {
+      // Use the last chapter's content
+      const lastCh = info.chapters[info.chapters.length - 1];
+      const chResp = await fetch(authUrl(API + '/api/book/chapter?path=' + encodeURIComponent(bookPath) + '&chapter=' + lastCh.num));
+      const chData = await chResp.json();
+      currentText = chData.finalText || chData.draftText || '';
+    }
+  } catch(e) { showToast('获取章节内容失败', 'error'); return; }
+  
+  if (!currentText.trim()) { showToast('章节内容为空', 'warning'); return; }
+  
+  const body = { path: bookPath, currentText, prompt, maxWords: 2000, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  await streamLlmRequest('/api/chapter/continue/stream', body, resultDiv, null, 'btn-continue-chapter', '续写');
+  showRefIndicator(resultDiv, bookPath);
+}
+
+
+// ========== Built-in Providers ==========
+const BUILTIN_PROVIDERS = {
+  openai:    { name: 'OpenAI',    baseUrl: 'https://api.openai.com/v1',                          model: 'gpt-4o' },
+  anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com',                          model: 'claude-3-opus-20240229' },
+  deepseek:  { name: 'DeepSeek',  baseUrl: 'https://api.deepseek.com/v1',                        model: 'deepseek-chat' },
+  qwen:      { name: '通义千问',   baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-max' },
+  glm:       { name: '智谱GLM',   baseUrl: 'https://open.bigmodel.cn/api/paas/v4',               model: 'glm-4' },
+  kimi:      { name: 'Moonshot',  baseUrl: 'https://api.moonshot.cn/v1',                          model: 'moonshot-v1-8k' },
+  minimax:   { name: 'MiniMax',   baseUrl: 'https://api.minimax.chat/v1',                         model: 'abab6.5s-chat' }
+};
+
+function applyProviderPreset(key) {
+  const p = BUILTIN_PROVIDERS[key];
+  if (!p) return;
+  const urlEl = document.getElementById('cfg-global-baseUrl');
+  const modelEl = document.getElementById('cfg-global-modelId');
+  if (urlEl) urlEl.value = p.baseUrl;
+  if (modelEl) modelEl.value = p.model;
+  // Also update provider select
+  const provEl = document.getElementById('cfg-global-provider');
+  if (provEl) {
+    const opts = provEl.options;
+    let found = false;
+    for (let i = 0; i < opts.length; i++) {
+      if (opts[i].value === key) { provEl.selectedIndex = i; found = true; break; }
+    }
+    if (!found) {
+      // Add as custom
+      provEl.value = 'custom';
+    }
+  }
+  showToast('已切换到 ' + p.name + ' (' + p.model + ')', 'success', 2000);
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
@@ -113,7 +244,8 @@ const PANEL_MAP = {
   'style': 'toolbox',
   'rollback': 'audit',
   'characters': 'toolbox',
-  'hooks': 'toolbox'
+  'hooks': 'toolbox',
+  'usage': 'panel-usage'
 };
 
 function showPanel(name) {
@@ -123,6 +255,7 @@ function showPanel(name) {
   const panel = document.getElementById('panel-' + targetName);
   if (panel) {
     panel.classList.add('active');
+    if (panelId === 'usage') refreshUsage();
     // Trigger animation
     panel.style.opacity = '0';
     panel.style.transform = 'translateY(8px)';

@@ -89,6 +89,17 @@ public class StudioConfig {
         "Observer", "Reflector", "Normalizer", "Auditor", "Reviser"
     };
 
+    // Built-in model provider configs
+    public static final java.util.Map<String, String[]> BUILTIN_PROVIDERS = java.util.Map.of(
+        "openai",    new String[]{"OpenAI",   "https://api.openai.com/v1",     "gpt-4o"},
+        "anthropic", new String[]{"Anthropic", "https://api.anthropic.com",     "claude-3-opus-20240229"},
+        "deepseek",  new String[]{"DeepSeek",  "https://api.deepseek.com/v1",   "deepseek-chat"},
+        "qwen",      new String[]{"通义千问",   "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max"},
+        "glm",       new String[]{"智谱GLM",   "https://open.bigmodel.cn/api/paas/v4", "glm-4"},
+        "kimi",      new String[]{"Moonshot",  "https://api.moonshot.cn/v1",    "moonshot-v1-8k"},
+        "minimax",   new String[]{"MiniMax",   "https://api.minimax.chat/v1",   "abab6.5s-chat"}
+    );
+
     public StudioConfig() {
         this.globalDefault = new AgentApiConfig();
         this.agentOverrides = new LinkedHashMap<>();
