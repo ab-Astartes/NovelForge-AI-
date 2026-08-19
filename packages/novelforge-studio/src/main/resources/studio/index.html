@@ -388,12 +388,16 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card card-compact write-context" id="write-book-context" style="display:none">
+          <div class="context-bar">
+            <span class="context-icon">📖</span>
+            <span class="context-label" id="write-book-name">未选择书籍</span>
+            <span class="context-hint">在顶部选择书籍后开始写作</span>
+          </div>
+        </div>
+<div class="card">
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">选择书籍</label>
-              <select id="write-book" class="input-field"></select>
-            </div>
+            <div class="form-group" style="display:none"><select id="write-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">模式</label>
               <select id="write-mode" class="input-field">
@@ -527,7 +531,7 @@
                 <option value="volume">卷纲</option>
               </select>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="display:none">
               <label class="form-label">书籍（可选，自动加载大纲）</label>
               <select id="synopsis-book" class="input-field"></select>
             </div>
@@ -586,7 +590,7 @@
         <!-- AI Trace Detection -->
         <div class="card">
           <div class="card-title"><span class="card-icon">🕵</span> 去AI痕</div>
-          <p style="color:var(--paper-dark);font-size:13px;margin-bottom:12px">检测并去除AI写作痕迹，需先选择书籍（在落笔面板选择）</p>
+          <p style="color:var(--paper-dark);font-size:13px;margin-bottom:12px">检测并去除AI写作痕迹，请先在顶部选择书籍</p>
           <div class="btn-row">
             <button onclick="generateOutlineSynopsis()" class="btn-ink btn-sm" id="btn-outline">大纲梗概</button>
             <button onclick="generateVolumeSynopsis()" class="btn-ink btn-sm" id="btn-volume">卷纲梗概</button>
@@ -597,7 +601,7 @@
         <!-- Writing Style -->
         <div class="card">
           <div class="card-title"><span class="card-icon">✒</span> 風格淬炼</div>
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">选择项目</label>
             <select id="style-book" class="input-field"></select>
           </div>
@@ -642,7 +646,7 @@
         <!-- Characters -->
         <div class="card">
           <div class="card-title"><span class="card-icon">👤</span> 人物台账</div>
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">选择项目</label>
             <select id="characters-book" class="input-field"></select>
           </div>
@@ -687,7 +691,7 @@
         <!-- Hooks -->
         <div class="card">
           <div class="card-title"><span class="card-icon">🪝</span> 伏笔台账</div>
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">选择项目</label>
             <select id="hooks-book" class="input-field"></select>
           </div>
@@ -728,10 +732,7 @@
         <div class="card">
           <div class="card-title"><span class="card-icon">🌐</span> 世界观与进度</div>
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">选择书籍</label>
-              <select id="state-book" class="input-field"></select>
-            </div>
+            <div class="form-group" style="display:none"><select id="state-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">类型</label>
               <select id="state-type" class="input-field">
@@ -784,12 +785,15 @@
           <p class="panel-desc">33维质量审计 + 修订引擎 + 状态回溯</p>
         </div>
 
-        <div class="card">
+        <div class="card card-compact" id="audit-book-context" style="display:none">
+          <div class="context-bar">
+            <span class="context-icon">📖</span>
+            <span class="context-label" id="audit-book-name">未选择书籍</span>
+          </div>
+        </div>
+<div class="card">
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">选择书籍</label>
-              <select id="audit-book" class="input-field"></select>
-            </div>
+            <div class="form-group" style="display:none"><select id="audit-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">章节号（留空=最后一章）</label>
               <input type="number" id="audit-chapter" class="input-field" placeholder="自动">
@@ -822,7 +826,7 @@
         <div class="card">
           <div class="card-title"><span class="card-icon">↩</span> 回溯寻真</div>
           <p style="color:var(--paper-dark);font-size:13px;margin-bottom:12px">TruthState 增量备份与回滚，安全守护世界观一致性</p>
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">选择项目</label>
             <select id="rollback-book" class="input-field"></select>
           </div>

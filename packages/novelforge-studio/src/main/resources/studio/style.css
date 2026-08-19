@@ -1533,6 +1533,83 @@ body {
   color: var(--paper-dark);
   letter-spacing: 1px;
 }
+
+/* --- Write/Audit Context Bar --- */
+.write-context .context-hint {
+  font-size: 11px;
+  color: var(--paper-dark);
+  margin-left: auto;
+}
+
+#write-book-context, #audit-book-context {
+  background: var(--ink-card);
+  border-left: 3px solid var(--cinnabar);
+}
+
+.context-icon {
+  font-size: 16px;
+}
+
+/* --- Panel Header Enhancement --- */
+.panel-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.panel-title {
+  margin-bottom: 4px;
+}
+
+.panel-desc {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+/* --- Card Compact --- */
+.card-compact {
+  padding: 10px 16px;
+  margin-bottom: 8px;
+}
+
+/* --- Detail Tab Enhancement --- */
+.detail-tab-content {
+  padding-top: 8px;
+}
+
+/* --- Form Grid Enhancement --- */
+.form-grid {
+  gap: 12px;
+}
+
+/* --- Button Enhancement --- */
+.btn-ink {
+  transition: all 0.2s;
+}
+
+.btn-ink:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover {
+  background: var(--sidebar-hover);
+}
+
+/* --- Search Input Enhancement --- */
+.search-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-inline .input-field {
+  flex: 1;
+}
 @media (max-width: 768px) {
   .global-book-selector { display: none; }
   .gbs-select { width: 140px; }

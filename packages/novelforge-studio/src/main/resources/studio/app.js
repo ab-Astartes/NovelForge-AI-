@@ -678,11 +678,23 @@ function onGlobalBookChange(val) {
     const el = document.getElementById(id);
     if (el) el.value = val;
   });
+  // Book detail card
   const detailCard = document.getElementById('book-detail-card');
   if (detailCard) {
     detailCard.style.display = val ? 'block' : 'none';
     if (val) loadBookEdit();
   }
+  // Update context indicators
+  const sel = document.getElementById('global-book');
+  const bookLabel = val && sel ? sel.options[sel.selectedIndex].text : '';
+  const writeCtx = document.getElementById('write-book-context');
+  const writeName = document.getElementById('write-book-name');
+  if (writeCtx) writeCtx.style.display = val ? 'block' : 'none';
+  if (writeName) writeName.textContent = val ? bookLabel : '未选择书籍';
+  const auditCtx = document.getElementById('audit-book-context');
+  const auditName = document.getElementById('audit-book-name');
+  if (auditCtx) auditCtx.style.display = val ? 'block' : 'none';
+  if (auditName) auditName.textContent = val ? bookLabel : '未选择书籍';
 }
 
 function onToolboxBookChange(val) {
