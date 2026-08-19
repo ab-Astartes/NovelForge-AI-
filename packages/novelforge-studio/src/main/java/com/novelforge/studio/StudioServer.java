@@ -321,6 +321,7 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         server.createContext("/api/book/inspirations", corsWrap(this::handleBookInspirationsApi));
         server.createContext("/api/world", corsWrap(this::handleWorldApi));
         server.createContext("/api/chat", corsWrap(this::handleChatApi));
+        server.createContext("/api/ai/selection", corsWrap(this::handleAiSelectionApi));
 
         
 
@@ -3463,7 +3464,87 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             sendJson(exchange, 500, mapper.writeValueAsString(mapper.createObjectNode().put("error", "Failed: " + e.getMessage())));
         }
     }
-    private void handleChatApi(HttpExchange exchange) throws IOException {
+        private void handleAiSelectionApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, 0); exchange.getResponseBody().close(); return;
+        }
+        try {
+            JsonNode body = readBody(exchange);
+            String text = body.has("text") ? body.get("text").asText() : "";
+            String action = body.has("action") ? body.get("action").asText() : "expand";
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            
+            if (text.isEmpty()) {
+                sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "text required")));
+                return;
+            }
+            
+            var resolvedRouter = resolveModelRouter(body);
+            var client = resolvedRouter.getClientForAgent("Writer");
+            String model = resolvedRouter.getModelForAgent("Writer");
+            
+            // Build prompt based on action
+            var messages = new java.util.ArrayList<java.util.Map<String, String>>();
+            String systemPrompt;
+            String userPrompt;
+            
+            switch (action.toLowerCase()) {
+                case "expand" -> {
+                    systemPrompt = "你是专业的小说写作助手，擅长扩写和丰富段落细节。请保持原文风格和语气，增加细节描写、感官体验和情感深度，使内容更加丰满生动。直接输出扩写后的文本，不要加任何解释说明。";
+                    userPrompt = "请扩写以下段落，保持风格一致，增加细节和深度，字数扩展到原文的2-3倍：\n\n" + text;
+                }
+                case "polish" -> {
+                    systemPrompt = "你是专业的文字编辑，擅长润色和优化文笔。请改善语言流畅度、修辞美感和节奏感，保持原意不变，不要大幅改变内容。直接输出润色后的文本，不要加任何解释说明。";
+                    userPrompt = "请润色以下段落，提升文笔质量，保持原意：\n\n" + text;
+                }
+                case "rewrite" -> {
+                    systemPrompt = "你是专业的小说写作助手，擅长用不同风格重写段落。请保持核心情节不变，但用不同的表达方式重新创作。直接输出改写后的文本，不要加任何解释说明。";
+                    userPrompt = "请用不同风格改写以下段落，保持核心情节不变：\n\n" + text;
+                }
+                default -> {
+                    systemPrompt = "你是专业的写作助手。请改进以下文本。直接输出结果，不要加解释。";
+                    userPrompt = text;
+                }
+            }
+            
+            // Add book context if available
+            if (bookPath != null && !bookPath.isEmpty()) {
+                try {
+                    var book = BookProject.loadBook(booksRoot.resolve(bookPath));
+                    systemPrompt += "\n当前作品：《" + book.getTitle() + "》";
+                    if (book.getGenre() != null) systemPrompt += "（" + book.getGenre() + "）";
+                } catch (Exception ignored) {}
+            }
+            
+            messages.add(java.util.Map.of("role", "system", "content", systemPrompt));
+            messages.add(java.util.Map.of("role", "user", "content", userPrompt));
+            
+            // Streaming response
+            sendSseHeaders(exchange);
+            var os = exchange.getResponseBody();
+            var fullResponse = new StringBuilder();
+            
+            client.chatCompleteStream(messages, model, 0.7, 4000, new com.novelforge.core.llm.StreamHandler() {
+                @Override
+                public void onChunk(String chunk) {
+                    fullResponse.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (java.io.IOException ignored) {}
+                }
+                @Override
+                public void onComplete(String result) {
+                    try { sendSseEvent(os, "done", fullResponse.toString()); } catch (java.io.IOException ignored) {}
+                }
+                @Override
+                public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", e.getMessage()); } catch (java.io.IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            sendJson(exchange, 500, mapper.writeValueAsString(mapper.createObjectNode().put("error", e.getMessage())));
+        }
+    }
+    
+private void handleChatApi(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             exchange.sendResponseHeaders(405, 0); exchange.getResponseBody().close(); return;
         }

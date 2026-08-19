@@ -376,20 +376,7 @@ async function aiExpandSelection() {
   const resultDiv = document.querySelector('.ai-result-panel') || createAiResultPanel();
   resultDiv.innerHTML = '<div class="loading-spinner"></div><span>AI 扩写中...</span>';
   resultDiv.style.display = 'block';
-  try {
-    const body = { path: bookPath, text: sel.text, action: 'expand', apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
-    const resp = await fetch(authUrl(API + '/api/chapter/revise'), {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await resp.json();
-    if (data.revisedText) {
-      resultDiv.innerHTML = '<div class="ai-result-label">AI 扩写结果</div><div class="ai-result-text">' + data.revisedText.replace(/\n/g, '<br>') + '</div><div class="ai-result-actions"><button class="btn-ink btn-sm" onclick="applyAiResult(' + sel.start + ',' + sel.end + ',this)">采用</button><button class="btn-ghost btn-sm" onclick="this.parentElement.parentElement.style.display=\'none\'">关闭</button></div>';
-    } else {
-      resultDiv.innerHTML = '<div class="empty-hint">扩写失败</div>';
-    }
-  } catch(e) { resultDiv.innerHTML = '<div class="empty-hint">扩写失败: ' + e.message + '</div>'; }
+  streamAiSelection(sel.text, 'expand', bookPath, resultDiv);
 }
 
 async function aiPolishSelection() {
@@ -400,20 +387,7 @@ async function aiPolishSelection() {
   const resultDiv = document.querySelector('.ai-result-panel') || createAiResultPanel();
   resultDiv.innerHTML = '<div class="loading-spinner"></div><span>AI 润色中...</span>';
   resultDiv.style.display = 'block';
-  try {
-    const body = { path: bookPath, text: sel.text, action: 'polish', apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
-    const resp = await fetch(authUrl(API + '/api/chapter/revise'), {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await resp.json();
-    if (data.revisedText) {
-      resultDiv.innerHTML = '<div class="ai-result-label">AI 润色结果</div><div class="ai-result-text">' + data.revisedText.replace(/\n/g, '<br>') + '</div><div class="ai-result-actions"><button class="btn-ink btn-sm" onclick="applyAiResult(' + sel.start + ',' + sel.end + ',this)">采用</button><button class="btn-ghost btn-sm" onclick="this.parentElement.parentElement.style.display=\'none\'">关闭</button></div>';
-    } else {
-      resultDiv.innerHTML = '<div class="empty-hint">润色失败</div>';
-    }
-  } catch(e) { resultDiv.innerHTML = '<div class="empty-hint">润色失败: ' + e.message + '</div>'; }
+  streamAiSelection(sel.text, 'polish', bookPath, resultDiv);
 }
 
 function applyAiResult(start, end, btn) {
@@ -579,6 +553,84 @@ function formatChatText(text) {
 
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+
+async function streamAiSelection(text, action, bookPath, resultDiv) {
+  try {
+    const body = { text, action, path: bookPath, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+    const resp = await fetch(authUrl(API + '/api/ai/selection'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+    resultDiv.innerHTML = '<div class="ai-result-text"></div>';
+    const textEl = resultDiv.querySelector('.ai-result-text');
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const eventMatch = line.match(/event:\s*(\w+)/);
+        const dataMatch = line.match(/data:\s*(.+)/);
+        if (dataMatch) {
+          const data = dataMatch[1].replace(/\\n/g, '\n');
+          if (eventMatch && eventMatch[1] === 'chunk') {
+            fullText += data;
+            textEl.innerHTML = formatChatText(fullText) + '<span class="typing-cursor">|</span>';
+            resultDiv.scrollTop = resultDiv.scrollHeight;
+          } else if (eventMatch && eventMatch[1] === 'done') {
+            textEl.innerHTML = formatChatText(fullText);
+            // Add action buttons
+            const btnBar = document.createElement('div');
+            btnBar.className = 'ai-result-actions';
+            btnBar.innerHTML = '<button class="btn-ink btn-sm" onclick="insertAiResult(this,\'replace\')">替换原文</button>' +
+              '<button class="btn-ink btn-sm" onclick="insertAiResult(this,\'append\')">追加到末尾</button>' +
+              '<button class="btn-ghost btn-sm" onclick="this.parentElement.parentElement.style.display=\'none\'">关闭</button>';
+            resultDiv.appendChild(btnBar);
+          } else if (eventMatch && eventMatch[1] === 'error') {
+            textEl.innerHTML = '<span style="color:var(--cinnabar)">错误: ' + data + '</span>';
+          }
+        }
+      }
+    }
+  } catch(e) {
+    resultDiv.innerHTML = '<span style="color:var(--cinnabar)">请求失败: ' + e.message + '</span>';
+  }
+}
+
+function createAiResultPanel() {
+  const panel = document.createElement('div');
+  panel.className = 'ai-result-panel';
+  panel.style.cssText = 'position:fixed;bottom:20px;left:20px;width:420px;max-height:300px;overflow-y:auto;background:var(--ink-dark);border:1px solid var(--ink-border);border-radius:12px;padding:16px;z-index:999;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+  document.body.appendChild(panel);
+  return panel;
+}
+
+function insertAiResult(btn, mode) {
+  const panel = btn.closest('.ai-result-panel');
+  const text = panel.querySelector('.ai-result-text')?.textContent || '';
+  const editor = document.querySelector('.chapter-editor-textarea');
+  if (!editor) { showToast('编辑器未找到', 'warning'); return; }
+  if (mode === 'replace') {
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+    editor.selectionStart = start;
+    editor.selectionEnd = start + text.length;
+  } else {
+    editor.value += '\n\n' + text;
+  }
+  panel.style.display = 'none';
+  updateWordCount();
+  showToast('已' + (mode === 'replace' ? '替换' : '追加') + '文本', 'success');
 }
 
 let AUTH_TOKEN = '';
