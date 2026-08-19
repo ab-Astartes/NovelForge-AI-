@@ -319,7 +319,9 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         server.createContext("/api/chapter/synopsis/stream", corsWrap(this::handleChapterSynopsisStreamApi));
         server.createContext("/api/book/references", corsWrap(this::handleBookReferencesApi));
         server.createContext("/api/book/inspirations", corsWrap(this::handleBookInspirationsApi));
+        server.createContext("/api/world", corsWrap(this::handleWorldApi));
 
+        
 
 
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(4));
@@ -984,6 +986,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                          .sorted(java.util.Comparator.reverseOrder())
 
                          .forEach(p -> { try { Files.delete(p); } catch (Exception e) { /* ignore */ } });
+
+        
+
+        
 
                     sendJson(exchange, 200, "{\"status\":\"deleted\",\"type\":\"project\"}");
 
@@ -3419,6 +3425,42 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
         sendJson(exchange, 405, mapper.writeValueAsString(mapper.createObjectNode().put("error", "method not allowed")));
     }
+        private void handleWorldApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, 0); exchange.getResponseBody().close(); return;
+        }
+        String query = exchange.getRequestURI().getQuery();
+        String path = getQueryParam(query, "path");
+        if (path == null || path.isEmpty()) {
+            sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required")));
+            return;
+        }
+        try {
+            var bookDir = booksRoot.resolve(path);
+            var state = new TruthState(bookDir);
+            var result = mapper.createObjectNode();
+            // World data
+            var worldData = state.world().getData();
+            if (worldData != null && !worldData.isEmpty()) {
+                result.set("world", worldData);
+            }
+            // Characters
+            var charData = state.characters().listAll();
+            if (charData != null && !charData.isEmpty()) {
+                result.set("characters", charData);
+            }
+            // Hooks
+            var hookData = state.hooks().listAll();
+            if (hookData != null && !hookData.isEmpty()) {
+                result.set("hooks", hookData);
+            }
+            result.put("bookPath", path);
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, mapper.writeValueAsString(mapper.createObjectNode().put("error", "Failed: " + e.getMessage())));
+        }
+    }
+
 
     /** Persist defaultConfig to ~/.NovelForge/config/pipeline.json */
 

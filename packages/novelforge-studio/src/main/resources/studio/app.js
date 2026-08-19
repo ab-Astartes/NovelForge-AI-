@@ -237,6 +237,36 @@ async function loadHookTracker() {
   }
 }
 
+
+// ========== World-Building Panel ==========
+async function loadWorldBuilding() {
+  const bookPath = document.getElementById('global-book')?.value;
+  const container = document.getElementById('world-content');
+  if (!bookPath) { if (container) container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  try {
+    const resp = await fetch(authUrl(API + '/api/world?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
+    const data = await resp.json();
+    let html = '';
+    if (data.world) {
+      html += '<div class="world-section">';
+      html += '<div class="world-section-title">🌍 世界观设定</div>';
+      if (data.world.setting) html += '<div class="world-field"><label>背景设定</label><div class="world-value">' + data.world.setting + '</div></div>';
+      if (data.world.rules) html += '<div class="world-field"><label>世界规则</label><div class="world-value">' + data.world.rules + '</div></div>';
+      if (data.world.geography) html += '<div class="world-field"><label>地理环境</label><div class="world-value">' + data.world.geography + '</div></div>';
+      if (data.world.technology) html += '<div class="world-field"><label>技术水平</label><div class="world-value">' + data.world.technology + '</div></div>';
+      if (data.world.culture) html += '<div class="world-field"><label>文化风俗</label><div class="world-value">' + data.world.culture + '</div></div>';
+      if (data.world.history) html += '<div class="world-field"><label>历史背景</label><div class="world-value">' + data.world.history + '</div></div>';
+      html += '</div>';
+    }
+    if (!data.world || (!data.world.setting && !data.world.rules)) {
+      html += '<div class="empty-hint">暂无世界观数据。写作后系统会自动提取世界观信息。</div>';
+    }
+    if (container) container.innerHTML = html;
+  } catch(e) {
+    if (container) container.innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+  }
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
@@ -322,6 +352,7 @@ function showPanel(name) {
     if (panelId === 'usage') refreshUsage();
     if (panelId === 'characters') loadCharacterSheet();
     if (panelId === 'hooks') loadHookTracker();
+    if (panelId === 'world') loadWorldBuilding();
     // Trigger animation
     panel.style.opacity = '0';
     panel.style.transform = 'translateY(8px)';

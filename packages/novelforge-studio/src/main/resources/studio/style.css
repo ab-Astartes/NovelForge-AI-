@@ -1866,6 +1866,13 @@ body {
 .search-result-chapter:hover { color: var(--cinnabar); }
 .search-result-snippet { font-size: 12px; color: var(--paper); line-height: 1.5; }
 .search-highlight { background: rgba(192,57,43,0.25); color: var(--cinnabar); padding: 1px 2px; border-radius: 2px; }
+
+/* --- World-Building Panel --- */
+.world-section { margin-top: 12px; }
+.world-section-title { font-size: 16px; font-weight: 700; color: var(--gold); margin-bottom: 12px; }
+.world-field { margin-bottom: 12px; padding: 12px; background: var(--ink-dark); border-radius: var(--radius); border: 1px solid var(--ink-border); }
+.world-field label { display: block; font-size: 12px; color: var(--cyan-ink); margin-bottom: 6px; font-weight: 600; }
+.world-field .world-value { font-size: 13px; color: var(--paper); line-height: 1.6; }
 @media (max-width: 768px) {
   .usage-summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
