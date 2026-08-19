@@ -3,11 +3,60 @@
 const API = '';  // same origin
 
 // 🟡-1: Auth token — auto-set on page load from startup message
+
+
+// ========== Keyboard Shortcuts ==========
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveConfig(); }
+  if (e.ctrlKey && e.key === 'b') { e.preventDefault(); showPanel('books'); }
+  if (e.ctrlKey && e.key === 'w') { e.preventDefault(); showPanel('write'); }
+  if (e.ctrlKey && e.shiftKey && e.key === 'A') { e.preventDefault(); showPanel('audit'); }
+});
+// ========== Toast Notifications ==========
+function showToast(message, type, duration) {
+  type = type || 'info';
+  duration = duration || 3000;
+  var container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  var toast = document.createElement('div');
+  var colors = { info: '#3a8f8f', success: '#27ae60', error: '#c0392b', warning: '#d4a24e' };
+  var icons = { info: '\u2139', success: '\u2713', error: '\u2717', warning: '\u26A0' };
+  var borderColor = colors[type] || colors.info;
+  var iconChar = icons[type] || icons.info;
+  toast.style.cssText = 'background:var(--ink-card, #1c1c24);color:var(--paper, #e8e4dc);padding:12px 16px;border-radius:8px;border-left:4px solid ' + borderColor + ';font-size:13px;max-width:320px;box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:auto;opacity:0;transform:translateX(20px);transition:all 0.3s ease;';
+  toast.innerHTML = '<span style="margin-right:8px">' + iconChar + '</span>' + message;
+  container.appendChild(toast);
+  requestAnimationFrame(function() {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(0)';
+  });
+  setTimeout(function() {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    setTimeout(function() { toast.remove(); }, 300);
+  }, duration);
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
   const t = params.get('token');
   if (t) AUTH_TOKEN = t;
+})();
+
+// Populate version display
+(function() {
+  var versionEl = document.getElementById('studio-version');
+  if (versionEl) {
+    fetch(API + '/api/version').then(function(r){return r.json()}).then(function(d){
+      versionEl.textContent = d.version || d.full || '';
+    }).catch(function(){});
+  }
 })();
 
 // 🟢-1: Shared LLM config — single source for all panels
@@ -145,6 +194,7 @@ async function createBook() {
 async function streamLlmRequest(url, body, resultDiv, textareaId, btnId, btnText) {
   const btn = btnId ? document.getElementById(btnId) : null;
   if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
+        btn.classList.add('btn-loading');
 
   const textarea = textareaId ? document.getElementById(textareaId) : null;
   if (textarea) textarea.value = '';
@@ -212,6 +262,7 @@ async function streamLlmRequest(url, body, resultDiv, textareaId, btnId, btnText
     if (resultDiv) showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = btnText; }
+        btn.classList.remove('btn-loading');
   }
   return fullText;
 }
@@ -980,7 +1031,7 @@ function toggleDraftFinal() {
 }
 
 async function cancelWrite() {
-  if (!currentWriteJobId) { alert('当前没有进行中的写作任务'); return; }
+  if (!currentWriteJobId) { showToast('当前没有进行中的写作任务', 'info'); return; }
   if (!window.confirm('确认取消写作？当前进度将丢失。')) return;
   try {
     const res = await fetch(authUrl(API + '/api/write/cancel'), {
@@ -1072,8 +1123,8 @@ async function saveIntentEditor() {
 async function saveChapterTitle() {
   const { bookPath, chapterNum } = currentChapterInfo;
   const title = document.getElementById('chapter-title-input').value.trim();
-  if (!bookPath || !chapterNum) { alert('请先加载章节内容'); return; }
-  if (!title) { alert('标题不能为空'); return; }
+  if (!bookPath || !chapterNum) { showToast('请先加载章节内容', 'info'); return; }
+  if (!title) { showToast('标题不能为空', 'info'); return; }
   try {
     const res = await fetch(authUrl(API + '/api/book/chapter-title'), {
       method: 'POST', headers: authHeaders(),
@@ -1116,7 +1167,7 @@ function cancelChapterEdit() {
 async function saveChapterContent() {
   const { bookPath, chapterNum } = currentChapterInfo;
   const finalText = document.getElementById('chapter-edit-textarea').value;
-  if (!bookPath || !chapterNum) { alert('请先加载章节内容'); return; }
+  if (!bookPath || !chapterNum) { showToast('请先加载章节内容', 'info'); return; }
   try {
     const res = await fetch(authUrl(API + '/api/book/chapter'), {
       method: 'POST', headers: authHeaders(),
@@ -1496,6 +1547,7 @@ async function saveConfig() {
     });
     const data = await res.json();
     if (data.status === 'updated') {
+          showToast('配置已保存', 'success');
       sharedConfig.apiKey = body.globalDefault.apiKey || sharedConfig.apiKey;
       sharedConfig.baseUrl = body.globalDefault.baseUrl || sharedConfig.baseUrl;
       sharedConfig.modelId = body.globalDefault.model || sharedConfig.modelId;
@@ -2421,53 +2473,20 @@ async function detectAiTrace() {
 // ========== Chapter Synopsis Generation ==========
 
 async function generateChapterSynopsis() {
-  const resultDiv = document.getElementById('synopsis-result');
-  const sourceType = document.getElementById('synopsis-source-type').value;
-  const bookPath = document.getElementById('synopsis-book').value;
-  const sourceText = document.getElementById('synopsis-source').value.trim();
-  const prompt = document.getElementById('synopsis-prompt').value.trim();
-  const genre = document.getElementById('synopsis-genre').value;
-  const apiKey = sharedConfig.apiKey;
-  const baseUrl = sharedConfig.baseUrl;
-  const modelId = sharedConfig.modelId;
-
-  if (!sourceText && !bookPath) {
-    showResult(resultDiv, '请输入大纲/卷纲内容或选择书籍', true);
-    return;
-  }
-
-  showResult(resultDiv, '⏳ 正在生成章节梗概...', false);
-  const btn = document.getElementById('btn-synopsis');
-  btn.disabled = true;
-
-  try {
-    const body = {
-      source: sourceText || undefined,
-      prompt: prompt || '',
-      genre: genre,
-      apiKey: apiKey,
-      baseUrl: baseUrl,
-      model: modelId
-    };
-    if (bookPath) body.path = bookPath;
-
-    const resp = await fetch(authUrl(API + '/api/chapter/synopsis'), {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body)
-    });
-    const data = await resp.json();
-
-    if (data.status === 'ok') {
-      showResult(resultDiv, '✦ 章节梗概已生成\n\n' + data.synopsis, false);
-    } else {
-      showResult(resultDiv, '✗ 生成失败: ' + (data.error || '未知错误'), true);
-    }
-  } catch (e) {
-    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
-  } finally {
-    btn.disabled = false;
-  }
+  const bookPath = document.getElementById('synopsis-source-book')?.value 
+    || document.getElementById('global-book')?.value;
+  const source = document.getElementById('synopsis-source')?.value || '';
+  const prompt = document.getElementById('chapter-synopsis-prompt')?.value || '';
+  const genre = document.getElementById('chapter-synopsis-genre')?.value || '';
+  if (!source && !bookPath) { showToast('请先选择书籍或输入大纲/卷纲内容', 'warning'); return; }
+  const resultDiv = document.getElementById('synopsis-result') || document.getElementById('write-result');
+  const body = { apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+  if (bookPath) body.path = bookPath;
+  if (source) body.source = source;
+  if (prompt) body.prompt = prompt;
+  if (genre) body.genre = genre;
+  await streamLlmRequest('/api/chapter/synopsis/stream', body, resultDiv, null, 'btn-chapter-synopsis', '章节梗概');
+  showRefIndicator(resultDiv, bookPath);
 }
 
 // ========== Rollback ==========
@@ -2623,7 +2642,7 @@ function addReference(bookPath) {
 
 async function submitReference(bookPath) {
   const title = document.getElementById('ref-title').value.trim();
-  if (!title) { alert('请填写标题'); return; }
+  if (!title) { showToast('请填写标题', 'info'); return; }
   const body = {
     path: bookPath,
     title: title,
@@ -2687,7 +2706,7 @@ function addInspiration(bookPath) {
 
 async function submitInspiration(bookPath) {
   const title = document.getElementById('insp-title').value.trim();
-  if (!title) { alert('请填写标题'); return; }
+  if (!title) { showToast('请填写标题', 'info'); return; }
   const body = {
     path: bookPath,
     title: title,
