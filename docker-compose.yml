@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  novelforge-studio:
+    build: .
+    container_name: novelforge-studio
+    ports:
+      - "8964:8964"
+    volumes:
+      - novelforge-books:/root/NovelForge/books
+      - novelforge-config:/root/NovelForge/config
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8964/api/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  novelforge-books:
+    driver: local
+  novelforge-config:
+    driver: local

@@ -251,4 +251,44 @@ public final class BookExporter {
             default -> "image/png";
         };
     }
+
+    public static void exportHtml(Book book, Path outputPath) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<!DOCTYPE html>\n");
+        sb.append("<html lang=\"zh-CN\">\n<head>\n");
+        sb.append("<meta charset=\"UTF-8\">\n");
+        sb.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
+        sb.append("<title>").append(book.getTitle() != null ? book.getTitle() : "Untitled").append("</title>\n");
+        sb.append("<style>\n");
+        sb.append("body { font-family: 'Noto Serif SC', 'SimSun', serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.8; background: #faf8f5; }\n");
+        sb.append("h1 { text-align: center; font-size: 2em; margin-bottom: 0.5em; color: #1a1a1a; }\n");
+        sb.append("h2 { font-size: 1.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.3em; margin-top: 2em; color: #2c2c2c; }\n");
+        sb.append(".meta { text-align: center; color: #888; margin-bottom: 2em; font-size: 0.9em; }\n");
+        sb.append("p { text-indent: 2em; margin: 0.8em 0; }\n");
+        sb.append("hr { border: none; border-top: 1px dashed #ccc; margin: 2em 0; }\n");
+        sb.append("</style>\n</head>\n<body>\n");
+        sb.append("<h1>").append(book.getTitle() != null ? book.getTitle() : "Untitled").append("</h1>\n");
+        if (book.getAuthor() != null && !book.getAuthor().isEmpty()) {
+            sb.append("<div class=\"meta\">").append(book.getAuthor()).append("</div>\n");
+        }
+        if (book.getGenre() != null && !book.getGenre().isEmpty()) {
+            sb.append("<div class=\"meta\">").append(book.getGenre()).append("</div>\n");
+        }
+        sb.append("<hr>\n");
+        if (book.getChapters() != null) {
+            for (var chapter : book.getChapters()) {
+                sb.append("<h2>").append(chapter.getTitle() != null ? chapter.getTitle() : "").append("</h2>\n");
+                String text = chapter.getFinalText() != null && !chapter.getFinalText().isEmpty()
+                    ? chapter.getFinalText() : chapter.getDraftText() != null ? chapter.getDraftText() : "";
+                for (String para : text.split("\\n\\n")) {
+                    if (!para.trim().isEmpty()) {
+                        sb.append("<p>").append(para.trim()).append("</p>\n");
+                    }
+                }
+            }
+        }
+        sb.append("</body>\n</html>");
+        Files.writeString(outputPath, sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
 }

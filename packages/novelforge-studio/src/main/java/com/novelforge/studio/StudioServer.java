@@ -1657,7 +1657,7 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
             Book book = BookProject.loadBook(Paths.get(bookPath));
 
-            String ext = format.equals("epub") ? "epub" : format.equals("md") ? "md" : "txt";
+            String ext = format.equals("epub") ? "epub" : format.equals("md") ? "md" : format.equals("html") ? "html" : "txt";
 
             Path outputPath = Paths.get(bookPath).resolve(book.getTitle() + "." + ext);
 
@@ -1670,6 +1670,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                 case "md"  -> com.novelforge.core.export.BookExporter.exportMd(book, outputPath);
 
                 case "epub" -> com.novelforge.core.export.BookExporter.exportEpub(book, outputPath, coverPath);
+
+                case "html" -> com.novelforge.core.export.BookExporter.exportHtml(book, outputPath);
 
                 default -> { sendJson(exchange, 400, "{\"error\":\"unsupported format\"}"); return; }
 
