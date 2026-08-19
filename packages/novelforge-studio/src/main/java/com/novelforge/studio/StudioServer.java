@@ -320,6 +320,7 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         server.createContext("/api/book/references", corsWrap(this::handleBookReferencesApi));
         server.createContext("/api/book/inspirations", corsWrap(this::handleBookInspirationsApi));
         server.createContext("/api/world", corsWrap(this::handleWorldApi));
+        server.createContext("/api/chat", corsWrap(this::handleChatApi));
 
         
 
@@ -3462,6 +3463,85 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             sendJson(exchange, 500, mapper.writeValueAsString(mapper.createObjectNode().put("error", "Failed: " + e.getMessage())));
         }
     }
+    private void handleChatApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, 0); exchange.getResponseBody().close(); return;
+        }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            String message = body.has("message") ? body.get("message").asText() : "";
+            String[] creds = resolveApiCredentials(body);
+            String baseUrl = body.has("baseUrl") ? body.get("baseUrl").asText() : null;
+            String model = body.has("model") ? body.get("model").asText() : null;
+            
+            if (message.isEmpty()) { sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "message required"))); return; }
+            
+            var resolvedRouter = resolveModelRouter(body);
+            // model resolved below
+            
+            // Build context from book if available
+            var messages = new java.util.ArrayList<java.util.Map<String, String>>();
+            var systemPrompt = new StringBuilder();
+            systemPrompt.append("你是NovelForge智能写作助手。你精通小说创作的各个方面，包括情节构建、人物塑造、对话设计、场景描写、伏笔设置等。");
+            
+            if (bookPath != null && !bookPath.isEmpty()) {
+                try {
+                    var book = BookProject.loadBook(booksRoot.resolve(bookPath));
+                    systemPrompt.append("\n\n当前作品：《").append(book.getTitle()).append("》");
+                    if (book.getGenre() != null) systemPrompt.append("（").append(book.getGenre()).append("）");
+                    if (book.getOutline() != null && !book.getOutline().isEmpty()) {
+                        systemPrompt.append("\n大纲摘要：").append((CharSequence)(book.getOutline().length() > 500 ? book.getOutline().substring(0, 500) + "..." : book.getOutline()));
+                    }
+                    if (book.getAuthorIntent() != null && !book.getAuthorIntent().isEmpty()) {
+                        systemPrompt.append("\n创作意图：").append(book.getAuthorIntent());
+                    }
+                    // Add recent chapter context
+                    if (book.getChapters() != null && !book.getChapters().isEmpty()) {
+                        var lastChapter = book.getChapters().get(book.getChapters().size() - 1);
+                        String chapterText = lastChapter.getFinalText() != null ? lastChapter.getFinalText() : lastChapter.getDraftText();
+                        if (chapterText != null && !chapterText.isEmpty()) {
+                            systemPrompt.append("\n最新章节《").append(lastChapter.getTitle()).append("》：");
+                            systemPrompt.append(chapterText.length() > 800 ? chapterText.substring(0, 800) + "..." : chapterText);
+                        }
+                    }
+                } catch (Exception e) {
+                    systemPrompt.append("\n（无法加载作品信息）");
+                }
+            }
+            systemPrompt.append("\n\n请基于以上信息回答用户的问题，给出专业、具体的建议。");
+            
+            messages.add(java.util.Map.of("role", "system", "content", systemPrompt.toString()));
+            messages.add(java.util.Map.of("role", "user", "content", message));
+            
+            // Use streaming response
+            sendSseHeaders(exchange);
+            var os = exchange.getResponseBody();
+            var fullResponse = new StringBuilder();
+            
+            var client = resolvedRouter.getClientForAgent("Architect");
+            String resolvedModel = resolvedRouter.getModelForAgent("Architect");
+            if (body.has("model") && !body.get("model").asText().isEmpty()) resolvedModel = body.get("model").asText();
+            client.chatCompleteStream(messages, resolvedModel, 0.7, 4000, new com.novelforge.core.llm.StreamHandler() {
+                @Override
+                public void onChunk(String chunk) {
+                    fullResponse.append(chunk);
+                    try { sendSseEvent(os, "chunk", chunk); } catch (java.io.IOException ignored) {}
+                }
+                @Override
+                public void onComplete(String result) {
+                    try { sendSseEvent(os, "done", fullResponse.toString()); } catch (java.io.IOException ignored) {}
+                }
+                @Override
+                public void onError(Exception e) {
+                    try { sendSseEvent(os, "error", e.getMessage()); } catch (java.io.IOException ignored) {}
+                }
+            });
+        } catch (Exception e) {
+            sendJson(exchange, 500, mapper.writeValueAsString(mapper.createObjectNode().put("error", e.getMessage())));
+        }
+    }
+
 
 
     /** Persist defaultConfig to ~/.NovelForge/config/pipeline.json */

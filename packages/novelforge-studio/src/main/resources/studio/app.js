@@ -482,6 +482,105 @@ function enhanceChapterEditor(bookPath, chapterTitle) {
   });
 }
 
+
+// ========== AI Chat Assistant ==========
+let chatHistory = [];
+let chatPanelOpen = false;
+
+function toggleChatPanel() {
+  chatPanelOpen = !chatPanelOpen;
+  let panel = document.getElementById('ai-chat-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'ai-chat-panel';
+    panel.className = 'ai-chat-panel';
+    panel.innerHTML = `
+      <div class="chat-header">
+        <span class="chat-title">🤖 智能写作助手</span>
+        <button class="chat-close" onclick="toggleChatPanel()">✕</button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-area">
+        <textarea id="chat-input" placeholder="输入问题，如：帮我设计一个反转情节..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
+        <button class="btn-ink btn-sm" onclick="sendChatMessage()">发送</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+  }
+  panel.style.display = chatPanelOpen ? 'flex' : 'none';
+  if (chatPanelOpen) document.getElementById('chat-input')?.focus();
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input?.value?.trim();
+  if (!msg) return;
+  input.value = '';
+  
+  const bookPath = document.getElementById('global-book')?.value;
+  const messagesDiv = document.getElementById('chat-messages');
+  
+  // Add user message
+  chatHistory.push({ role: 'user', content: msg });
+  messagesDiv.innerHTML += '<div class="chat-msg user-msg">' + escapeHtml(msg) + '</div>';
+  messagesDiv.innerHTML += '<div class="chat-msg ai-msg typing">思考中...</div>';
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  
+  try {
+    const body = { message: msg, path: bookPath || '', apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
+    const resp = await fetch(authUrl(API + '/api/chat'), {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+    
+    // Remove typing indicator
+    const typingEl = messagesDiv.querySelector('.typing');
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('event:') && !line.startsWith('data:')) continue;
+        const eventMatch = line.match(/event:\s*(\w+)/);
+        const dataMatch = line.match(/data:\s*(.+)/);
+        if (dataMatch) {
+          const data = dataMatch[1].replace(/\\n/g, '\n');
+          if (eventMatch && eventMatch[1] === 'chunk') {
+            fullText += data;
+            if (typingEl) typingEl.innerHTML = formatChatText(fullText);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          } else if (eventMatch && eventMatch[1] === 'done') {
+            if (typingEl) { typingEl.classList.remove('typing'); typingEl.innerHTML = formatChatText(fullText); }
+            chatHistory.push({ role: 'assistant', content: fullText });
+          } else if (eventMatch && eventMatch[1] === 'error') {
+            if (typingEl) { typingEl.classList.remove('typing'); typingEl.innerHTML = '<span style="color:var(--cinnabar)">错误: ' + data + '</span>'; }
+          }
+        }
+      }
+    }
+  } catch(e) {
+    const typingEl = messagesDiv.querySelector('.typing');
+    if (typingEl) { typingEl.classList.remove('typing'); typingEl.innerHTML = '<span style="color:var(--cinnabar)">发送失败: ' + e.message + '</span>'; }
+  }
+}
+
+function formatChatText(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
