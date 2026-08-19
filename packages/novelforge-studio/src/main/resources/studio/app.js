@@ -1,4 +1,4 @@
-﻿// 墨阁 · NovelForge Studio — Frontend v2 (Sidebar Layout)
+// 墨阁 · NovelForge Studio — Frontend v2 (Sidebar Layout)
 
 const API = '';  // same origin
 
@@ -173,6 +173,70 @@ function applyProviderPreset(key) {
   showToast('已切换到 ' + p.name + ' (' + p.model + ')', 'success', 2000);
 }
 
+
+// ========== Character & Hook Systems ==========
+async function loadCharacterSheet() {
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { document.getElementById('characters-content').innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  try {
+    const resp = await fetch(authUrl(API + '/api/characters?path=' + encodeURIComponent(bookPath)));
+    const data = await resp.json();
+    const container = document.getElementById('characters-content');
+    if (!data.characters || data.characters.length === 0) {
+      container.innerHTML = '<div class="empty-hint">暂无人物数据。完成写作后，人物信息将自动提取。</div>';
+      return;
+    }
+    let html = '<div class="character-grid">';
+    for (const c of data.characters) {
+      html += '<div class="character-card">';
+      html += '<div class="character-name">' + (c.name || '未命名') + '</div>';
+      if (c.role) html += '<div class="character-role">' + c.role + '</div>';
+      if (c.description) html += '<div class="character-desc">' + c.description + '</div>';
+      if (c.relationships && c.relationships.length > 0) {
+        html += '<div class="character-relations"><span class="relation-label">关系：</span>';
+        for (const r of c.relationships) {
+          html += '<span class="relation-tag">' + r.target + '(' + r.type + ')</span> ';
+        }
+        html += '</div>';
+      }
+      if (c.traits) html += '<div class="character-traits">' + c.traits + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) {
+    document.getElementById('characters-content').innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+  }
+}
+
+async function loadHookTracker() {
+  const bookPath = document.getElementById('global-book')?.value;
+  if (!bookPath) { document.getElementById('hooks-content').innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  try {
+    const resp = await fetch(authUrl(API + '/api/hooks?path=' + encodeURIComponent(bookPath)));
+    const data = await resp.json();
+    const container = document.getElementById('hooks-content');
+    if (!data.hooks || data.hooks.length === 0) {
+      container.innerHTML = '<div class="empty-hint">暂无伏笔数据。完成写作后，伏笔信息将自动追踪。</div>';
+      return;
+    }
+    let html = '<div class="hook-list">';
+    for (const h of data.hooks) {
+      const status = h.resolved ? '✅ 已收束' : '⏳ 待收束';
+      html += '<div class="hook-card ' + (h.resolved ? 'resolved' : 'pending') + '">';
+      html += '<div class="hook-title">' + (h.description || h.hook || '未命名伏笔') + '</div>';
+      html += '<div class="hook-status">' + status + '</div>';
+      if (h.plantedChapter) html += '<div class="hook-chapter">埋设：第' + h.plantedChapter + '章</div>';
+      if (h.resolvedChapter) html += '<div class="hook-chapter">收束：第' + h.resolvedChapter + '章</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) {
+    document.getElementById('hooks-content').innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+  }
+}
+
 let AUTH_TOKEN = '';
 (function() {
   const params = new URLSearchParams(window.location.search);
@@ -256,6 +320,8 @@ function showPanel(name) {
   if (panel) {
     panel.classList.add('active');
     if (panelId === 'usage') refreshUsage();
+    if (panelId === 'characters') loadCharacterSheet();
+    if (panelId === 'hooks') loadHookTracker();
     // Trigger animation
     panel.style.opacity = '0';
     panel.style.transform = 'translateY(8px)';
@@ -1320,30 +1386,43 @@ async function saveChapterContent() {
 // ========== Book Search ==========
 
 async function searchBookContent() {
-  const bookPath = document.getElementById('global-book').value;
-  const keyword = document.getElementById('search-keyword').value;
+  const bookPath = document.getElementById('global-book')?.value;
+  const keyword = document.getElementById('search-keyword')?.value;
   const resultDiv = document.getElementById('search-results');
-  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
-  if (!keyword || keyword.trim().length === 0) { showResult(resultDiv, '请输入关键词', true); return; }
+  if (!bookPath) { if (resultDiv) resultDiv.innerHTML = '<div class="empty-hint">请选择书籍</div>'; return; }
+  if (!keyword || keyword.trim().length === 0) { if (resultDiv) resultDiv.innerHTML = '<div class="empty-hint">请输入关键词</div>'; return; }
   try {
     const res = await fetch(authUrl(API + '/api/search?path=' + encodeURIComponent(bookPath) + '&keyword=' + encodeURIComponent(keyword.trim())), { headers: authHeaders() });
     const data = await res.json();
-    if (data.length === 0) {
-      showResult(resultDiv, `未找到「${keyword}」`, true);
+    if (!data || data.length === 0) {
+      if (resultDiv) resultDiv.innerHTML = '<div class="empty-hint">未找到「' + keyword + '」</div>';
       return;
     }
-    let html = `<div style="margin-bottom:4px;color:#c9a961">找到 ${data.length} 处匹配：</div>`;
-    data.forEach(hit => {
-      const loc = hit.chapter === 0 ? '大纲' : `第${hit.chapter}章 ${hit.title}`;
-      html += `<div style="padding:6px 8px;border-bottom:1px solid #333;cursor:pointer" onclick="showChapterContent('${bookPath}',${hit.chapter})">`;
-      html += `<span style="color:#c0392b;font-weight:bold">${loc}</span>`;
-      const snippet = hit.snippet ? hit.snippet.replace(new RegExp(`(${keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<span style="color:#c0392b;background:#1a0a0a;padding:0 2px">$1</span>') : '';
-      html += `<div style="color:#999;font-size:0.85em;margin-top:2px">…${snippet}…</div></div>`;
-    });
-    resultDiv.innerHTML = html;
-    resultDiv.className = 'result-box show success';
-  } catch (e) { showResult(resultDiv, '网络错误: ' + e.message, true); }
+    let html = '<div class="search-summary">找到 ' + data.length + ' 处匹配「<span class="search-keyword-highlight">' + keyword + '</span>」</div>';
+    html += '<div class="search-results-list">';
+    for (const hit of data) {
+      const chTitle = hit.chapter || hit.title || '未知章节';
+      const snippet = hit.snippet ? hit.snippet.replace(new RegExp('(' + keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<span class="search-highlight">$1</span>') : '';
+      html += '<div class="search-result-item">';
+      html += '<div class="search-result-chapter" onclick="jumpToChapter(\'' + bookPath + '\', \'' + chTitle.replace(/'/g, "\\'") + '\')">' + chTitle + '</div>';
+      html += '<div class="search-result-snippet">' + snippet + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    if (resultDiv) resultDiv.innerHTML = html;
+  } catch(e) {
+    if (resultDiv) resultDiv.innerHTML = '<div class="empty-hint">搜索失败: ' + e.message + '</div>';
+  }
 }
+
+function jumpToChapter(bookPath, chapterTitle) {
+  showPanel('books');
+  setTimeout(() => {
+    showChapterContent(bookPath, chapterTitle);
+    showToast('已跳转到: ' + chapterTitle, 'info', 2000);
+  }, 300);
+}
+
 
 // ========== Book Property Edit ==========
 

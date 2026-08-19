@@ -1786,6 +1786,86 @@ body {
   background: rgba(192,57,43,0.15);
   color: var(--cinnabar);
 }
+
+/* --- Character & Hook Systems --- */
+.character-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.character-card {
+  background: var(--ink-dark);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--ink-border);
+  border-left: 3px solid var(--gold);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.character-card:hover { transform: translateY(-2px); border-color: var(--cinnabar); }
+.character-name { font-size: 16px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
+.character-role { font-size: 12px; color: var(--cyan-ink); margin-bottom: 8px; }
+.character-desc { font-size: 13px; color: var(--paper); line-height: 1.5; margin-bottom: 8px; }
+.character-relations { font-size: 12px; color: var(--paper-dark); }
+.relation-label { color: var(--paper-dark); }
+.relation-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(58,143,143,0.15);
+  color: var(--cyan-ink);
+  margin: 2px;
+  font-size: 11px;
+}
+.character-traits { font-size: 12px; color: var(--paper-dark); font-style: italic; margin-top: 6px; }
+
+.hook-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.hook-card {
+  background: var(--ink-dark);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  border: 1px solid var(--ink-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hook-card.pending { border-left: 3px solid var(--gold); }
+.hook-card.resolved { border-left: 3px solid #27ae60; opacity: 0.8; }
+.hook-title { flex: 1; font-size: 13px; color: var(--paper); }
+.hook-status { font-size: 12px; white-space: nowrap; }
+.hook-chapter { font-size: 11px; color: var(--paper-dark); }
+
+.panel-content { padding: 12px 0; }
+.empty-hint {
+  text-align: center;
+  color: var(--paper-dark);
+  padding: 40px 20px;
+  font-size: 14px;
+}
+
+/* --- Enhanced Search --- */
+.search-summary { font-size: 14px; color: var(--gold); margin-bottom: 12px; }
+.search-keyword-highlight { color: var(--cinnabar); font-weight: 600; }
+.search-results-list { display: flex; flex-direction: column; gap: 8px; }
+.search-result-item {
+  background: var(--ink-dark);
+  border-radius: var(--radius);
+  padding: 12px;
+  border: 1px solid var(--ink-border);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.search-result-item:hover { border-color: var(--cinnabar); }
+.search-result-chapter {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan-ink);
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.search-result-chapter:hover { color: var(--cinnabar); }
+.search-result-snippet { font-size: 12px; color: var(--paper); line-height: 1.5; }
+.search-highlight { background: rgba(192,57,43,0.25); color: var(--cinnabar); padding: 1px 2px; border-radius: 2px; }
 @media (max-width: 768px) {
   .usage-summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
