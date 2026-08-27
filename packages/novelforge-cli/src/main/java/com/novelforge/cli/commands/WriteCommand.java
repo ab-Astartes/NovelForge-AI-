@@ -23,7 +23,7 @@ public class WriteCommand {
 
     public void execute(String[] args) {
         if (args.length == 0) {
-            System.err.println("Usage: novelforge write <next|draft|audit|continue|batch|progress|resume> --book <path> [--api-key <key>] [--model <id>] [--count <n>]");
+            System.err.println("Usage: novelforge write <next|draft|audit|continue|batch|progress|resume> --book <path> [--api-key <key>] [--model <id>] [--count <n>] [--memory on|off] [--embed-api-key <key>] [--embed-base-url <url>] [--embed-model <id>]");
             return;
         }
 
@@ -77,6 +77,29 @@ public class WriteCommand {
             // Setup LLM router
             ModelRouter router = new ModelRouter(
                     new ModelRouter.ModelConfig("openai", modelId, baseUrl, apiKey));
+
+            // Long-term memory (RAG). Default: lexical recall (zero API cost, works offline).
+            // Pass --embed-api-key (and optional --embed-base-url/--embed-model) to enable
+            // true dense-vector recall. Use --memory off to disable entirely.
+            String memoryFlag = findOption(args, "--memory");
+            if (memoryFlag == null || !memoryFlag.equalsIgnoreCase("off")) {
+                String embedBase = findOption(args, "--embed-base-url");
+                String embedKey = findOption(args, "--embed-api-key");
+                String embedModel = findOption(args, "--embed-model");
+                com.novelforge.core.memory.EmbeddingClient embedder = null;
+                if (embedKey != null && !embedKey.isEmpty()) {
+                    if (embedBase == null) embedBase = baseUrl;
+                    if (embedModel == null) embedModel = "text-embedding-3-small";
+                    embedder = new com.novelforge.core.memory.OpenAiCompatibleEmbeddingClient(embedBase, embedKey, embedModel);
+                }
+                com.novelforge.core.memory.MemoryStore memoryStore =
+                        new com.novelforge.core.memory.MemoryStore(bookDir, embedder);
+                memoryStore.load();          // reuse cached vectors if present
+                memoryStore.rebuild(book, truthState);  // refresh slices (+ embed if endpoint set)
+                config.setMemoryStore(memoryStore);
+                System.out.println("🧠 长程记忆已加载：" + memoryStore.size() + " 片段"
+                        + (memoryStore.isVectorEnabled() ? "（向量召回）" : "（中文词面召回）"));
+            }
 
             PipelineRunner runner = new PipelineRunner(config, router);
 

@@ -6,12 +6,95 @@ const API = '';  // same origin
 
 
 // ========== Keyboard Shortcuts ==========
-document.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveConfig(); }
-  if (e.ctrlKey && e.key === 'b') { e.preventDefault(); showPanel('books'); }
-  if (e.ctrlKey && e.key === 'w') { e.preventDefault(); showPanel('write'); }
-  if (e.ctrlKey && e.shiftKey && e.key === 'A') { e.preventDefault(); showPanel('audit'); }
+const SHORTCUTS = [
+  ['Ctrl + S', '保存当前上下文（编辑章节时保存正文，否则保存配置）'],
+  ['Ctrl + 1 ~ 0', '切换面板：开卷 / 书阁 / 落笔 / 进度 / 台账 / 图谱 / 工具箱 / 审阅 / 用量 / 设置'],
+  ['Ctrl + Enter', '在落笔面板触发「落笔」'],
+  ['Ctrl + K', '聚焦全书搜索'],
+  ['Ctrl + /', '开关 AI 助手'],
+  ['F11 或 Ctrl + Shift + F', '沉浸模式'],
+  ['Esc', '关闭弹窗 / 退出沉浸模式'],
+  ['?', '显示本快捷键面板']
+];
+const PANEL_ORDER = ['create', 'books', 'write', 'progress', 'ledger', 'graph', 'toolbox', 'audit', 'usage', 'config'];
+
+function isTyping(el) {
+  if (!el) return false;
+  const t = (el.tagName || '').toLowerCase();
+  return t === 'input' || t === 'textarea' || t === 'select' || el.isContentEditable;
+}
+
+document.addEventListener('keydown', function (e) {
+  const typing = isTyping(document.activeElement);
+
+  // Ctrl+S：上下文相关保存
+  if (e.ctrlKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    const ta = document.getElementById('chapter-edit-textarea');
+    if (ta && !ta.classList.contains('hidden') && ta.offsetParent !== null) saveChapterContent();
+    else if (currentPanel === 'config') saveConfig();
+    else if (currentPanel === 'toolbox') saveStyle();
+    else saveConfig();
+    return;
+  }
+  // Ctrl+1..9 / Ctrl+0 面板切换
+  if (e.ctrlKey && !e.shiftKey && /^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+    const idx = e.key === '0' ? 9 : Number(e.key) - 1;
+    if (PANEL_ORDER[idx]) showPanel(PANEL_ORDER[idx]);
+    return;
+  }
+  // Ctrl+Enter 落笔
+  if (e.ctrlKey && e.key === 'Enter') {
+    e.preventDefault();
+    if (currentPanel !== 'write') showPanel('write');
+    document.getElementById('btn-write')?.click();
+    return;
+  }
+  // Ctrl+K 搜索
+  if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    showPanel('books');
+    setTimeout(() => document.getElementById('search-keyword')?.focus(), 120);
+    return;
+  }
+  // Ctrl+/ 助手
+  if (e.ctrlKey && e.key === '/') { e.preventDefault(); toggleChatPanel(); return; }
+  // 沉浸模式
+  if (e.key === 'F11' || (e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f'))) {
+    e.preventDefault(); toggleImmersiveMode(); return;
+  }
+  // Esc 关闭
+  if (e.key === 'Escape') {
+    const help = document.getElementById('shortcut-modal');
+    if (help && help.style.display !== 'none') { help.style.display = 'none'; return; }
+    const diff = document.getElementById('diff-modal');
+    if (diff && diff.style.display !== 'none') { closeDiffModal(); return; }
+    if (document.body.classList.contains('immersive-mode')) { toggleImmersiveMode(); return; }
+    return;
+  }
+  // ? 帮助（非输入态）
+  if (!typing && e.key === '?') { e.preventDefault(); openShortcutHelp(); }
 });
+
+function openShortcutHelp() {
+  let modal = document.getElementById('shortcut-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'shortcut-modal';
+    modal.className = 'nf-modal';
+    modal.innerHTML =
+      '<div class="nf-modal-card">' +
+      '<div class="nf-modal-head"><h3>快捷键</h3>' +
+      '<button class="nf-modal-close" onclick="document.getElementById(\'shortcut-modal\').style.display=\'none\'">✕</button></div>' +
+      '<table class="shortcut-table"><tbody>' +
+      SHORTCUTS.map(s => '<tr><td><kbd>' + s[0] + '</kbd></td><td>' + s[1] + '</td></tr>').join('') +
+      '</tbody></table></div>';
+    modal.addEventListener('click', ev => { if (ev.target === modal) modal.style.display = 'none'; });
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+}
 // ========== Toast Notifications ==========
 function showToast(message, type, duration) {
   type = type || 'info';
@@ -89,18 +172,18 @@ async function continueChapter() {
   const bookPath = document.getElementById('global-book')?.value;
   if (!bookPath) { showToast('请先选择书籍', 'warning'); return; }
   const chapterTitle = document.getElementById('chapter-edit-title')?.value;
-  const currentText = document.getElementById('chapter-editor')?.value || '';
+  const currentText = document.getElementById('chapter-edit-textarea')?.value || '';
   if (!currentText.trim()) { showToast('章节内容为空，无法续写', 'warning'); return; }
   
   const prompt = document.getElementById('continue-prompt')?.value || '';
   const maxWords = 2000;
   const resultDiv = document.getElementById('chapter-continue-result') || document.getElementById('write-result');
   const body = { path: bookPath, chapterTitle, currentText, prompt, maxWords, apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
-  await streamLlmRequest('/api/chapter/continue/stream', body, resultDiv, 'chapter-editor', 'btn-continue-chapter', '续写');
+  await streamLlmRequest('/api/chapter/continue/stream', body, resultDiv, 'chapter-edit-textarea', 'btn-continue-chapter', '续写');
 }
 
 function appendContinuation() {
-  const editor = document.getElementById('chapter-editor');
+  const editor = document.getElementById('chapter-edit-textarea');
   const resultDiv = document.getElementById('chapter-continue-result') || document.getElementById('write-result');
   const continuedText = resultDiv?.innerText || '';
   if (continuedText && editor) {
@@ -153,10 +236,13 @@ const BUILTIN_PROVIDERS = {
 function applyProviderPreset(key) {
   const p = BUILTIN_PROVIDERS[key];
   if (!p) return;
-  const urlEl = document.getElementById('cfg-global-baseUrl');
-  const modelEl = document.getElementById('cfg-global-modelId');
+  // 注意：DOM id 是全小写 cfg-global-baseurl / cfg-global-model，此前大小写不匹配导致预设切换静默失效
+  const urlEl = document.getElementById('cfg-global-baseurl');
+  const modelEl = document.getElementById('cfg-global-model');
   if (urlEl) urlEl.value = p.baseUrl;
   if (modelEl) modelEl.value = p.model;
+  sharedConfig.baseUrl = p.baseUrl;
+  sharedConfig.modelId = p.model;
   // Also update provider select
   const provEl = document.getElementById('cfg-global-provider');
   if (provEl) {
@@ -174,96 +260,231 @@ function applyProviderPreset(key) {
 }
 
 
-// ========== Character & Hook Systems ==========
+// ========== 真相台账 (人物 / 伏笔 / 世界观 / 时间线) ==========
+
+/** 台账当前书目：优先台账面板自身的选择器，回退到全局选择器 */
+function ledgerBookPath() {
+  return document.getElementById('ledger-book')?.value
+      || document.getElementById('global-book')?.value
+      || '';
+}
+
+/** 后端 listAll() 直接返回数组，部分接口包一层对象 —— 两种形态都兼容 */
+function unwrapList(data, key) {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data[key])) return data[key];
+  if (data && data[key] && typeof data[key] === 'object') return Object.values(data[key]);
+  if (data && typeof data === 'object' && !data.error) {
+    // characters.json 可能是 { "张三": {...} } 形态
+    const vals = Object.values(data).filter(v => v && typeof v === 'object' && !Array.isArray(v));
+    if (vals.length && vals.every(v => v.name || v.description || v.role)) return vals;
+  }
+  return [];
+}
+
+function onLedgerBookChange(val) {
+  const gb = document.getElementById('global-book');
+  if (gb && val) gb.value = val;
+  reloadLedger();
+}
+
+function reloadLedger() {
+  loadCharacterSheet();
+  loadHookTracker();
+  loadWorldBuilding();
+  loadTimelineLedger();
+}
+
+function switchLedgerTab(name) {
+  document.querySelectorAll('.ledger-tab').forEach(t => t.classList.toggle('active', t.dataset.ledger === name));
+  document.querySelectorAll('.ledger-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('ledger-pane-' + name)?.classList.add('active');
+}
+
 async function loadCharacterSheet() {
-  const bookPath = document.getElementById('global-book')?.value;
-  if (!bookPath) { document.getElementById('characters-content').innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  const container = document.getElementById('characters-content');
+  if (!container) return;
+  const bookPath = ledgerBookPath();
+  const countEl = document.getElementById('characters-count');
+  if (!bookPath) { container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; if (countEl) countEl.textContent = '0'; return; }
+  container.innerHTML = '<div class="empty-hint">加载中…</div>';
   try {
-    const resp = await fetch(authUrl(API + '/api/characters?path=' + encodeURIComponent(bookPath)));
+    const resp = await fetch(authUrl(API + '/api/characters?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const data = await resp.json();
-    const container = document.getElementById('characters-content');
-    if (!data.characters || data.characters.length === 0) {
-      container.innerHTML = '<div class="empty-hint">暂无人物数据。完成写作后，人物信息将自动提取。</div>';
+    const list = unwrapList(data, 'characters');
+    if (countEl) countEl.textContent = String(list.length);
+    if (!list.length) {
+      container.innerHTML = '<div class="empty-hint">暂无人物数据。完成写作后，Observer 会自动提取人物档案。</div>';
       return;
     }
     let html = '<div class="character-grid">';
-    for (const c of data.characters) {
+    for (const c of list) {
       html += '<div class="character-card">';
-      html += '<div class="character-name">' + (c.name || '未命名') + '</div>';
-      if (c.role) html += '<div class="character-role">' + c.role + '</div>';
-      if (c.description) html += '<div class="character-desc">' + c.description + '</div>';
-      if (c.relationships && c.relationships.length > 0) {
-        html += '<div class="character-relations"><span class="relation-label">关系：</span>';
-        for (const r of c.relationships) {
-          html += '<span class="relation-tag">' + r.target + '(' + r.type + ')</span> ';
+      html += '<div class="character-name">' + escapeHtml(c.name || '未命名') + '</div>';
+      if (c.role) html += '<div class="character-role">' + escapeHtml(c.role) + '</div>';
+      if (c.status) html += '<div class="character-role">状态：' + escapeHtml(c.status) + '</div>';
+      if (c.description) html += '<div class="character-desc">' + escapeHtml(c.description) + '</div>';
+      const rels = Array.isArray(c.relationships) ? c.relationships
+                 : (c.relationships && typeof c.relationships === 'object' ? Object.entries(c.relationships).map(([k, v]) => ({ target: k, type: v })) : []);
+      if (rels.length) {
+        html += '<div class="character-relations"><span class="relation-label">关系</span>';
+        for (const r of rels) {
+          html += '<span class="relation-tag">' + escapeHtml(String(r.target || '')) + (r.type ? ' · ' + escapeHtml(String(r.type)) : '') + '</span>';
         }
         html += '</div>';
       }
-      if (c.traits) html += '<div class="character-traits">' + c.traits + '</div>';
+      const traits = Array.isArray(c.traits) ? c.traits.join('、') : c.traits;
+      if (traits) html += '<div class="character-traits">' + escapeHtml(String(traits)) + '</div>';
+      if (c.firstAppearChapter || c.lastSeenChapter) {
+        html += '<div class="character-meta">' +
+          (c.firstAppearChapter ? '首现 第' + c.firstAppearChapter + '章' : '') +
+          (c.lastSeenChapter ? ' · 最近 第' + c.lastSeenChapter + '章' : '') + '</div>';
+      }
+      html += '<div class="character-actions"><button class="btn-ghost btn-xs" onclick="editCharacter(\'' +
+        escapeHtml(String(c.name || '')).replace(/'/g, "\\'") + '\')">编辑</button></div>';
       html += '</div>';
     }
     html += '</div>';
     container.innerHTML = html;
-  } catch(e) {
-    document.getElementById('characters-content').innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+  } catch (e) {
+    container.innerHTML = '<div class="empty-hint">加载失败: ' + escapeHtml(e.message) + '</div>';
   }
 }
+
+let _hookCache = [];
+let _hookFilter = 'all';
 
 async function loadHookTracker() {
-  const bookPath = document.getElementById('global-book')?.value;
-  if (!bookPath) { document.getElementById('hooks-content').innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  const container = document.getElementById('hooks-content');
+  if (!container) return;
+  const bookPath = ledgerBookPath();
+  const countEl = document.getElementById('hooks-count');
+  if (!bookPath) { container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; if (countEl) countEl.textContent = '0'; return; }
+  container.innerHTML = '<div class="empty-hint">加载中…</div>';
   try {
-    const resp = await fetch(authUrl(API + '/api/hooks?path=' + encodeURIComponent(bookPath)));
+    const resp = await fetch(authUrl(API + '/api/hooks?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const data = await resp.json();
-    const container = document.getElementById('hooks-content');
-    if (!data.hooks || data.hooks.length === 0) {
-      container.innerHTML = '<div class="empty-hint">暂无伏笔数据。完成写作后，伏笔信息将自动追踪。</div>';
-      return;
-    }
-    let html = '<div class="hook-list">';
-    for (const h of data.hooks) {
-      const status = h.resolved ? '✅ 已收束' : '⏳ 待收束';
-      html += '<div class="hook-card ' + (h.resolved ? 'resolved' : 'pending') + '">';
-      html += '<div class="hook-title">' + (h.description || h.hook || '未命名伏笔') + '</div>';
-      html += '<div class="hook-status">' + status + '</div>';
-      if (h.plantedChapter) html += '<div class="hook-chapter">埋设：第' + h.plantedChapter + '章</div>';
-      if (h.resolvedChapter) html += '<div class="hook-chapter">收束：第' + h.resolvedChapter + '章</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-    container.innerHTML = html;
-  } catch(e) {
-    document.getElementById('hooks-content').innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+    _hookCache = unwrapList(data, 'hooks');
+    if (countEl) countEl.textContent = String(_hookCache.length);
+    renderHooks();
+  } catch (e) {
+    container.innerHTML = '<div class="empty-hint">加载失败: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
+function filterHooks(mode) {
+  _hookFilter = mode;
+  document.querySelectorAll('[data-hookfilter]').forEach(c => c.classList.toggle('active', c.dataset.hookfilter === mode));
+  renderHooks();
+}
 
-// ========== World-Building Panel ==========
+function renderHooks() {
+  const container = document.getElementById('hooks-content');
+  if (!container) return;
+  const currentCh = Number(document.getElementById('ws-chapters')?.textContent || 0);
+  let list = _hookCache;
+  if (_hookFilter === 'open') list = list.filter(h => !h.resolved && h.status !== 'resolved');
+  else if (_hookFilter === 'resolved') list = list.filter(h => h.resolved || h.status === 'resolved');
+  else if (_hookFilter === 'overdue') list = list.filter(h => !h.resolved && h.status !== 'resolved' && h.dueChapter && currentCh > Number(h.dueChapter));
+
+  if (!list.length) {
+    container.innerHTML = '<div class="empty-hint">' +
+      (_hookCache.length ? '当前筛选下无伏笔' : '暂无伏笔数据。完成写作后，Reflector 会自动维护伏笔池。') + '</div>';
+    return;
+  }
+  let html = '<div class="hook-list">';
+  for (const h of list) {
+    const resolved = h.resolved || h.status === 'resolved';
+    const overdue = !resolved && h.dueChapter && currentCh > Number(h.dueChapter);
+    const cls = resolved ? 'resolved' : (overdue ? 'overdue' : 'pending');
+    html += '<div class="hook-card ' + cls + '">';
+    html += '<div class="hook-title">' + escapeHtml(h.description || h.hook || h.text || '未命名伏笔') + '</div>';
+    html += '<div class="hook-meta-row">';
+    html += '<span class="hook-status">' + (resolved ? '✅ 已兑现' : (overdue ? '⚠ 逾期未兑现' : '⏳ 待兑现')) + '</span>';
+    if (h.priority) html += '<span class="hook-priority hp-' + escapeHtml(String(h.priority)) + '">' + escapeHtml(String(h.priority)) + '</span>';
+    if (h.plantedChapter) html += '<span class="hook-chapter">埋设 第' + h.plantedChapter + '章</span>';
+    if (h.dueChapter) html += '<span class="hook-chapter">期限 第' + h.dueChapter + '章</span>';
+    if (h.resolvedChapter) html += '<span class="hook-chapter">兑现 第' + h.resolvedChapter + '章</span>';
+    html += '</div>';
+    if (h.id) {
+      html += '<div class="hook-actions"><button class="btn-ghost btn-xs" onclick="editHook(\'' +
+        String(h.id).replace(/'/g, "\\'") + '\')">编辑</button></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// ========== World-Building ==========
+const WORLD_FIELDS = [
+  ['setting', '背景设定'], ['rules', '世界规则'], ['powerSystem', '力量体系'],
+  ['geography', '地理环境'], ['factions', '势力组织'], ['technology', '技术水平'],
+  ['culture', '文化风俗'], ['history', '历史背景'], ['economy', '经济体系']
+];
+
 async function loadWorldBuilding() {
-  const bookPath = document.getElementById('global-book')?.value;
   const container = document.getElementById('world-content');
-  if (!bookPath) { if (container) container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  if (!container) return;
+  const bookPath = ledgerBookPath();
+  if (!bookPath) { container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  container.innerHTML = '<div class="empty-hint">加载中…</div>';
   try {
     const resp = await fetch(authUrl(API + '/api/world?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const data = await resp.json();
-    let html = '';
-    if (data.world) {
-      html += '<div class="world-section">';
-      html += '<div class="world-section-title">🌍 世界观设定</div>';
-      if (data.world.setting) html += '<div class="world-field"><label>背景设定</label><div class="world-value">' + data.world.setting + '</div></div>';
-      if (data.world.rules) html += '<div class="world-field"><label>世界规则</label><div class="world-value">' + data.world.rules + '</div></div>';
-      if (data.world.geography) html += '<div class="world-field"><label>地理环境</label><div class="world-value">' + data.world.geography + '</div></div>';
-      if (data.world.technology) html += '<div class="world-field"><label>技术水平</label><div class="world-value">' + data.world.technology + '</div></div>';
-      if (data.world.culture) html += '<div class="world-field"><label>文化风俗</label><div class="world-value">' + data.world.culture + '</div></div>';
-      if (data.world.history) html += '<div class="world-field"><label>历史背景</label><div class="world-value">' + data.world.history + '</div></div>';
-      html += '</div>';
+    const w = data.world || {};
+    let html = '<div class="world-section">';
+    let filled = 0;
+    for (const [key, label] of WORLD_FIELDS) {
+      const v = w[key];
+      if (v === undefined || v === null || v === '') continue;
+      filled++;
+      const text = Array.isArray(v) ? v.join('、') : (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v));
+      html += '<div class="world-field"><label>' + label + '</label><div class="world-value">' + escapeHtml(text) + '</div></div>';
     }
-    if (!data.world || (!data.world.setting && !data.world.rules)) {
-      html += '<div class="empty-hint">暂无世界观数据。写作后系统会自动提取世界观信息。</div>';
+    // 兜底：展示后端返回的未知字段，避免数据被静默丢弃
+    const known = new Set(WORLD_FIELDS.map(f => f[0]));
+    for (const [k, v] of Object.entries(w)) {
+      if (known.has(k) || v === undefined || v === null || v === '') continue;
+      filled++;
+      const text = Array.isArray(v) ? v.join('、') : (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v));
+      html += '<div class="world-field"><label>' + escapeHtml(k) + '</label><div class="world-value">' + escapeHtml(text) + '</div></div>';
     }
-    if (container) container.innerHTML = html;
-  } catch(e) {
-    if (container) container.innerHTML = '<div class="empty-hint">加载失败: ' + e.message + '</div>';
+    html += '</div>';
+    container.innerHTML = filled ? html
+      : '<div class="empty-hint">暂无世界观数据。写作后 Observer 会自动提取世界观信息。</div>';
+  } catch (e) {
+    container.innerHTML = '<div class="empty-hint">加载失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ========== Timeline ==========
+async function loadTimelineLedger() {
+  const container = document.getElementById('timeline-content');
+  if (!container) return;
+  const bookPath = ledgerBookPath();
+  if (!bookPath) { container.innerHTML = '<div class="empty-hint">请先选择书籍</div>'; return; }
+  container.innerHTML = '<div class="empty-hint">加载中…</div>';
+  try {
+    const resp = await fetch(authUrl(API + '/api/state?path=' + encodeURIComponent(bookPath) + '&type=timeline'), { headers: authHeaders() });
+    const data = await resp.json();
+    const raw = (data.summary || data.state || '').trim();
+    if (!raw) { container.innerHTML = '<div class="empty-hint">暂无时间线数据。</div>'; return; }
+    const rows = raw.split('\n').filter(l => l.trim());
+    let html = '<div class="timeline-track">';
+    for (const line of rows) {
+      const m = line.match(/第?\s*(\d+)\s*章?[:：]?\s*(.*)$/);
+      html += '<div class="timeline-item">' +
+        '<div class="timeline-dot"></div>' +
+        '<div class="timeline-body">' +
+        (m ? '<span class="timeline-ch">第' + m[1] + '章</span><span class="timeline-text">' + escapeHtml(m[2]) + '</span>'
+           : '<span class="timeline-text">' + escapeHtml(line) + '</span>') +
+        '</div></div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div class="empty-hint">加载失败: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
@@ -332,8 +553,8 @@ function stopAutoSave() {
 
 async function autoSaveCurrentDraft() {
   const bookPath = document.getElementById('global-book')?.value;
-  const chapterTitle = document.querySelector('.chapter-editor-title')?.textContent;
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const chapterTitle = document.getElementById('chapter-title-input')?.value;
+  const editor = document.getElementById('chapter-edit-textarea');
   if (!bookPath || !chapterTitle || !editor) return;
   try {
     await fetch(authUrl(API + '/api/book/edit'), {
@@ -348,7 +569,7 @@ async function autoSaveCurrentDraft() {
 }
 
 function updateWordCount() {
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const editor = document.getElementById('chapter-edit-textarea');
   const counter = document.getElementById('word-count-display');
   if (!editor || !counter) return;
   const text = editor.value;
@@ -360,7 +581,7 @@ function updateWordCount() {
 
 // ========== Selection-based AI Tools ==========
 function getSelectedText() {
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const editor = document.getElementById('chapter-edit-textarea');
   if (!editor) return null;
   const start = editor.selectionStart;
   const end = editor.selectionEnd;
@@ -391,7 +612,7 @@ async function aiPolishSelection() {
 }
 
 function applyAiResult(start, end, btn) {
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const editor = document.getElementById('chapter-edit-textarea');
   if (!editor) return;
   const newText = btn.closest('.ai-result-panel').querySelector('.ai-result-text').innerText;
   editor.value = editor.value.substring(0, start) + newText + editor.value.substring(end);
@@ -400,21 +621,13 @@ function applyAiResult(start, end, btn) {
   updateWordCount();
 }
 
-function createAiResultPanel() {
-  const panel = document.createElement('div');
-  panel.className = 'ai-result-panel';
-  panel.style.display = 'none';
-  const editorArea = document.querySelector('.chapter-editor-area') || document.querySelector('#chapter-editor');
-  if (editorArea) editorArea.parentElement.appendChild(panel);
-  else document.body.appendChild(panel);
-  return panel;
-}
+// createAiResultPanel() 统一定义在下方「AI 划选改写」区块，此处不再重复定义
 
 
 // Post-render hook for chapter editor enhancements
 function enhanceChapterEditor(bookPath, chapterTitle) {
   // Add word count bar
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const editor = document.getElementById('chapter-edit-textarea');
   if (!editor) return;
   
   // Remove existing enhancements
@@ -551,9 +764,7 @@ function formatChatText(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
 
-function escapeHtml(text) {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-}
+// escapeHtml() 统一定义在文件末尾（含 null 保护与引号转义），此处不再重复定义
 
 
 async function streamAiSelection(text, action, bookPath, resultDiv) {
@@ -617,7 +828,7 @@ function createAiResultPanel() {
 function insertAiResult(btn, mode) {
   const panel = btn.closest('.ai-result-panel');
   const text = panel.querySelector('.ai-result-text')?.textContent || '';
-  const editor = document.querySelector('.chapter-editor-textarea');
+  const editor = document.getElementById('chapter-edit-textarea');
   if (!editor) { showToast('编辑器未找到', 'warning'); return; }
   if (mode === 'replace') {
     const start = editor.selectionStart;
@@ -698,27 +909,29 @@ const PANEL_MAP = {
   'toolbox': 'toolbox',
   'audit': 'audit',
   'config': 'config',
+  'graph': 'graph',
   // Legacy panel names → redirect to new panels
   'state': 'toolbox',
-  'progress': 'toolbox',
   'style': 'toolbox',
   'rollback': 'audit',
-  'characters': 'toolbox',
-  'hooks': 'toolbox',
-  'usage': 'panel-usage'
+  'characters': 'ledger',
+  'hooks': 'ledger',
+  'world': 'ledger',
+  'ledger': 'ledger',
+  'progress': 'progress',
+  'usage': 'usage'
 };
+
+let currentPanel = 'create';
 
 function showPanel(name) {
   const targetName = PANEL_MAP[name] || name;
+  currentPanel = targetName;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
   const panel = document.getElementById('panel-' + targetName);
   if (panel) {
     panel.classList.add('active');
-    if (panelId === 'usage') refreshUsage();
-    if (panelId === 'characters') loadCharacterSheet();
-    if (panelId === 'hooks') loadHookTracker();
-    if (panelId === 'world') loadWorldBuilding();
     // Trigger animation
     panel.style.opacity = '0';
     panel.style.transform = 'translateY(8px)';
@@ -726,15 +939,35 @@ function showPanel(name) {
       panel.style.opacity = '1';
       panel.style.transform = 'translateY(0)';
     });
+  } else {
+    console.warn('[showPanel] 未找到面板: panel-' + targetName);
+    showToast('面板 "' + targetName + '" 不存在', 'warning');
+    return;
   }
   const nav = document.getElementById('nav-' + targetName);
   if (nav) nav.classList.add('active');
 
   // Auto-refresh relevant panels
+  if (targetName === 'usage') refreshUsage();
   if (targetName === 'books') loadBooks();
   if (targetName === 'write' || targetName === 'toolbox') populateBookSelects();
   if (targetName === 'write') { const wb = document.getElementById('write-book')?.value; if (wb) updateWriteStats(wb); }
-  if (targetName === 'toolbox') { populateBookSelects(); loadStyle(); loadCharacters(); loadHooks(); }
+  if (targetName === 'toolbox') { populateBookSelects(); loadStyle(); }
+  if (targetName === 'ledger') {
+    populateBookSelects();
+    loadCharacterSheet();
+    loadHookTracker();
+    loadWorldBuilding();
+  }
+  if (targetName === 'progress') {
+    populateBookSelects();
+    loadProgress();
+  }
+  if (targetName === 'graph') {
+    populateBookSelects();
+    loadGraph();
+  }
+  if (targetName === 'audit') populateBookSelects();
 }
 
 // ========== Result Display ==========
@@ -1319,12 +1552,16 @@ async function showBookDetail(bookPath) {
   }
 }
 
+const BOOK_SELECT_IDS = ['write-book','audit-book','synopsis-book','style-book','characters-book',
+  'hooks-book','state-book','rollback-book','toolbox-book','ledger-book','progress-book','synopsis-source-book'];
+
 function onGlobalBookChange(val) {
-  const ids = ['write-book','audit-book','synopsis-book','style-book','characters-book','hooks-book','state-book','rollback-book','toolbox-book'];
-  ids.forEach(id => {
+  BOOK_SELECT_IDS.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = val;
   });
+  // 当前停留在台账面板时立即刷新数据
+  if (currentPanel === 'ledger') reloadLedger();
   // Book detail card
   const detailCard = document.getElementById('book-detail-card');
   if (detailCard) {
@@ -1368,14 +1605,27 @@ async function populateBookSelects(books) {
       books = await res.json();
     } catch (e) { return; }
   }
-  const selects = ['global-book','toolbox-book','write-book', 'state-book', 'audit-book', 'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book', 'hooks-book', 'synopsis-book', 'outline-editor-book', 'intent-editor-book', 'book-edit-book', 'search-book'];
+  const selects = ['global-book','toolbox-book','ledger-book','write-book', 'state-book', 'audit-book',
+    'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book',
+    'hooks-book', 'synopsis-book', 'synopsis-source-book', 'outline-editor-book', 'intent-editor-book',
+    'book-edit-book', 'search-book', 'graph-book'];
+  const globalVal = document.getElementById('global-book')?.value || '';
+  const opts = books.map(b =>
+    `<option value="${safePath(b.path)}">${escapeHtml(b.title)} · ${GENRE_LABELS[b.genre] || b.genre}</option>`
+  ).join('');
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
-    sel.innerHTML = books.map(b =>
-      `<option value="${safePath(b.path)}">${b.title} · ${GENRE_LABELS[b.genre] || b.genre}</option>`
-    ).join('');
+    const prev = sel.value;                       // 保留当前选择，避免刷新后选中项被重置
+    sel.innerHTML = '<option value="">选择书籍…</option>' + opts;
+    const want = prev || globalVal;
+    if (want && [...sel.options].some(o => o.value === want)) sel.value = want;
   });
+  // 仅有一本书时自动选中，省一次点击
+  if (books.length === 1) {
+    const gb = document.getElementById('global-book');
+    if (gb && !gb.value) { gb.value = safePath(books[0].path); onGlobalBookChange(gb.value); }
+  }
 }
 
 // ========== Write Chapter ==========
@@ -2071,6 +2321,61 @@ async function exportBook() {
   }
 }
 
+// Synthesize a book cover PNG (zero-dependency, ink-wash palettes)
+async function generateCover() {
+  const bookPath = document.getElementById('global-book').value;
+  const resultDiv = document.getElementById('export-result');
+  if (!bookPath) { showResult(resultDiv, '请选择书籍', true); return; }
+  showResult(resultDiv, '⏳ 正在渲染封面…', false);
+  try {
+    const res = await fetch(authUrl(API + '/api/cover'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, palette: Math.floor(Math.random() * 5) })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showResult(resultDiv, `✓ 封面已生成：${data.outputPath}（600×900 PNG，可用于 EPUB 导出）`, false);
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '生成失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
+// Market radar: LLM-driven genre positioning insights
+async function runRadar() {
+  const resultDiv = document.getElementById('radar-result');
+  const genre = document.getElementById('radar-genre').value.trim();
+  const extra = document.getElementById('radar-extra').value.trim();
+  if (!genre) { showResult(resultDiv, '请填写题材/赛道', true); return; }
+  showResult(resultDiv, '⏳ 正在扫榜分析…', false);
+  try {
+    const res = await fetch(authUrl(API + '/api/radar'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ genre, extra })
+    });
+    const data = await res.json();
+    if (data.success && data.radar) {
+      const r = data.radar;
+      const list = arr => Array.isArray(arr) ? '<ul>' + arr.map(x => '<li>' + escapeHtml(String(x)) + '</li>').join('') + '</ul>' : '';
+      resultDiv.innerHTML =
+        '<div class="radar-report">' +
+        (r.positioning ? '<p><strong>📍 定位：</strong>' + escapeHtml(r.positioning) + '</p>' : '') +
+        (r.trends && r.trends.length ? '<p><strong>📈 流行方向：</strong></p>' + list(r.trends) : '') +
+        (r.hooks && r.hooks.length ? '<p><strong>🪝 高转化钩子：</strong></p>' + list(r.hooks) : '') +
+        (r.differentiation ? '<p><strong>🎯 差异化：</strong>' + escapeHtml(r.differentiation) + '</p>' : '') +
+        (r.risks && r.risks.length ? '<p><strong>⚠️ 同质化风险：</strong></p>' + list(r.risks) : '') +
+        '</div>';
+      resultDiv.className = 'result-box';
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '分析失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
 // ========== Config ==========
 
 const agentToggles = {};
@@ -2121,6 +2426,14 @@ async function saveConfig() {
       baseUrl: document.getElementById('cfg-global-baseurl').value,
       ...(document.getElementById('cfg-global-apikey').value.trim() ? { apiKey: document.getElementById('cfg-global-apikey').value.trim() } : {})
     },
+    memory: {
+      enabled: document.getElementById('cfg-memory-enabled').value === 'true',
+      ...(document.getElementById('cfg-memory-baseurl').value.trim() ? { embeddingBaseUrl: document.getElementById('cfg-memory-baseurl').value.trim() } : {}),
+      ...(document.getElementById('cfg-memory-apikey').value.trim() ? { embeddingApiKey: document.getElementById('cfg-memory-apikey').value.trim() } : {}),
+      ...(document.getElementById('cfg-memory-model').value.trim() ? { embeddingModel: document.getElementById('cfg-memory-model').value.trim() } : {})
+    },
+    webhooks: document.getElementById('cfg-webhooks').value
+      .split('\n').map(s => s.trim()).filter(s => s.length > 0),
     agentOverrides: {}
   };
 
@@ -2382,6 +2695,22 @@ async function loadConfig() {
       syncConfigToUI();
     }
 
+    // Long-term memory (RAG) + webhook config
+    const memEnabledEl = document.getElementById('cfg-memory-enabled');
+    if (memEnabledEl) memEnabledEl.value = String(data.memory ? data.memory.enabled !== false : true);
+    const memUrlEl = document.getElementById('cfg-memory-baseurl');
+    if (memUrlEl) memUrlEl.value = (data.memory && data.memory.embeddingBaseUrl) || '';
+    const memKeyEl = document.getElementById('cfg-memory-apikey');
+    if (memKeyEl) {
+      memKeyEl.value = '';
+      const k = data.memory && data.memory.embeddingApiKey;
+      memKeyEl.placeholder = k ? '已配置（留空保留原值）' : 'sk-...（留空=词面召回降级）';
+    }
+    const memModelEl = document.getElementById('cfg-memory-model');
+    if (memModelEl) memModelEl.value = (data.memory && data.memory.embeddingModel) || '';
+    const hookEl = document.getElementById('cfg-webhooks');
+    if (hookEl) hookEl.value = Array.isArray(data.webhooks) ? data.webhooks.join('\n') : '';
+
     const presetSelect = document.getElementById('cfg-preset');
     if (data.presets && presetSelect) {
       const currentVal = presetSelect.value;
@@ -2627,16 +2956,72 @@ async function saveStyle() {
   }
 }
 
+// Clone style from a sample text: LLM extracts the style genes and fills the form
+async function cloneStyle() {
+  const bookPath = document.getElementById('style-book')?.value;
+  const resultDiv = document.getElementById('style-result');
+  const sample = document.getElementById('style-sample').value.trim();
+  if (!bookPath) { showResult(resultDiv, '请先选择项目', true); return; }
+  if (!sample || sample.length < 100) { showResult(resultDiv, '请在下方文本框粘贴至少 100 字的参考文本，AI 才能提炼风格', true); return; }
+  showResult(resultDiv, '⏳ 正在分析样例、提炼风格基因…', false);
+  try {
+    const res = await fetch(authUrl(API + '/api/style/clone'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath, sample, name: document.getElementById('style-name').value.trim() })
+    });
+    const data = await res.json();
+    if (data.success && data.style) {
+      // Refresh the form with extracted style
+      loadStyle();
+      showResult(resultDiv, '✓ 风格克隆完成，已自动填入各维度并保存到书籍配置', false);
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '克隆失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
+// ========== Long-term Memory (RAG) ==========
+
+async function rebuildMemory() {
+  const resultDiv = document.getElementById('memory-status');
+  const bookPath = document.getElementById('global-book')?.value || document.getElementById('state-book')?.value;
+  if (!bookPath) { showResult(resultDiv, '请先在顶部选择一本书', true); return; }
+  showResult(resultDiv, '⏳ 正在切分章节与真相文件、重建记忆索引…', false);
+  try {
+    const res = await fetch(authUrl(API + '/api/memory'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: bookPath })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const mode = data.vectorEnabled ? '向量语义检索' : '中文词面检索（未配置 Embedding，自动降级）';
+      showResult(resultDiv, `✓ 记忆索引已重建：${data.totalChunks} 个片段 · ${mode}`, false);
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '重建失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
 // ========== Progress Panel ==========
 
 async function loadProgress() {
   const bookPath = document.getElementById('progress-book')?.value || document.getElementById('state-book')?.value;
-  if (!bookPath) return;
+  const summaryDiv = document.getElementById('progress-summary');
+  const emptyDiv = document.getElementById('progress-empty');
+  if (!bookPath) {
+    if (summaryDiv) summaryDiv.style.display = 'none';
+    if (emptyDiv) emptyDiv.style.display = '';
+    return;
+  }
+  if (summaryDiv) summaryDiv.style.display = '';
+  if (emptyDiv) emptyDiv.style.display = 'none';
   try {
     const res = await fetch(authUrl(API + '/api/progress?path=' + encodeURIComponent(bookPath)), { headers: authHeaders() });
     const data = await res.json();
-    const summaryDiv = document.getElementById('progress-summary');
-    if (summaryDiv) summaryDiv.style.display = '';
 
     // Use new IDs to avoid conflicts with state-stats
     const pstatChapters = document.getElementById('pstat-chapters');
@@ -2668,11 +3053,18 @@ async function loadProgress() {
         tbody.appendChild(tr);
       });
     } else {
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#8b7355;text-align:center">暂无详细进度数据（需要通过写作功能生成）</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#8b7355;text-align:center">暂无详细进度数据（需要通过写作功能生成）</td></tr>';
     }
   } catch (e) {
     console.error('loadProgress error:', e);
   }
+}
+
+function onProgressBookChange(val) {
+  const g = document.getElementById('global-book');
+  if (g) g.value = val;
+  onGlobalBookChange(val);
+  loadProgress();
 }
 
 
@@ -3082,11 +3474,12 @@ async function detectAiTrace() {
 // ========== Chapter Synopsis Generation ==========
 
 async function generateChapterSynopsis() {
-  const bookPath = document.getElementById('synopsis-source-book')?.value 
+  // 实际 DOM id 是 synopsis-book / synopsis-prompt / synopsis-genre
+  const bookPath = document.getElementById('synopsis-book')?.value
     || document.getElementById('global-book')?.value;
   const source = document.getElementById('synopsis-source')?.value || '';
-  const prompt = document.getElementById('chapter-synopsis-prompt')?.value || '';
-  const genre = document.getElementById('chapter-synopsis-genre')?.value || '';
+  const prompt = document.getElementById('synopsis-prompt')?.value || '';
+  const genre = document.getElementById('synopsis-genre')?.value || '';
   if (!source && !bookPath) { showToast('请先选择书籍或输入大纲/卷纲内容', 'warning'); return; }
   const resultDiv = document.getElementById('synopsis-result') || document.getElementById('write-result');
   const body = { apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId };
@@ -3402,3 +3795,11 @@ if (_origShowChapter) {
   };
 }
 
+
+// 台账 → 图谱快捷跳转
+function jumpToGraph() {
+  const lb = document.getElementById('ledger-book');
+  const gb = document.getElementById('graph-book');
+  if (lb && gb && lb.value && !gb.value) gb.value = lb.value;
+  showPanel('graph');
+}

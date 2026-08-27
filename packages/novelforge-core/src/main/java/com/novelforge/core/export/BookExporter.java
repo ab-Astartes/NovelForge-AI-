@@ -252,8 +252,7 @@ public final class BookExporter {
         };
     }
 
-    public static void exportHtml(Book book, Path outputPath) throws Exception {
-        StringBuilder sb = new StringBuilder();
+    public static void exportHtml(Book book, Path outputPath) throws Exception {        StringBuilder sb = new StringBuilder();
         sb.append("<!DOCTYPE html>\n");
         sb.append("<html lang=\"zh-CN\">\n<head>\n");
         sb.append("<meta charset=\"UTF-8\">\n");
@@ -289,6 +288,96 @@ public final class BookExporter {
         }
         sb.append("</body>\n</html>");
         Files.writeString(outputPath, sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    // ---------------------------------------------------------------- DOCX
+
+    private static final String DOCX_STYLES =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+        "<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
+        "<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/>" +
+        "<w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:eastAsia=\"SimSun\"/></w:rPr></w:style>" +
+        "<w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/>" +
+        "<w:basedOn w:val=\"Normal\"/><w:pPr><w:spacing w:before=\"240\" w:after=\"120\"/></w:pPr>" +
+        "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr></w:style>" +
+        "</w:styles>";
+
+    /** Export book as a Word .docx (Office Open XML, no external dependencies). */
+    public static void exportDocx(Book book, Path outputPath) throws Exception {
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(outputPath))) {
+            addStringEntry(zos, "[Content_Types].xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>" +
+                "<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>" +
+                "</Types>");
+
+            addStringEntry(zos, "_rels/.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>" +
+                "</Relationships>");
+
+            addStringEntry(zos, "word/_rels/document.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>" +
+                "</Relationships>");
+
+            addStringEntry(zos, "word/styles.xml", DOCX_STYLES);
+
+            StringBuilder body = new StringBuilder();
+            body.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+            body.append("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">");
+            body.append("<w:body>");
+            body.append(docxParagraph(book.getTitle() != null ? book.getTitle() : "Untitled", true));
+            body.append(docxParagraph(
+                "作者：" + (book.getAuthor() != null ? book.getAuthor() : "") +
+                "    题材：" + (book.getGenre() != null ? book.getGenre() : ""), false));
+            for (Chapter ch : book.getChapters()) {
+                String text = ch.getFinalText() != null && !ch.getFinalText().isEmpty()
+                        ? ch.getFinalText() : ch.getDraftText();
+                if (text == null || text.isEmpty()) continue;
+                body.append(docxParagraph("第" + ch.getNumber() + "章 " +
+                        (ch.getTitle() != null ? ch.getTitle() : ""), true));
+                for (String para : text.split("\n{2,}")) {
+                    String p = para.replace("\n", " ").trim();
+                    if (!p.isEmpty()) body.append(docxParagraph(p, false));
+                }
+            }
+            body.append("</w:body></w:document>");
+            addStringEntry(zos, "word/document.xml", body.toString());
+        }
+    }
+
+    private static String docxParagraph(String text, boolean heading) {
+        return "<w:p>" +
+            (heading ? "<w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>" : "") +
+            "<w:r><w:t xml:space=\"preserve\">" + xmlEscape(text) + "</w:t></w:r></w:p>";
+    }
+
+    private static String xmlEscape(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '&') sb.append("&amp;");
+            else if (c == '<') sb.append("&lt;");
+            else if (c == '>') sb.append("&gt;");
+            else if (c == '\"') sb.append("&quot;");
+            else if (c < 0x20 && c != '\n' && c != '\t' && c != '\r') sb.append(" ");
+            else sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    // ---------------------------------------------------------------- PDF
+
+    /** Export book as PDF. Delegates to the dependency-free CJK-aware PDF writer. */
+    public static void exportPdf(Book book, Path outputPath) throws Exception {
+        com.novelforge.core.export.PdfWriter.write(book, outputPath);
     }
 
 }

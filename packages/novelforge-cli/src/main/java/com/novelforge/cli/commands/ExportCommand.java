@@ -50,6 +50,18 @@ public class ExportCommand {
                     BookExporter.exportEpub(book, outputPath, coverImagePath);
                     System.out.println("✅ Exported EPUB: " + output);
                 }
+                case "html" -> {
+                    BookExporter.exportHtml(book, outputPath);
+                    System.out.println("✅ Exported HTML: " + output);
+                }
+                case "docx" -> {
+                    BookExporter.exportDocx(book, outputPath);
+                    System.out.println("✅ Exported DOCX: " + output);
+                }
+                case "pdf" -> {
+                    BookExporter.exportPdf(book, outputPath);
+                    System.out.println("✅ Exported PDF: " + output);
+                }
                 default -> {
                     System.err.println("Unsupported format: " + format);
                     printUsage();
@@ -62,12 +74,15 @@ public class ExportCommand {
     }
 
     private void printUsage() {
-        System.out.println("Usage: novelforge export --book <path> --format <epub|txt|md> [--output <file>] [--cover <path>]");
+        System.out.println("Usage: novelforge export --book <path> --format <epub|txt|md|html|docx|pdf> [--output <file>] [--cover <path>]");
         System.out.println();
         System.out.println("Formats:");
         System.out.println("  txt  — plain text (with chapter separators)");
         System.out.println("  md   — Markdown (compatible with most editors)");
         System.out.println("  epub — EPUB 3 (cover + nav + paragraph formatting)");
+        System.out.println("  html — single-file web page");
+        System.out.println("  docx — Word document (pure OOXML, zero dependencies)");
+        System.out.println("  pdf  — PDF with embedded CJK font (zero dependencies)");
         System.out.println("Options:");
         System.out.println("  --cover <path> — cover image for EPUB (jpg/png/gif/svg/webp)");
     }

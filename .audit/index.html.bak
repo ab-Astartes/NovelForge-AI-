@@ -31,23 +31,11 @@
       <button onclick="showPanel('write')" class="sidebar-nav-item" id="nav-write">
         <span class="nav-icon">✒️</span><span class="nav-label">落笔</span>
       </button>
-      <button onclick="showPanel('progress')" class="sidebar-nav-item" id="nav-progress">
-        <span class="nav-icon">📈</span><span class="nav-label">进度</span>
-      </button>
-      <button onclick="showPanel('ledger')" class="sidebar-nav-item" id="nav-ledger">
-        <span class="nav-icon">🗂</span><span class="nav-label">台账</span>
-      </button>
-      <button onclick="showPanel('graph')" class="sidebar-nav-item" id="nav-graph">
-        <span class="nav-icon">🕸</span><span class="nav-label">图谱</span>
-      </button>
       <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
         <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
       </button>
       <button onclick="showPanel('audit')" class="sidebar-nav-item" id="nav-audit">
         <span class="nav-icon">🔍</span><span class="nav-label">审阅</span>
-      </button>
-      <button onclick="showPanel('usage')" class="sidebar-nav-item" id="nav-usage">
-        <span class="nav-icon">📊</span><span class="nav-label">用量</span>
       </button>
       <button onclick="showPanel('config')" class="sidebar-nav-item" id="nav-config">
         <span class="nav-icon">⚙</span><span class="nav-label">设置</span>
@@ -57,6 +45,10 @@
     <div class="sidebar-footer">
       <span class="footer-version-label"><span id="footer-version"></span></span>
     </div>
+            <div class="nav-item" onclick="showPanel('usage')" title="用量">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">用量</span>
+            </div>
   </aside>
 
   <!-- ===== Main Content ===== -->
@@ -74,14 +66,11 @@
               <option value="">选择书籍…</option>
             </select>
           </div>
-          <div class="header-actions">
-            <button id="btn-immersive" class="btn-ghost btn-sm" onclick="toggleImmersiveMode()" title="隐藏侧栏，专注正文">🖋 沉浸</button>
-            <button id="btn-chat" class="btn-ghost btn-sm" onclick="toggleChatPanel()" title="AI 创作助手">🤖 助手</button>
-            <button class="btn-ghost btn-sm" onclick="openShortcutHelp()" title="快捷键 (?)">⌨</button>
-          </div>
         </div>
       </div>
-    </header>
+    
+      <button id="btn-immersive" class="btn-ghost btn-sm" onclick="toggleImmersiveMode()">沉浸模式</button>
+      <button id="btn-chat" class="btn-ghost btn-sm" onclick="toggleChatPanel()">🤖 助手</button></header>
 
     <!-- Content Area -->
     <div class="content-area">
@@ -154,12 +143,12 @@
         </div>
 
         <!-- Step 2: Generate Outline -->
-        <div class="wizard-content hidden" id="wizard-step-content-2">
+        <div class="wizard-content" id="wizard-step-content-2" class="hidden">
           <div class="card">
             <div class="card-title"><span class="card-icon">📝</span> 大纲生成</div>
 
             <!-- Loading state -->
-            <div class="wizard-loading hidden" id="wizard-outline-loading">
+            <div id="wizard-outline-loading" class="wizard-loading" class="hidden">
               <div class="wizard-spinner"></div>
               <div class="wizard-loading-text">正在构思大纲…</div>
               <div class="wizard-loading-sub">AI 正在根据你的创意生成小说大纲</div>
@@ -171,7 +160,7 @@
                 <span class="wizard-info-label">✦ 书籍已创建</span>
                 <span id="wizard-book-path" class="wizard-info-path"></span>
               </div>
-              <div class="form-group mt-3">
+              <div class="form-group" class="mt-3">
                 <label class="form-label">大纲内容（可编辑）</label>
                 <textarea id="wizard-outline-text" class="input-field wizard-textarea-lg" rows="16" placeholder="大纲内容将在此显示…"></textarea>
               </div>
@@ -186,12 +175,12 @@
         </div>
 
         <!-- Step 3: Generate Volume Outline -->
-        <div class="wizard-content hidden" id="wizard-step-content-3">
+        <div class="wizard-content" id="wizard-step-content-3" class="hidden">
           <div class="card">
             <div class="card-title"><span class="card-icon">📖</span> 卷纲生成 <span style="color:var(--paper-dark);font-weight:normal;font-size:13px">（可选）</span></div>
 
             <!-- Loading state -->
-            <div class="wizard-loading hidden" id="wizard-volume-loading">
+            <div id="wizard-volume-loading" class="wizard-loading" class="hidden">
               <div class="wizard-spinner"></div>
               <div class="wizard-loading-text">正在构思卷纲…</div>
               <div class="wizard-loading-sub">AI 正在基于大纲生成详细卷纲结构</div>
@@ -231,7 +220,7 @@
         </div>
 
         <!-- Book Detail Tabs -->
-        <div class="card hidden" id="book-detail-card">
+        <div class="card" id="book-detail-card" class="hidden">
           <div class="detail-tabs">
             <button class="detail-tab active" onclick="switchDetailTab('props')">属性</button>
             <button class="detail-tab" onclick="switchDetailTab('outline')">大纲</button>
@@ -269,7 +258,7 @@
                 </select>
               </div>
             </div>
-            <div class="btn-row mt-2">
+            <div class="btn-row" class="mt-2">
               <button onclick="loadBookEdit()" class="btn-ghost btn-sm">加载属性</button>
               <button onclick="saveBookEdit()" class="btn-ink btn-sm">保存属性</button>
             </div>
@@ -278,7 +267,7 @@
 
           <!-- Tab: Outline -->
           <div class="detail-tab-content" id="tab-outline">
-            <div class="btn-row mb-2">
+            <div class="btn-row" class="mb-2">
               <button onclick="loadOutlineEditor()" class="btn-ghost btn-sm">加载大纲</button>
               <button onclick="saveOutlineEditor()" class="btn-ink btn-sm">保存大纲</button>
             </div>
@@ -288,7 +277,7 @@
 
           <!-- Tab: Intent -->
           <div class="detail-tab-content" id="tab-intent">
-            <div class="btn-row mb-2">
+            <div class="btn-row" class="mb-2">
               <button onclick="loadIntentEditor()" class="btn-ghost btn-sm">加载意图</button>
               <button onclick="saveIntentEditor()" class="btn-ink btn-sm">保存意图</button>
             </div>
@@ -298,9 +287,9 @@
 
           <!-- Tab: Search -->
           <div class="detail-tab-content" id="tab-search">
-            <div class="form-group mb-2">
+            <div class="form-group" class="mb-2">
               <div style="display:flex;gap:8px">
-                <input class="input-field flex-1" type="text" id="search-keyword" placeholder="输入关键词搜索全书内容">
+                <input type="text" id="search-keyword" class="input-field" placeholder="输入关键词搜索全书内容" class="flex-1">
                 <button onclick="searchBookContent()" class="btn-ink btn-sm">搜索</button>
               </div>
             </div>
@@ -317,21 +306,16 @@
                   <option value="md">Markdown · 标记</option>
                   <option value="html">HTML · 网页</option>
                   <option value="epub">EPUB · 电子书</option>
-                  <option value="docx">DOCX · Word 文档</option>
-                  <option value="pdf">PDF · 排版稿</option>
                 </select>
               </div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:10px;">
-              <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
-              <button onclick="generateCover()" class="btn-ink btn-sm">🎨 生成封面</button>
-            </div>
+            <button onclick="exportBook()" class="btn-ink btn-sm">导出</button>
             <div id="export-result" class="result-box"></div>
           </div>
         </div>
 
         <!-- Delete (danger zone) -->
-        <div class="card card-danger mt-2">
+        <div class="card card-danger" class="mt-2">
           <div class="card-title"><span class="card-icon">💀</span> 焚卷销书</div>
           <div class="form-grid">
             <div class="form-group">
@@ -411,7 +395,7 @@
           </div>
         </div>
 
-        <div class="card card-compact write-context hidden" id="write-book-context">
+        <div class="card card-compact write-context" id="write-book-context" class="hidden">
           <div class="context-bar">
             <span class="context-icon">📖</span>
             <span class="context-label" id="write-book-name">未选择书籍</span>
@@ -420,7 +404,7 @@
         </div>
 <div class="card">
           <div class="form-grid">
-            <div class="form-group hidden"><select id="write-book" class="input-field"></select></div>
+            <div class="form-group" class="hidden"><select id="write-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">模式</label>
               <select id="write-mode" class="input-field">
@@ -429,7 +413,7 @@
                 <option value="batch">批量炼章（多章节）</option>
               </select>
             </div>
-            <div class="form-group hidden" id="batch-count-group">
+            <div class="form-group" id="batch-count-group" class="hidden">
               <label class="form-label">章数</label>
               <input type="number" id="write-batch-count" class="input-field" value="3" min="1" max="20">
             </div>
@@ -438,11 +422,11 @@
           <div class="btn-row">
             <button onclick="writeChapter()" class="btn-ink" id="btn-write">落笔！</button>
             <button onclick="startBatchWrite()" class="btn-ink btn-secondary" id="btn-batch">🔥 批量炼章</button>
-            <button class="btn-ink btn-secondary hidden" onclick="cancelWrite()" id="btn-cancel">✗ 取消炼章</button>
+            <button onclick="cancelWrite()" class="btn-ink btn-secondary" id="btn-cancel" class="hidden">✗ 取消炼章</button>
             <button onclick="resumeChapter()" class="btn-ink btn-secondary" id="btn-resume">续笔</button>
           </div>
           <div id="write-progress" class="progress-indicator"></div>
-          <div class="write-stats hidden" id="write-stats">
+          <div id="write-stats" class="write-stats" class="hidden">
             <div class="stat-card"><div class="stat-value" id="ws-chapters">0</div><div class="stat-label">已写章节</div></div>
             <div class="stat-card"><div class="stat-value" id="ws-words">0</div><div class="stat-label">总字数</div></div>
             <div class="stat-card"><div class="stat-value" id="ws-avg-score">—</div><div class="stat-label">平均审阅分</div></div>
@@ -453,44 +437,20 @@
         </div>
 
         <!-- Chapter Preview -->
-        <div class="chapter-preview hidden" id="chapter-preview">
+        <div id="chapter-preview" class="chapter-preview" class="hidden">
           <h3 class="sub-title">最新章节预览</h3>
           <div id="chapter-title-edit" style="display:flex;gap:8px;margin-bottom:8px">
-            <input class="input-field flex-1" type="text" id="chapter-title-input" placeholder="章节标题">
+            <input type="text" id="chapter-title-input" class="input-field" placeholder="章节标题" class="flex-1">
             <button onclick="saveChapterTitle()" class="btn-ink btn-sm" id="btn-save-title">保存标题</button>
           </div>
           <div id="chapter-text" class="chapter-text-content"></div>
-          <div class="btn-row mt-2">
+          <div class="btn-row" class="mt-2">
             <button onclick="editChapterContent()" class="btn-ghost btn-sm" id="btn-edit-chapter">编辑内容</button>
-            <button class="btn-ink btn-sm hidden" onclick="saveChapterContent()" id="btn-save-chapter">保存内容</button>
-            <button class="btn-ghost btn-sm hidden" onclick="cancelChapterEdit()" id="btn-cancel-edit">取消</button>
+            <button onclick="saveChapterContent()" class="btn-ink btn-sm" id="btn-save-chapter" class="hidden">保存内容</button>
+            <button onclick="cancelChapterEdit()" class="btn-ghost btn-sm" id="btn-cancel-edit" class="hidden">取消</button>
           </div>
-          <textarea id="chapter-edit-textarea" class="input-field chapter-editor-textarea hidden mt-2" rows="15" placeholder="编辑章节正文..."></textarea>
+          <textarea id="chapter-edit-textarea" class="input-field" rows="15" style="display:none;margin-top:8px" placeholder="编辑章节正文..."></textarea>
           <div id="chapter-stats" class="chapter-meta"></div>
-        </div>
-
-        <!-- 章节续写工坊 -->
-        <div class="card" id="chapter-continue-card">
-          <div class="card-title"><span class="card-icon">✍</span> 续写工坊
-            <span class="card-hint">在上方「编辑内容」进入编辑态后，可对当前正文续写或划选改写</span>
-          </div>
-          <div class="form-grid">
-            <div class="form-group wide">
-              <label class="form-label">当前章节标题</label>
-              <input type="text" id="chapter-edit-title" class="input-field" placeholder="自动同步上方章节标题" readonly>
-            </div>
-            <div class="form-group wide">
-              <label class="form-label">续写指令（可选）</label>
-              <textarea id="continue-prompt" class="input-field" rows="2" placeholder="例如：接着写主角进入密室后的发现，保持压抑基调，结尾留钩子"></textarea>
-            </div>
-          </div>
-          <div class="btn-row">
-            <button onclick="continueChapter()" class="btn-ink btn-sm" id="btn-continue-chapter">✍ 续写</button>
-            <button onclick="appendContinuation()" class="btn-ghost btn-sm">追加到正文</button>
-            <button onclick="aiExpandSelection()" class="btn-ghost btn-sm">划选扩写</button>
-            <button onclick="aiPolishSelection()" class="btn-ghost btn-sm">划选润色</button>
-          </div>
-          <div id="chapter-continue-result" class="result-box"></div>
         </div>
       </section>
 
@@ -509,27 +469,6 @@
               <option value="">选择书籍…</option>
             </select>
           </div>
-        </div>
-
-        <!-- Market Radar (对标 InkOS 市场雷达) -->
-        <div class="card">
-          <div class="tool-group-header">
-            <span class="tool-group-icon">📡</span>
-            <span class="tool-group-name">市场雷达</span>
-          </div>
-          <div class="card-title"><span class="card-icon">✧</span> 题材扫榜 · 定位建议</div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">题材 / 赛道</label>
-              <input type="text" id="radar-genre" class="input-field" placeholder="如：都市异能、诡秘流、系统流">
-            </div>
-            <div class="form-group wide">
-              <label class="form-label">补充信息（可选）</label>
-              <input type="text" id="radar-extra" class="input-field" placeholder="目标平台、已有想法、对标作品等">
-            </div>
-          </div>
-          <button onclick="runRadar()" class="btn-ink btn-sm">扫榜分析</button>
-          <div id="radar-result" class="result-box"></div>
         </div>
 
         <!-- Prompt-driven Outline Generation -->
@@ -604,7 +543,7 @@
                 <option value="volume">卷纲</option>
               </select>
             </div>
-            <div class="form-group hidden">
+            <div class="form-group" class="hidden">
               <label class="form-label">书籍（可选，自动加载大纲）</label>
               <select id="synopsis-book" class="input-field"></select>
             </div>
@@ -696,7 +635,7 @@
           <span class="tool-group-name">设定管理</span>
         </div>
 <div class="card-title"><span class="card-icon">✒</span> 風格淬炼</div>
-          <div class="form-group hidden">
+          <div class="form-group" class="hidden">
             <label class="form-label">选择项目</label>
             <select id="style-book" class="input-field"></select>
           </div>
@@ -734,21 +673,18 @@
             <label class="form-label">参考样例</label>
             <textarea id="style-sample" class="input-field" rows="4" placeholder="粘贴一段参考文本，供 LLM 学习风格"></textarea>
           </div>
-          <div style="display:flex;gap:8px;margin-top:10px;">
-            <button onclick="cloneStyle()" class="btn-ink btn-sm">🧬 从样例克隆风格</button>
-            <button onclick="saveStyle()" class="btn-ink btn-sm">保存风格</button>
-          </div>
+          <button onclick="saveStyle()" class="btn-ink btn-sm">保存风格</button>
           <div id="style-result" class="result-box"></div>
         </div>
 
         <!-- Characters -->
         <div class="card">
           <div class="card-title"><span class="card-icon">👤</span> 人物台账</div>
-          <div class="form-group hidden">
+          <div class="form-group" class="hidden">
             <label class="form-label">选择项目</label>
             <select id="characters-book" class="input-field"></select>
           </div>
-          <div class="btn-row mb-3">
+          <div class="btn-row" class="mb-3">
             <button onclick="loadCharacters()" class="btn-ghost btn-sm">刷新 ↻</button>
           </div>
           <div id="characters-list" class="ledger-list">
@@ -789,11 +725,11 @@
         <!-- Hooks -->
         <div class="card">
           <div class="card-title"><span class="card-icon">🪝</span> 伏笔台账</div>
-          <div class="form-group hidden">
+          <div class="form-group" class="hidden">
             <label class="form-label">选择项目</label>
             <select id="hooks-book" class="input-field"></select>
           </div>
-          <div class="btn-row mb-3">
+          <div class="btn-row" class="mb-3">
             <button onclick="loadHooks()" class="btn-ghost btn-sm">刷新 ↻</button>
           </div>
           <div id="hooks-list" class="ledger-list">
@@ -830,7 +766,7 @@
         <div class="card">
           <div class="card-title"><span class="card-icon">🌐</span> 世界观与进度</div>
           <div class="form-grid">
-            <div class="form-group hidden"><select id="state-book" class="input-field"></select></div>
+            <div class="form-group" class="hidden"><select id="state-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">类型</label>
               <select id="state-type" class="input-field">
@@ -846,7 +782,7 @@
             <button onclick="loadState()" class="btn-ghost btn-sm">查看</button>
             <button onclick="loadProgress()" class="btn-ghost btn-sm">刷新进度</button>
           </div>
-          <div class="stats-row hidden" id="state-stats">
+          <div id="state-stats" class="stats-row" class="hidden">
             <div class="stat-card"><div class="stat-num" id="stat-chapters">0</div><div class="stat-label">章节</div></div>
             <div class="stat-card"><div class="stat-num" id="stat-words">0</div><div class="stat-label">总字数</div></div>
             <div class="stat-card"><div class="stat-num" id="stat-audited">0</div><div class="stat-label">已审计</div></div>
@@ -883,7 +819,7 @@
           <p class="panel-desc">33维质量审计 + 修订引擎 + 状态回溯</p>
         </div>
 
-        <div class="card card-compact hidden" id="audit-book-context">
+        <div class="card card-compact" id="audit-book-context" class="hidden">
           <div class="context-bar">
             <span class="context-icon">📖</span>
             <span class="context-label" id="audit-book-name">未选择书籍</span>
@@ -891,7 +827,7 @@
         </div>
 <div class="card">
           <div class="form-grid">
-            <div class="form-group hidden"><select id="audit-book" class="input-field"></select></div>
+            <div class="form-group" class="hidden"><select id="audit-book" class="input-field"></select></div>
             <div class="form-group">
               <label class="form-label">章节号（留空=最后一章）</label>
               <input type="number" id="audit-chapter" class="input-field" placeholder="自动">
@@ -924,7 +860,7 @@
         <div class="card">
           <div class="card-title"><span class="card-icon">↩</span> 回溯寻真</div>
           <p class="text-muted text-sm mb-3">TruthState 增量备份与回滚，安全守护世界观一致性</p>
-          <div class="form-group hidden">
+          <div class="form-group" class="hidden">
             <label class="form-label">选择项目</label>
             <select id="rollback-book" class="input-field"></select>
           </div>
@@ -947,10 +883,10 @@
         <!-- Global API Config -->
         <div class="card">
           <div class="card-title"><span class="card-icon">🔑</span> 全局 API 配置</div>
-          <div class="form-group mb-2">
+          <div class="form-group" class="mb-2">
             <label class="form-label">预设切换</label>
             <div style="display:flex;gap:8px;align-items:center">
-              <select class="input-field flex-1" id="cfg-preset" onchange="applyPreset(this.value)">
+              <select id="cfg-preset" class="input-field" class="flex-1" onchange="applyPreset(this.value)">
                 <option value="">自定义</option>
                 <option value="economy">💰 省钱模式</option>
                 <option value="quality">👑 高质量模式</option>
@@ -995,46 +931,6 @@
           </div>
         </div>
 
-        <!-- Long-term memory (RAG) + Webhook notifications -->
-        <div class="card">
-          <div class="card-title"><span class="card-icon">🧠</span> 长程记忆 · 语义召回 (RAG)</div>
-          <p class="agent-section-desc">写作时自动召回最相关的历史章节/人设/伏笔片段，保持百万字级一致性。未配置 Embedding 时自动降级为中文词面召回（零成本离线可用）。</p>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">启用长程记忆</label>
-              <select id="cfg-memory-enabled" class="input-field">
-                <option value="true">开启（推荐）</option>
-                <option value="false">关闭</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Embedding Base URL</label>
-              <input type="text" id="cfg-memory-baseurl" class="input-field" placeholder="留空则复用全局 Base URL">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Embedding API Key</label>
-              <input type="password" id="cfg-memory-apikey" class="input-field" placeholder="sk-...（留空=词面召回降级）">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Embedding 模型</label>
-              <input type="text" id="cfg-memory-model" class="input-field" placeholder="text-embedding-3-small">
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:10px;">
-            <button onclick="rebuildMemory()" class="btn-ink btn-sm">重建记忆索引</button>
-          </div>
-          <div id="memory-status" class="result-box"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="card-icon">🔔</span> Webhook 通知</div>
-          <p class="agent-section-desc">章节流水线完成/失败时向以下 URL 推送 JSON 事件（每行一个，留空即关闭）。可对接企业微信/钉钉/飞书机器人中转。</p>
-          <div class="form-group">
-            <label class="form-label">Webhook URL 列表</label>
-            <textarea id="cfg-webhooks" class="input-field" rows="3" placeholder="https://example.com/hook"></textarea>
-          </div>
-        </div>
-
         <!-- Agent Pipeline (Unified) -->
         <div class="card">
           <div class="card-title"><span class="card-icon">⚙</span> 九重炼章 · 智能体配置</div>
@@ -1068,231 +964,6 @@
         <div id="config-result" class="result-box"></div>
       </section>
 
-      <!-- ========== 台账：真相档案 ========== -->
-      <section id="panel-ledger" class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">真相台账</h2>
-          <p class="panel-desc">人物矩阵 · 伏笔池 · 世界观设定 —— 长篇一致性的底座</p>
-        </div>
-
-        <div class="card card-compact">
-          <div class="context-bar">
-            <span class="context-label">当前书目</span>
-            <select id="ledger-book" class="input-field gbs-select" onchange="onLedgerBookChange(this.value)">
-              <option value="">选择书籍…</option>
-            </select>
-            <button class="btn-ghost btn-sm" onclick="reloadLedger()">⟳ 刷新台账</button>
-            <button class="btn-ghost btn-sm" onclick="jumpToGraph()" style="margin-left:auto">🕸 查看关系图谱</button>
-          </div>
-        </div>
-
-        <div class="ledger-tabs">
-          <button class="ledger-tab active" data-ledger="characters" onclick="switchLedgerTab('characters')">👤 人物矩阵</button>
-          <button class="ledger-tab" data-ledger="hooks" onclick="switchLedgerTab('hooks')">🪝 伏笔池</button>
-          <button class="ledger-tab" data-ledger="world" onclick="switchLedgerTab('world')">🌍 世界观</button>
-          <button class="ledger-tab" data-ledger="timeline" onclick="switchLedgerTab('timeline')">⏳ 时间线</button>
-        </div>
-
-        <div class="ledger-pane active" id="ledger-pane-characters">
-          <div class="card">
-            <div class="card-title"><span class="card-icon">👤</span> 人物矩阵
-              <span class="card-badge" id="characters-count">0</span>
-            </div>
-            <div id="characters-content" class="ledger-body">
-              <div class="empty-hint">选择书籍后加载人物档案</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ledger-pane" id="ledger-pane-hooks">
-          <div class="card">
-            <div class="card-title"><span class="card-icon">🪝</span> 伏笔池
-              <span class="card-badge" id="hooks-count">0</span>
-            </div>
-            <div class="hook-filter-bar">
-              <button class="chip active" data-hookfilter="all" onclick="filterHooks('all')">全部</button>
-              <button class="chip" data-hookfilter="open" onclick="filterHooks('open')">待兑现</button>
-              <button class="chip" data-hookfilter="resolved" onclick="filterHooks('resolved')">已兑现</button>
-              <button class="chip chip-warn" data-hookfilter="overdue" onclick="filterHooks('overdue')">⚠ 逾期</button>
-            </div>
-            <div id="hooks-content" class="ledger-body">
-              <div class="empty-hint">选择书籍后加载伏笔台账</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ledger-pane" id="ledger-pane-world">
-          <div class="card">
-            <div class="card-title"><span class="card-icon">🌍</span> 世界观设定</div>
-            <div id="world-content" class="ledger-body">
-              <div class="empty-hint">选择书籍后加载世界观</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ledger-pane" id="ledger-pane-timeline">
-          <div class="card">
-            <div class="card-title"><span class="card-icon">⏳</span> 时间线</div>
-            <div id="timeline-content" class="ledger-body">
-              <div class="empty-hint">选择书籍后加载时间线</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========== 图谱：人物/势力关系网络 ========== -->
-      <section id="panel-graph" class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">关系图谱</h2>
-          <p class="panel-desc">人物 · 势力 · 地点关系网络 —— 从时间线与章节正文自动挖掘共现关系</p>
-        </div>
-
-        <div class="graph-toolbar">
-          <label class="gbs-label" style="margin:0">书目</label>
-          <select id="graph-book" class="input-field gbs-select" style="min-width:220px"><option value="">（选择书籍）</option></select>
-          <button class="btn-ink btn-sm" onclick="loadGraph()">⟳ 刷新图谱</button>
-          <button class="btn-ghost btn-sm" onclick="relayoutGraph()">↺ 重新布局</button>
-          <span id="graph-stats" class="graph-stats"></span>
-        </div>
-
-        <div class="graph-filter-bar">
-          <div id="graph-type-chips" class="graph-chips"></div>
-          <div class="graph-filter-slider">
-            <span class="gbs-label" style="margin:0">提及 ≥ <b id="graph-mention-val">0</b></span>
-            <input type="range" id="graph-mention-range" min="0" max="50" step="1" value="0" oninput="applyGraphFilters()">
-          </div>
-          <input type="search" id="graph-filter-query" class="input-field graph-filter-query" placeholder="🔍 搜索人物 / 地点 / 势力…" oninput="applyGraphFilters()">
-        </div>
-
-        <div class="graph-play-bar hidden" id="graph-play-bar">
-          <button id="graph-play-btn" class="btn-ink btn-sm" onclick="toggleGraphPlay()">▶ 演变播放</button>
-          <button class="btn-ghost btn-sm" onclick="stopGraphPlay()">■ 复位</button>
-          <input type="range" id="graph-play-slider" class="graph-play-slider" min="0" max="0" value="0" oninput="onGraphPlaySlider(this.value)">
-          <span id="graph-play-label" class="graph-play-label">初始（仅节点）</span>
-        </div>
-
-        <div class="graph-layout">
-          <div class="graph-canvas-wrap">
-            <div id="graph-canvas" class="graph-canvas">
-              <div class="empty-hint">选择书籍并刷新，绘制角色关系网络</div>
-            </div>
-            <div id="graph-tooltip" class="graph-tooltip hidden"></div>
-          </div>
-          <div class="graph-side">
-            <div class="card">
-              <div class="card-title"><span class="card-icon">🧭</span> 图例</div>
-              <div id="graph-legend" class="graph-legend"></div>
-              <div class="card-hint">连线越粗 = 共现越频繁；点击节点高亮其关系；拖拽节点调整布局；滚轮缩放。</div>
-            </div>
-            <div class="card">
-              <div class="card-title"><span class="card-icon">🏆</span> 核心人物 <span class="card-badge" id="graph-degree-count">0</span></div>
-              <div id="graph-degree-list" class="graph-degree-list">
-                <div class="empty-hint">暂无数据</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========== 用量：Token 账单 ========== -->
-      <section id="panel-usage" class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">用量账单</h2>
-          <p class="panel-desc">Token 消耗与成本统计，按模型分账</p>
-        </div>
-
-        <div class="usage-stats-grid">
-          <div class="stat-card stat-card-lg">
-            <div class="stat-value" id="usage-total-calls">0</div>
-            <div class="stat-label">总调用次数</div>
-          </div>
-          <div class="stat-card stat-card-lg">
-            <div class="stat-value" id="usage-total-input">0</div>
-            <div class="stat-label">输入 Token</div>
-          </div>
-          <div class="stat-card stat-card-lg">
-            <div class="stat-value" id="usage-total-output">0</div>
-            <div class="stat-label">输出 Token</div>
-          </div>
-          <div class="stat-card stat-card-lg stat-card-cost">
-            <div class="stat-value" id="usage-total-cost">$0.00</div>
-            <div class="stat-label">预估成本</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="card-icon">📊</span> 按模型分账</div>
-          <div id="usage-models-list">
-            <div class="usage-empty">暂无数据</div>
-          </div>
-          <div class="btn-row mt-2">
-            <button onclick="refreshUsage()" class="btn-ink btn-sm">⟳ 刷新</button>
-            <button onclick="resetUsage()" class="btn-ghost btn-sm">重置统计</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========== 进度：写作进度看板 ========== -->
-      <section id="panel-progress" class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">写作进度</h2>
-          <p class="panel-desc">章节数 · 总字数 · 平均审计分 · 流水线耗时，逐章明细可一键 Diff</p>
-        </div>
-
-        <div class="card card-compact">
-          <div class="context-bar">
-            <span class="context-label">当前书目</span>
-            <select id="progress-book" class="input-field gbs-select" onchange="onProgressBookChange(this.value)">
-              <option value="">选择书籍…</option>
-            </select>
-            <button class="btn-ghost btn-sm" onclick="loadProgress()">⟳ 刷新进度</button>
-          </div>
-        </div>
-
-        <div id="progress-summary" style="display:none">
-          <div class="stats-row">
-            <div class="stat-card" id="pstat-chapters">
-              <div class="stat-value">0</div>
-              <div class="stat-label">章节数</div>
-            </div>
-            <div class="stat-card" id="pstat-words">
-              <div class="stat-value">0</div>
-              <div class="stat-label">总字数</div>
-            </div>
-            <div class="stat-card" id="pstat-score">
-              <div class="stat-value">0</div>
-              <div class="stat-label">平均审计分</div>
-            </div>
-            <div class="stat-card" id="pstat-time">
-              <div class="stat-value">0s</div>
-              <div class="stat-label">流水线耗时</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-title"><span class="card-icon">📋</span> 逐章明细</div>
-            <div class="table-wrap">
-              <table class="usage-table">
-                <thead>
-                  <tr>
-                    <th>章</th>
-                    <th>标题</th>
-                    <th style="text-align:right">字数</th>
-                    <th style="text-align:center">审核</th>
-                    <th style="text-align:right">评分</th>
-                    <th style="text-align:right">耗时</th>
-                    <th style="text-align:center">操作</th>
-                  </tr>
-                </thead>
-                <tbody id="progress-tbody"></tbody>
-              </table>
-            </div>
-            <div class="card-hint">提示：进度数据由写作/审阅流程生成，首次使用请先通过「落笔」或「审阅」生成章节。</div>
-          </div>
-        </div>
-        <div id="progress-empty" class="empty-hint">选择书籍后加载写作进度</div>
-      </section>
-
       <!-- Footer -->
       <footer class="footer">
         <div class="footer-ink-line"></div>
@@ -1315,6 +986,5 @@
 </div>
 
 <script src="/app.js"></script>
-<script src="/graph.js"></script>
 </body>
 </html>

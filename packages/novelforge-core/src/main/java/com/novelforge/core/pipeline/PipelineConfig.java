@@ -27,6 +27,9 @@ public class PipelineConfig {
     private volatile double auditPassThreshold; // overall score threshold to pass audit
     private volatile int maxRevisionPasses;     // how many revision attempts before proceeding anyway
 
+    /** Long-term memory store for RAG-style cross-chapter recall (null = disabled). */
+    private com.novelforge.core.memory.MemoryStore memoryStore;
+
     // Default: full pipeline, 2000-4000 words, 7.0 threshold, 1 revision pass
     public PipelineConfig() {
         this.runArchitect = true;
@@ -90,6 +93,10 @@ public class PipelineConfig {
     public int getMaxRevisionPasses() { return maxRevisionPasses; }
     public synchronized void setMaxRevisionPasses(int v) { this.maxRevisionPasses = v; }
 
+    /** Long-term memory store accessor (RAG recall). */
+    public com.novelforge.core.memory.MemoryStore getMemoryStore() { return memoryStore; }
+    public synchronized void setMemoryStore(com.novelforge.core.memory.MemoryStore memoryStore) { this.memoryStore = memoryStore; }
+
     /** Create a copy of this config (for "continue" mode — skip Architect while preserving all other settings) */
     public PipelineConfig clone() {
         PipelineConfig copy = new PipelineConfig();
@@ -106,6 +113,7 @@ public class PipelineConfig {
         copy.chapterWordsMax = this.chapterWordsMax;
         copy.auditPassThreshold = this.auditPassThreshold;
         copy.maxRevisionPasses = this.maxRevisionPasses;
+        copy.memoryStore = this.memoryStore;
         return copy;
     }
 

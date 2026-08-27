@@ -30,6 +30,13 @@ public class StudioConfig {
     private Map<String, PresetEntry> presets;             // Preset name -> preset config
     private PipelineConfig pipelineConfig;
 
+    // Long-term memory (RAG) configuration
+    private String embeddingBaseUrl = "";                 // OpenAI-compatible embeddings base URL
+    private String embeddingApiKey = "";                  // embeddings API key
+    private String embeddingModel = "text-embedding-3-small";
+    private boolean memoryEnabled = true;                 // master switch for RAG recall
+    private java.util.List<String> webhooks = new java.util.ArrayList<>();  // pipeline event webhook URLs
+
     /** Preset entry: contains its own globalDefault + agentOverrides */
     public static class PresetEntry {
         private AgentApiConfig globalDefault;
@@ -106,6 +113,7 @@ public class StudioConfig {
         this.activePreset = "";
         this.presets = new LinkedHashMap<>();
         this.pipelineConfig = new PipelineConfig();
+        this.webhooks = new java.util.ArrayList<>();
     }
 
     // --- Getters/Setters ---
@@ -119,6 +127,18 @@ public class StudioConfig {
     public void setPresets(Map<String, PresetEntry> presets) { this.presets = presets; }
     public PipelineConfig getPipelineConfig() { return pipelineConfig; }
     public void setPipelineConfig(PipelineConfig pipelineConfig) { this.pipelineConfig = pipelineConfig; }
+
+    // --- Memory / Embedding config ---
+    public String getEmbeddingBaseUrl() { return embeddingBaseUrl; }
+    public void setEmbeddingBaseUrl(String v) { this.embeddingBaseUrl = v == null ? "" : v; }
+    public String getEmbeddingApiKey() { return embeddingApiKey; }
+    public void setEmbeddingApiKey(String v) { this.embeddingApiKey = v == null ? "" : v; }
+    public String getEmbeddingModel() { return embeddingModel; }
+    public void setEmbeddingModel(String v) { this.embeddingModel = v == null || v.isEmpty() ? "text-embedding-3-small" : v; }
+    public boolean isMemoryEnabled() { return memoryEnabled; }
+    public void setMemoryEnabled(boolean v) { this.memoryEnabled = v; }
+    public java.util.List<String> getWebhooks() { return webhooks; }
+    public void setWebhooks(java.util.List<String> w) { this.webhooks = w == null ? new java.util.ArrayList<>() : w; }
 
     /** Get resolved API config for a specific agent (global default + agent override merge) */
     public AgentApiConfig getResolvedConfig(String agentName) {
@@ -180,6 +200,16 @@ public class StudioConfig {
         pipelineNode.put("runAuditor", pipelineConfig.isRunAuditor());
         pipelineNode.put("runReviser", pipelineConfig.isRunReviser());
         root.set("pipelineConfig", pipelineNode);
+        // Memory / embedding / webhook config
+        ObjectNode memoryNode = MAPPER.createObjectNode();
+        memoryNode.put("enabled", memoryEnabled);
+        memoryNode.put("embeddingBaseUrl", embeddingBaseUrl);
+        memoryNode.put("embeddingApiKey", embeddingApiKey);
+        memoryNode.put("embeddingModel", embeddingModel);
+        root.set("memory", memoryNode);
+        ArrayNode hooks = MAPPER.createArrayNode();
+        for (String w : webhooks) hooks.add(w);
+        root.set("webhooks", hooks);
         return root;
     }
 
@@ -220,6 +250,18 @@ public class StudioConfig {
             if (pc.has("runNormalizer")) pipelineConfig.setRunNormalizer(pc.get("runNormalizer").asBoolean());
             if (pc.has("runAuditor")) pipelineConfig.setRunAuditor(pc.get("runAuditor").asBoolean());
             if (pc.has("runReviser")) pipelineConfig.setRunReviser(pc.get("runReviser").asBoolean());
+        }
+        if (root.has("memory")) {
+            JsonNode mem = root.get("memory");
+            if (mem.has("enabled")) config.setMemoryEnabled(mem.get("enabled").asBoolean());
+            if (mem.has("embeddingBaseUrl")) config.setEmbeddingBaseUrl(mem.get("embeddingBaseUrl").asText());
+            if (mem.has("embeddingApiKey")) config.setEmbeddingApiKey(mem.get("embeddingApiKey").asText());
+            if (mem.has("embeddingModel")) config.setEmbeddingModel(mem.get("embeddingModel").asText());
+        }
+        if (root.has("webhooks") && root.get("webhooks").isArray()) {
+            java.util.List<String> ws = new java.util.ArrayList<>();
+            root.get("webhooks").forEach(n -> ws.add(n.asText()));
+            config.setWebhooks(ws);
         }
         return config;
     }

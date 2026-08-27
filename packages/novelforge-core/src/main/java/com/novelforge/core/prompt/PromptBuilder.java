@@ -145,21 +145,23 @@ public class PromptBuilder {
                 "（这是第一章，无前文衔接）";
 
         String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
+        String memoryBlock = retrieveMemory(book, plannerOutput, config);
         String user = String.format("""
             ## 规划师输出
             %s
-            
+
             ## 上一章末尾
             %s
-            
+
             ## 角色状态
             %s
-            
+
             ## 世界观
             %s
-            
+
             ## 题材: %s
-            
+
+            %s
             %s
 
             请组装第 %d 章的完整写作上下文包。
@@ -170,6 +172,7 @@ public class PromptBuilder {
                 state.world().getSummary(),
                 nullSafe(book.getGenre()),
                 refContext,
+                memoryBlock,
                 book.nextChapterNumber()
         );
 
@@ -239,16 +242,19 @@ public class PromptBuilder {
         String formattedSystem = system;
 
         String refContext = formatReferencesContext(book.getReferences(), book.getInspirations());
+        String memoryBlock = retrieveMemory(book, composedContext, config);
         String user = String.format("""
             ## 写作上下文包
             %s
-            
+
+            %s
             %s
 
             请创作第 %d 章完整内容。
             """,
                 truncate(composedContext),
                 refContext,
+                memoryBlock,
                 book.nextChapterNumber()
         );
 
@@ -975,5 +981,17 @@ public class PromptBuilder {
         }
         sb.append("\n请在创作中充分参考以上素材，保持风格和元素的一致性。\n");
         return sb.toString();
+    }
+
+    /**
+     * Recall top-k relevant long-term memory fragments for the current writing step.
+     * Returns empty string when memory is disabled or empty (no-op, zero overhead).
+     */
+    private String retrieveMemory(Book book, String query, PipelineConfig config) {
+        if (config == null) return "";
+        com.novelforge.core.memory.MemoryStore ms = config.getMemoryStore();
+        if (ms == null || ms.size() == 0) return "";
+        String q = (query == null ? "" : query) + " " + nullSafe(book.getGenre());
+        return ms.retrieveContext(q, 6, null);
     }
 }

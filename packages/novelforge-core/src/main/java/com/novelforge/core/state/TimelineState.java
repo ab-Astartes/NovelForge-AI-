@@ -69,6 +69,9 @@ public class TimelineState {
         ((com.fasterxml.jackson.databind.node.ArrayNode) events).add(event);
     }
 
+    /** Raw data access for graph/export tools (mirrors WorldState#getData) */
+    public synchronized ObjectNode getData() { return data; }
+
     /** Get summary of all timeline events */
     public synchronized String getSummary() {
         JsonNode events = data.get("events");

@@ -276,6 +276,7 @@ public class StudioServer {
         server.createContext("/api/state", corsWrap(this::handleStateApi));
 
         server.createContext("/api/export", corsWrap(this::handleExportApi));
+        server.createContext("/api/memory", corsWrap(this::handleMemoryApi));
 
         server.createContext("/api/config", corsWrap(this::handleConfigApi));
 
@@ -295,6 +296,10 @@ public class StudioServer {
         server.createContext("/api/rollback", corsWrap(this::handleRollbackApi));
 
         server.createContext("/api/style", corsWrap(this::handleStyleApi));
+        server.createContext("/api/style/clone", corsWrap(this::handleStyleCloneApi));
+        server.createContext("/api/cover", corsWrap(this::handleCoverApi));
+        server.createContext("/api/radar", corsWrap(this::handleRadarApi));
+        server.createContext("/api/graph", corsWrap(this::handleGraphApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -435,6 +440,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else if (path.equals("/app.js")) {
 
             serveResource(exchange, "/studio/app.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/graph.js")) {
+
+            serveResource(exchange, "/studio/graph.js", "application/javascript; charset=utf-8");
 
         } else {
 
@@ -1077,13 +1086,21 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
             job.events.add("event: pipeline_start\ndata: {\"jobId\":\"" + jobId + "\"}\n\n");
 
+            Book book = null;
+
             try {
 
-                Book book = BookProject.loadBook(Paths.get(bookPath));
+                book = BookProject.loadBook(Paths.get(bookPath));
 
                 TruthState state = new TruthState(Paths.get(bookPath));
 
                 PipelineConfig config = loadConfig(Paths.get(bookPath));
+
+                // Long-term memory (RAG) — build store from book + embedding config
+                if (studioConfig.isMemoryEnabled()) {
+                    com.novelforge.core.memory.MemoryStore ms = buildMemoryStore(Paths.get(bookPath), book, state);
+                    if (ms != null) config.setMemoryStore(ms);
+                }
 
                 // Use the router determined above (either from request params or instance modelRouter)
 
@@ -1264,7 +1281,7 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
                 }
 
-            } catch (Exception e) {
+                } catch (Exception e) {
 
                 job.error = e.getMessage();
 
@@ -1273,6 +1290,9 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                 job.events.add("event: pipeline_fail\ndata: {\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}\n\n");
 
             }
+
+            // Fire webhooks for terminal pipeline events (fire-and-forget, never blocks writing)
+            fireWebhookIfNeeded(job, book, bookPath);
 
         });
 
@@ -1293,6 +1313,104 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
 
     // --- API: Write SSE stream (real-time progress) ---
+
+    /** Build (or rebuild) the long-term memory store for a book. Null when it fails. */
+    private com.novelforge.core.memory.MemoryStore buildMemoryStore(Path bookDir, Book book, TruthState state) {
+        try {
+            String eb = studioConfig.getEmbeddingBaseUrl();
+            String ek = studioConfig.getEmbeddingApiKey();
+            String em = studioConfig.getEmbeddingModel();
+            com.novelforge.core.memory.EmbeddingClient embedder = null;
+            if (ek != null && !ek.isEmpty()) {
+                if (eb == null || eb.isEmpty()) eb = studioConfig.getGlobalDefault().getBaseUrl();
+                embedder = new com.novelforge.core.memory.OpenAiCompatibleEmbeddingClient(eb, ek, em);
+            }
+            com.novelforge.core.memory.MemoryStore ms = new com.novelforge.core.memory.MemoryStore(bookDir, embedder);
+            ms.load();
+            ms.rebuild(book, state);
+            return ms;
+        } catch (Exception e) {
+            System.err.println("[Memory] failed to build store: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static final com.novelforge.core.notify.WebhookNotifier WEBHOOK_NOTIFIER =
+            new com.novelforge.core.notify.WebhookNotifier();
+
+    /** Fire configured webhooks when a write job reaches a terminal state. */
+    private void fireWebhookIfNeeded(WriteJob job, Book book, String bookPath) {
+        java.util.List<String> urls = studioConfig.getWebhooks();
+        if (urls == null || urls.isEmpty()) return;
+        if (!"completed".equals(job.status) && !"failed".equals(job.status)) return;
+        com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
+        payload.put("jobId", job.jobId);
+        payload.put("status", job.status);
+        payload.put("book", book != null ? (book.getTitle() != null ? book.getTitle() : "") : "");
+        payload.put("bookPath", bookPath);
+        payload.put("error", job.error != null ? job.error : "");
+        WEBHOOK_NOTIFIER.notifyAll(urls, "pipeline." + job.status, payload);
+    }
+
+    /** API: /api/memory — long-term memory (RAG) status, rebuild and test retrieval. */
+    private void handleMemoryApi(HttpExchange exchange) throws IOException {
+        try {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getQuery();
+                String bookPath = getQueryParam(query, "path");
+                if (bookPath == null || bookPath.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                TruthState state = new TruthState(Paths.get(bookPath));
+                com.novelforge.core.memory.MemoryStore ms = buildMemoryStore(Paths.get(bookPath), book, state);
+
+                com.fasterxml.jackson.databind.node.ObjectNode resp = mapper.createObjectNode();
+                if (ms == null) {
+                    resp.put("ok", false);
+                    resp.put("error", "memory store build failed");
+                    sendJson(exchange, 500, resp.toString());
+                    return;
+                }
+                resp.put("ok", true);
+                resp.put("vectorEnabled", ms.isVectorEnabled());
+                resp.put("memoryEnabled", studioConfig.isMemoryEnabled());
+                resp.put("totalChunks", ms.size());
+                com.fasterxml.jackson.databind.node.ObjectNode byScope = mapper.createObjectNode();
+                for (com.novelforge.core.memory.MemoryChunk c : ms.getChunks()) {
+                    byScope.put(c.scope, byScope.path(c.scope).asInt(0) + 1);
+                }
+                resp.set("byScope", byScope);
+
+                // Optional retrieval smoke-test: /api/memory?path=..&q=..&k=5
+                String q = getQueryParam(query, "q");
+                if (q != null && !q.isEmpty()) {
+                    int k = 5;
+                    String ks = getQueryParam(query, "k");
+                    if (ks != null) { try { k = Integer.parseInt(ks); } catch (NumberFormatException ignored) {} }
+                    String ctx = ms.retrieveContext(q, k, null);
+                    resp.put("retrievalPreview", ctx.length() > 1500 ? ctx.substring(0, 1500) + "..." : ctx);
+                }
+                sendJson(exchange, 200, resp.toString());
+            } else if ("POST".equals(exchange.getRequestMethod())) {
+                JsonNode body = readBody(exchange);
+                String bookPath = body.path("path").asText("");
+                if (bookPath.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+                Book book = BookProject.loadBook(Paths.get(bookPath));
+                TruthState state = new TruthState(Paths.get(bookPath));
+                com.novelforge.core.memory.MemoryStore ms = buildMemoryStore(Paths.get(bookPath), book, state);
+                if (ms == null) { sendJson(exchange, 500, "{\"error\":\"rebuild failed\"}"); return; }
+                com.fasterxml.jackson.databind.node.ObjectNode resp = mapper.createObjectNode();
+                resp.put("ok", true);
+                resp.put("rebuilt", true);
+                resp.put("vectorEnabled", ms.isVectorEnabled());
+                resp.put("totalChunks", ms.size());
+                sendJson(exchange, 200, resp.toString());
+            } else {
+                sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
     private void handleWriteStreamApi(HttpExchange exchange) throws IOException {
 
@@ -1659,7 +1777,11 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
             Book book = BookProject.loadBook(Paths.get(bookPath));
 
-            String ext = format.equals("epub") ? "epub" : format.equals("md") ? "md" : format.equals("html") ? "html" : "txt";
+            String ext = format.equals("epub") ? "epub"
+                    : format.equals("md") ? "md"
+                    : format.equals("html") ? "html"
+                    : format.equals("docx") ? "docx"
+                    : format.equals("pdf") ? "pdf" : "txt";
 
             Path outputPath = Paths.get(bookPath).resolve(book.getTitle() + "." + ext);
 
@@ -1674,6 +1796,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                 case "epub" -> com.novelforge.core.export.BookExporter.exportEpub(book, outputPath, coverPath);
 
                 case "html" -> com.novelforge.core.export.BookExporter.exportHtml(book, outputPath);
+
+                case "docx" -> com.novelforge.core.export.BookExporter.exportDocx(book, outputPath);
+
+                case "pdf" -> com.novelforge.core.export.BookExporter.exportPdf(book, outputPath);
 
                 default -> { sendJson(exchange, 400, "{\"error\":\"unsupported format\"}"); return; }
 
@@ -1824,6 +1950,24 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             if (body.has("runAuditor")) defaultConfig.setRunAuditor(body.get("runAuditor").asBoolean());
 
             if (body.has("runReviser")) defaultConfig.setRunReviser(body.get("runReviser").asBoolean());
+
+            // Memory / embedding config
+            if (body.has("memory")) {
+                JsonNode mem = body.get("memory");
+                if (mem.has("enabled")) studioConfig.setMemoryEnabled(mem.get("enabled").asBoolean());
+                if (mem.has("embeddingBaseUrl")) studioConfig.setEmbeddingBaseUrl(mem.get("embeddingBaseUrl").asText());
+                if (mem.has("embeddingApiKey")) {
+                    String k = mem.get("embeddingApiKey").asText();
+                    if (k == null || k.isEmpty()) k = studioConfig.getEmbeddingApiKey(); // preserve if omitted
+                    studioConfig.setEmbeddingApiKey(k);
+                }
+                if (mem.has("embeddingModel")) studioConfig.setEmbeddingModel(mem.get("embeddingModel").asText());
+            }
+            if (body.has("webhooks") && body.get("webhooks").isArray()) {
+                java.util.List<String> ws = new java.util.ArrayList<>();
+                body.get("webhooks").forEach(n -> ws.add(n.asText()));
+                studioConfig.setWebhooks(ws);
+            }
 
             // Persist config to disk
 
@@ -2511,6 +2655,411 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
     }
 
     /** Handle style API — GET current style, POST set/update style */
+
+    /** API: /api/style/clone — extract a WritingStyle profile from a sample text via LLM. */
+    private void handleStyleCloneApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.path("path").asText("");
+            String sample = body.path("sample").asText("");
+            String styleName = body.path("name").asText("");
+            if (bookPath.isEmpty() || sample.isBlank()) {
+                sendJson(exchange, 400, "{\"error\":\"path and sample required\"}");
+                return;
+            }
+            if (!isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+            if (sample.length() > 8000) sample = sample.substring(0, 8000);
+
+            ModelRouter router = resolveModelRouter(body);
+            if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required (configure global LLM first)\"}"); return; }
+            com.novelforge.core.llm.LlmClient client = router.getClientForAgent("Writer");
+            String model = router.getModelForAgent("Writer");
+
+            String system = "你是资深文学编辑。分析给定的写作样本，提炼其风格基因。只输出一个 JSON 对象，不要输出任何其他文字。字段："
+                    + "{\"name\":\"风格名\",\"description\":\"一段风格总述\",\"vocabularyPattern\":\"用词偏好\","
+                    + "\"sentenceStructure\":\"句式节奏\",\"pacingPattern\":\"叙事节奏\","
+                    + "\"dialogueStyle\":\"对话风格\",\"descriptionStyle\":\"描写风格\"}。所有值用中文，每项 30~80 字。";
+            String user = "写作样本：\n" + sample;
+            String raw = client.chatComplete(java.util.List.of(
+                    java.util.Map.of("role", "system", "content", system),
+                    java.util.Map.of("role", "user", "content", user)), model, 0.3, 2000);
+
+            // Strip markdown code fences if present
+            String json = raw.trim();
+            if (json.startsWith("```")) {
+                json = json.replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("\\n?```$", "").trim();
+            }
+            int s = json.indexOf('{');
+            int e = json.lastIndexOf('}');
+            if (s >= 0 && e > s) json = json.substring(s, e + 1);
+            JsonNode parsed = mapper.readTree(json);
+
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            WritingStyle existing = book.getStyle();
+            final WritingStyle style = existing != null ? existing : new WritingStyle();
+            if (!styleName.isEmpty()) style.setName(styleName);
+            else if (!parsed.path("name").asText("").isEmpty()) style.setName(parsed.path("name").asText());
+            copyIfPresent(parsed, "description", v -> style.setDescription(v));
+            copyIfPresent(parsed, "vocabularyPattern", v -> style.setVocabularyPattern(v));
+            copyIfPresent(parsed, "sentenceStructure", v -> style.setSentenceStructure(v));
+            copyIfPresent(parsed, "pacingPattern", v -> style.setPacingPattern(v));
+            copyIfPresent(parsed, "dialogueStyle", v -> style.setDialogueStyle(v));
+            copyIfPresent(parsed, "descriptionStyle", v -> style.setDescriptionStyle(v));
+            if (style.getReferenceSample() == null || style.getReferenceSample().isEmpty()) {
+                style.setReferenceSample(sample.substring(0, Math.min(sample.length(), 2000)));
+            }
+            book.setStyle(style);
+            BookProject.saveBookMetadata(Paths.get(bookPath), book);
+
+            ObjectNode resp = mapper.createObjectNode();
+            resp.put("success", true);
+            resp.set("style", mapper.valueToTree(style));
+            sendJson(exchange, 200, resp.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private interface StyleSetter { void set(String v); }
+
+    private void copyIfPresent(JsonNode node, String field, StyleSetter setter) {
+        String v = node.path(field).asText("");
+        if (!v.isEmpty()) setter.set(v);
+    }
+
+    /** API: /api/cover — synthesize a book cover PNG (zero-dependency). */
+    private void handleCoverApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.path("path").asText("");
+            Integer palette = body.has("palette") ? body.get("palette").asInt() : null;
+            if (bookPath.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            if (!isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+            Book book = BookProject.loadBook(Paths.get(bookPath));
+            java.nio.file.Path out = Paths.get(bookPath).resolve("cover.png");
+            com.novelforge.core.export.CoverGenerator.generate(book, out, palette);
+            ObjectNode resp = mapper.createObjectNode();
+            resp.put("success", true);
+            resp.put("outputPath", out.toString());
+            sendJson(exchange, 200, resp.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** API: /api/radar — LLM-driven market/topic radar for genre positioning (对标 InkOS 市场雷达). */
+    private void handleRadarApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String genre = body.path("genre").asText("");
+            String extra = body.path("extra").asText("");
+            if (genre.isBlank()) { sendJson(exchange, 400, "{\"error\":\"genre required\"}"); return; }
+
+            ModelRouter router = resolveModelRouter(body);
+            if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required (configure global LLM first)\"}"); return; }
+            com.novelforge.core.llm.LlmClient client = router.getClientForAgent("Architect");
+            String model = router.getModelForAgent("Architect");
+
+            String system = "你是资深网文市场分析师。基于你对中文网文市场（番茄/起点等平台）的了解，"
+                    + "针对给定题材输出市场洞察。只输出 JSON，格式："
+                    + "{\"positioning\":\"题材定位建议\",\"trends\":[\"当前流行方向1\",\"方向2\",\"方向3\"],"
+                    + "\"hooks\":[\"高转化爽点/开篇钩子1\",\"钩子2\",\"钩子3\"],"
+                    + "\"differentiation\":\"与同类作品的差异化切入点\",\"risks\":[\"同质化风险1\",\"风险2\"]}。"
+                    + "全部中文，trends/hooks/risks 各 3~5 条，每条 15~40 字。";
+            String user = "题材：" + genre + (extra.isBlank() ? "" : "\n补充信息：" + extra);
+            String raw = client.chatComplete(java.util.List.of(
+                    java.util.Map.of("role", "system", "content", system),
+                    java.util.Map.of("role", "user", "content", user)), model, 0.5, 2000);
+
+            String json = raw.trim().replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("\\n?```$", "").trim();
+            int s = json.indexOf('{');
+            int e = json.lastIndexOf('}');
+            if (s >= 0 && e > s) json = json.substring(s, e + 1);
+            JsonNode parsed = mapper.readTree(json);
+
+            ObjectNode resp = mapper.createObjectNode();
+            resp.put("success", true);
+            resp.set("radar", parsed);
+            sendJson(exchange, 200, resp.toString());
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** API: /api/graph — relationship graph aggregated from characters/world/timeline/chapters (P2 差异化). */
+    private void handleGraphApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}");
+            return;
+        }
+        try {
+            sendJson(exchange, 200, buildGraphJson(Paths.get(bookPath)));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private static final String[][] RELATION_PATTERNS = {
+            {"敌对", "击败,羞辱,追杀,报复,挑衅,怒斥,威胁,围杀,斗法,激战,仇敌,恩怨,斩杀,反目,打压,搜查"},
+            {"师徒", "师父,师傅,师尊,弟子,徒弟,指点,传授,教导,拜师,传承,授业"},
+            {"亲情", "哥哥,妹妹,弟弟,姐姐,父亲,母亲,爹爹,娘亲,儿子,女儿,兄妹,父女,母子,叔伯,养育,血脉"},
+            {"爱慕", "爱慕,心动,喜欢,恋人,夫妻,成亲,娶,倾心,红颜,定情,情愫"},
+            {"友盟", "相助,救命,救援,保护,结盟,盟友,好友,知己,并肩,托付,赠予,信任,联手,共战"}
+    };
+
+    /** 势力名启发式（人物势力归属）：1~2 字名 + 家/门/宗等后缀（萧家、天机阁），失败再放宽 3~4 字名（星月神教）。 */
+    private static final java.util.regex.Pattern FACTION_PAT_2 = java.util.regex.Pattern.compile("[\\u4e00-\\u9fa5]{1,2}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫)");
+    private static final java.util.regex.Pattern FACTION_PAT_34 = java.util.regex.Pattern.compile("[\\u4e00-\\u9fa5]{3,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫)");
+
+    private static String inferRelation(String desc) {
+        for (String[] p : RELATION_PATTERNS) {
+            for (String kw : p[1].split(",")) {
+                if (desc.contains(kw)) return p[0];
+            }
+        }
+        return null;
+    }
+
+    /** Build the relationship-graph JSON for a book directory. */
+    private String buildGraphJson(Path bookDir) throws Exception {
+        TruthState state = new TruthState(bookDir);
+
+        Map<String, ObjectNode> nodeMap = new java.util.LinkedHashMap<>();
+        Map<String, ObjectNode> edgeMap = new java.util.LinkedHashMap<>();
+        Map<String, Integer> mentions = new java.util.HashMap<>();
+
+        // ---- nodes: characters (with faction inference) ----
+        JsonNode chars = state.characters().listAll();
+        JsonNode world = state.world().getData();
+        // 预收集 world.json 定义的势力名，供角色归属精确匹配
+        java.util.Set<String> worldFactions = new java.util.HashSet<>();
+        if (world != null && world.has("factions") && world.get("factions").isArray()) {
+            for (JsonNode f : world.get("factions")) {
+                String fn = f.isTextual() ? f.asText() : f.path("name").asText("");
+                if (!fn.isBlank()) worldFactions.add(fn);
+            }
+        }
+        // 第一遍：收集每个角色的候选势力（显式 faction > world 名命中 > 描述正则）
+        java.util.Map<String, String> charFaction = new java.util.HashMap<>();
+        java.util.Map<String, java.util.List<String>> charCandidates = new java.util.HashMap<>();
+        java.util.Set<String> allCands = new java.util.HashSet<>();
+        if (chars != null && chars.isArray()) {
+            for (JsonNode c : chars) {
+                String name = c.path("name").asText("");
+                if (name.isBlank()) continue;
+                String desc = c.path("description").asText("");
+                java.util.List<String> cands = new java.util.ArrayList<>();
+                String faction = c.path("faction").asText("");
+                if (!faction.isBlank()) cands.add(faction);
+                if (!desc.isBlank()) {
+                    if (!worldFactions.isEmpty()) {
+                        for (String fn : worldFactions) { if (desc.contains(fn)) { cands.add(fn); break; } }
+                    }
+                    java.util.regex.Matcher m2 = FACTION_PAT_2.matcher(desc);
+                    if (m2.find()) cands.add(m2.group());
+                    else {
+                        java.util.regex.Matcher m34 = FACTION_PAT_34.matcher(desc);
+                        if (m34.find()) cands.add(m34.group());
+                    }
+                }
+                charCandidates.put(name, cands);
+                allCands.addAll(cands);
+            }
+            // 后缀归并：A 以 B 结尾（A≠B）→ 归一为 B（"青阳镇萧家"→"萧家"），消除地名前缀干扰
+            java.util.Map<String, String> merge = new java.util.HashMap<>();
+            for (String a : allCands) {
+                String best = a;
+                for (String b : allCands) {
+                    if (!b.equals(a) && a.endsWith(b) && b.length() < best.length()) best = b;
+                }
+                merge.put(a, best);
+            }
+            for (java.util.Map.Entry<String, java.util.List<String>> en : charCandidates.entrySet()) {
+                if (en.getValue().isEmpty()) continue;
+                String best = null;
+                for (String cd : en.getValue()) {
+                    String norm = merge.getOrDefault(cd, cd);
+                    if (best == null || norm.length() < best.length()) best = norm;
+                }
+                if (best != null && !best.isBlank()) charFaction.put(en.getKey(), best);
+            }
+        }
+        // 第二遍：构建人物节点（携带归一化势力）
+        if (chars != null && chars.isArray()) {
+            for (JsonNode c : chars) {
+                String name = c.path("name").asText("");
+                if (name.isBlank()) continue;
+                ObjectNode n = mapper.createObjectNode();
+                n.put("id", name);
+                n.put("label", name);
+                n.put("group", "character");
+                String desc = c.path("description").asText("");
+                n.put("desc", desc);
+                n.put("role", c.path("role").asText(""));
+                String faction = charFaction.get(name);
+                if (faction != null && !faction.isBlank()) n.put("faction", faction);
+                nodeMap.put(name, n);
+            }
+        }
+
+        // ---- nodes: world entities (locations/factions/items/systems/rules) ----
+        if (world != null) {
+            String[][] kinds = {{"locations", "location"}, {"factions", "faction"}, {"items", "item"}, {"systems", "system"}, {"rules", "rule"}};
+            for (String[] k : kinds) {
+                JsonNode arr = world.get(k[0]);
+                if (arr == null || !arr.isArray()) continue;
+                for (JsonNode e : arr) {
+                    String name = e.isTextual() ? e.asText() : e.path("name").asText("");
+                    if (name.isBlank() || nodeMap.containsKey(name)) continue;
+                    ObjectNode n = mapper.createObjectNode();
+                    n.put("id", name);
+                    n.put("label", name);
+                    n.put("group", k[1]);
+                    n.put("desc", e.isObject() ? e.path("description").asText("") : "");
+                    n.put("role", "");
+                    nodeMap.put(name, n);
+                }
+            }
+        }
+
+        // ---- edges: timeline event co-occurrence (relation inference priority) ----
+        JsonNode events = state.timeline().getData().path("events");
+        if (events != null && events.isArray()) {
+            for (JsonNode ev : events) {
+                String desc = ev.path("description").asText("");
+                if (desc.isBlank()) continue;
+                List<String> names = findMentionedNames(desc, nodeMap.keySet());
+                if (names.size() < 2) continue;
+                String rel = inferRelation(desc);
+                for (int i = 0; i < names.size(); i++) {
+                    for (int j = i + 1; j < names.size(); j++) {
+                        addGraphEdge(edgeMap, names.get(i), names.get(j), 1, rel);
+                    }
+                }
+            }
+        }
+
+        // ---- edges: chapter co-occurrence + mention counts + evolution sequence ----
+        Path chaptersDir = bookDir.resolve("chapters");
+        java.util.Set<String> seenEdgeKeys = new java.util.HashSet<>();
+        ArrayNode chapterEvolution = mapper.createArrayNode();
+        int chapterIdx = 0;
+        if (Files.isDirectory(chaptersDir)) {
+            try (java.util.stream.Stream<Path> stream = Files.list(chaptersDir)) {
+                List<Path> files = stream
+                        .filter(p -> p.getFileName().toString().endsWith(".md"))
+                        .filter(p -> !p.getFileName().toString().contains(".draft."))
+                        .sorted().toList();
+                for (Path f : files) {
+                    if (chapterIdx >= 60) break;   // payload 保护：最多演进 60 章
+                    chapterIdx++;
+                    String text = Files.readString(f, StandardCharsets.UTF_8);
+                    List<String> names = findMentionedNames(text, nodeMap.keySet());
+                    if (names.size() < 2) continue;
+                    // 本章首次出现的关系边（供前端演变动画逐帧点亮）
+                    ArrayNode added = mapper.createArrayNode();
+                    for (int i = 0; i < names.size(); i++) {
+                        mentions.merge(names.get(i), countOccurrences(text, names.get(i)), Integer::sum);
+                        for (int j = i + 1; j < names.size(); j++) {
+                            int cmp = names.get(i).compareTo(names.get(j));
+                            String key = cmp <= 0 ? names.get(i) + "\u0000" + names.get(j) : names.get(j) + "\u0000" + names.get(i);
+                            if (!seenEdgeKeys.contains(key)) {
+                                seenEdgeKeys.add(key);
+                                ObjectNode ae = mapper.createObjectNode();
+                                ae.put("source", cmp <= 0 ? names.get(i) : names.get(j));
+                                ae.put("target", cmp <= 0 ? names.get(j) : names.get(i));
+                                ae.put("chapter", chapterIdx);
+                                added.add(ae);
+                            }
+                            addGraphEdge(edgeMap, names.get(i), names.get(j), 1, null);
+                        }
+                    }
+                    if (added.size() > 0) {
+                        ObjectNode ch = mapper.createObjectNode();
+                        ch.put("index", chapterIdx);
+                        ch.put("title", f.getFileName().toString().replaceFirst("\\.md$", ""));
+                        ch.set("added", added);
+                        chapterEvolution.add(ch);
+                    }
+                }
+            }
+        }
+
+        // ---- sort edges by weight, cap for render ----
+        List<ObjectNode> edgeList = new java.util.ArrayList<>(edgeMap.values());
+        edgeList.sort((a, b) -> Integer.compare(b.path("weight").asInt(), a.path("weight").asInt()));
+        int cap = Math.min(edgeList.size(), 400);
+        ArrayNode finalEdges = mapper.createArrayNode();
+        Map<String, Integer> degree = new java.util.HashMap<>();
+        for (int i = 0; i < cap; i++) {
+            ObjectNode e = edgeList.get(i);
+            finalEdges.add(e);
+            degree.merge(e.path("source").asText(), 1, Integer::sum);
+            degree.merge(e.path("target").asText(), 1, Integer::sum);
+        }
+
+        ArrayNode finalNodes = mapper.createArrayNode();
+        for (ObjectNode n : nodeMap.values()) {
+            n.put("mentions", mentions.getOrDefault(n.path("id").asText(), 0));
+            n.put("degree", degree.getOrDefault(n.path("id").asText(), 0));
+            finalNodes.add(n);
+        }
+
+        ObjectNode resp = mapper.createObjectNode();
+        resp.put("ok", true);
+        resp.put("book", bookDir.getFileName() != null ? bookDir.getFileName().toString() : bookDir.toString());
+        resp.set("nodes", finalNodes);
+        resp.set("edges", finalEdges);
+        resp.set("chapters", chapterEvolution);
+        ObjectNode stats = mapper.createObjectNode();
+        stats.put("characters", chars != null && chars.isArray() ? chars.size() : 0);
+        stats.put("worldEntities", nodeMap.size() - (chars != null && chars.isArray() ? chars.size() : 0));
+        stats.put("events", events != null && events.isArray() ? events.size() : 0);
+        stats.put("edges", finalEdges.size());
+        stats.put("chapters", chapterIdx);
+        resp.set("stats", stats);
+        return mapper.writeValueAsString(resp);
+    }
+
+    /** Merge a weighted edge into the edge map (dedup by unordered pair). */
+    private void addGraphEdge(Map<String, ObjectNode> edgeMap, String a, String b, int weight, String label) {
+        if (a == null || b == null || a.equals(b)) return;
+        String key = a.compareTo(b) <= 0 ? a + "\u0000" + b : b + "\u0000" + a;
+        ObjectNode e = edgeMap.get(key);
+        if (e == null) {
+            e = mapper.createObjectNode();
+            int cmp = a.compareTo(b);
+            e.put("source", cmp <= 0 ? a : b);
+            e.put("target", cmp <= 0 ? b : a);
+            e.put("weight", weight);
+            if (label != null) e.put("label", label);
+            edgeMap.put(key, e);
+        } else {
+            e.put("weight", e.path("weight").asInt() + weight);
+            if (label != null && !e.has("label")) e.put("label", label);
+        }
+    }
+
+    /** Names (len>=2) that appear in the text. */
+    private List<String> findMentionedNames(String text, java.util.Set<String> names) {
+        List<String> found = new java.util.ArrayList<>();
+        for (String name : names) {
+            if (name.length() >= 2 && text.contains(name)) found.add(name);
+        }
+        return found;
+    }
+
+    private int countOccurrences(String text, String needle) {
+        int count = 0, idx = 0;
+        while ((idx = text.indexOf(needle, idx)) >= 0) { count++; idx += needle.length(); }
+        return Math.min(count, 999);
+    }
 
     private void handleStyleApi(HttpExchange exchange) throws IOException {
 
