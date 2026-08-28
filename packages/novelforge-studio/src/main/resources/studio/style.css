@@ -2279,6 +2279,120 @@ body {
   pointer-events: none;
 }
 .graph-tooltip b { color: var(--gold-light); }
+
+/* ========== 疆域：实力分布地图（P4） ========== */
+.fm-canvas {
+  background: #f4f1e8;                 /* 羊皮纸底，与深色面板形成地图感对比 */
+}
+.fm-svg {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+.fm-cell {
+  cursor: pointer;
+  transition: fill-opacity .15s;
+}
+.fm-label-main {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  paint-order: stroke;
+  stroke: rgba(244, 241, 232, 0.85);
+  stroke-width: 3px;
+  pointer-events: none;
+  user-select: none;
+}
+.fm-label-sub {
+  font-size: 11px;
+  opacity: .85;
+  pointer-events: none;
+  user-select: none;
+}
+.fm-rel-line {
+  pointer-events: none;
+}
+.fm-tooltip {
+  background: rgba(28, 26, 22, 0.96);
+  border-left-color: #e0a65c;
+  color: #f4f1e8;
+}
+.fm-tip-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f0c674;
+  margin-bottom: 4px;
+}
+.fm-tip-row {
+  font-size: 12px;
+  color: #d8d2c2;
+  margin-top: 2px;
+  line-height: 1.5;
+}
+.fm-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.fm-detail-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  flex: none;
+}
+.fm-detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+.fm-detail-row {
+  font-size: 12.5px;
+  color: var(--paper-dim);
+  margin-top: 6px;
+  line-height: 1.7;
+}
+.fm-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  margin: 2px 4px 2px 0;
+  font-size: 11px;
+  color: var(--cyan-light);
+  background: rgba(76, 196, 196, 0.12);
+  border: 1px solid rgba(76, 196, 196, 0.3);
+  border-radius: 10px;
+}
+.fm-members { color: var(--paper); }
+.fm-desc {
+  color: var(--paper-dark);
+  font-size: 12px;
+  border-top: 1px dashed var(--ink-border);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+.fm-rel-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  margin: 2px 4px 2px 0;
+  font-size: 11px;
+  border-radius: 10px;
+}
+.fm-rel-hostile {
+  color: #ff8f7a;
+  background: rgba(224, 96, 96, 0.12);
+  border: 1px solid rgba(224, 96, 96, 0.35);
+}
+.fm-rel-ally {
+  color: #7fd8a8;
+  background: rgba(111, 191, 111, 0.12);
+  border: 1px solid rgba(111, 191, 111, 0.35);
+}
+.legend-item-active { color: var(--gold-light); }
+.fm-detail {
+  margin-top: 8px;
+  min-height: 120px;
+}
 .tip-role { margin-top: 2px; color: var(--cyan-light); font-size: 11px; }
 .tip-desc { margin-top: 4px; color: var(--paper-dim); }
 .tip-meta { margin-top: 4px; color: var(--paper-dark); font-size: 11px; }
@@ -2452,3 +2566,103 @@ body {
   .graph-filter-query { max-width: none; width: 100%; }
   .graph-play-label { max-width: 140px; }
 }
+
+/* ============ 智能取名面板 ============ */
+.naming-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.naming-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 18px 20px;
+}
+.naming-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.naming-label {
+  font-size: 12px;
+  color: var(--paper-dim);
+  letter-spacing: 0.4px;
+}
+.naming-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.naming-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-border);
+  background: var(--ink-soft);
+  color: var(--paper-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.naming-chip:hover { border-color: var(--gold); color: var(--paper); }
+.naming-chip.active {
+  background: linear-gradient(135deg, var(--gold), var(--gold-light));
+  color: #1c140a;
+  border-color: var(--gold-light);
+  font-weight: 600;
+}
+.naming-radios {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--paper);
+}
+.naming-radios label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.naming-actions { flex: 1 1 auto; flex-direction: row; align-items: center; gap: 14px; }
+.naming-hint { font-size: 12px; color: var(--cyan-light); }
+.naming-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.naming-card {
+  position: relative;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--ink-border);
+  background: var(--ink-soft);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.naming-card:hover { transform: translateY(-2px); border-color: var(--gold); }
+.naming-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gold-light);
+  letter-spacing: 1px;
+  padding-right: 48px;
+}
+.naming-meaning {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--paper-dim);
+}
+.naming-copy {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-border);
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.naming-copy:hover { border-color: var(--gold); color: var(--gold-light); }

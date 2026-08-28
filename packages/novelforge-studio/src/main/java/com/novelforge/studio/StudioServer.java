@@ -300,6 +300,8 @@ public class StudioServer {
         server.createContext("/api/cover", corsWrap(this::handleCoverApi));
         server.createContext("/api/radar", corsWrap(this::handleRadarApi));
         server.createContext("/api/graph", corsWrap(this::handleGraphApi));
+        server.createContext("/api/faction-map", corsWrap(this::handleFactionMapApi));
+        server.createContext("/api/naming", corsWrap(this::handleNamingApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -444,6 +446,14 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else if (path.equals("/graph.js")) {
 
             serveResource(exchange, "/studio/graph.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/factionmap.js")) {
+
+            serveResource(exchange, "/studio/factionmap.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/naming.js")) {
+
+            serveResource(exchange, "/studio/naming.js", "application/javascript; charset=utf-8");
 
         } else {
 
@@ -3025,6 +3035,597 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         stats.put("chapters", chapterIdx);
         resp.set("stats", stats);
         return mapper.writeValueAsString(resp);
+    }
+
+    // ========== 实力分布地图 (/api/faction-map) ==========
+    private static final java.util.regex.Pattern PLACE_PAT = java.util.regex.Pattern.compile("[\\u4e00-\\u9fa5]{2,4}(?:镇|城|村|山|谷|郡|州|府|域|界)");
+    private static final java.util.regex.Pattern FACTION_PAT_MAP = java.util.regex.Pattern.compile("[\\u4e00-\\u9fa5]{2,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫)");
+    /** 下辖模式：X 麾下/门下/附属 Y，或 Y 隶属/归属 X */
+    private static final java.util.regex.Pattern SUBORD_FWD_PAT = java.util.regex.Pattern.compile("([\\u4e00-\\u9fa5]{2,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫))(?:麾下|门下|附属|辖下|统辖|部下|附庸|麾下势力)(?:的)?([\\u4e00-\\u9fa5]{2,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫))?");
+    private static final java.util.regex.Pattern SUBORD_REV_PAT = java.util.regex.Pattern.compile("([\\u4e00-\\u9fa5]{2,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫))(?:隶属|归属|依附|附庸|听从|归顺)(?:于)?(?:的)?([\\u4e00-\\u9fa5]{2,4}(?:家|门|宗|派|族|殿|教|会|阁|盟|谷|宫))");
+    /** 特点关键词表：标签 → 命中词 */
+    private static final String[][] TRAIT_KEYWORDS = {
+            {"家族传承", "族,家,嫡,旁系,血脉,家规,宗祠"},
+            {"宗派门阀", "宗,门,派,教,阁,殿,盟,宫"},
+            {"武道炼体", "炼体,锻体,拳,掌,刀,剑,武,战"},
+            {"丹道炼药", "丹,药,炉,火,炼药"},
+            {"阵法禁制", "阵,禁制,符,封印"},
+            {"御兽驯妖", "兽,妖,驯,灵兽"},
+            {"仙门道统", "道,仙,法,灵根,灵气"},
+            {"魔道邪修", "魔,邪,血,阴,毒"}
+    };
+    /** 风格定性词：模式 → 风格标签（描述命中即叠加） */
+    private static final String[][] STYLE_PATTERNS = {
+            {"以武立族", "族,家族,演武,考核"},
+            {"宗门道统", "宗,门派,师尊,道统"},
+            {"魔道妖风", "魔,邪,阴,毒,血"},
+            {"丹道传家", "丹,药,炼丹"},
+            {"剑修风流", "剑,剑修"},
+            {"行事隐秘", "隐,暗,秘,影"},
+            {"正大堂皇", "正,浩,光明,正道"},
+            {"亦正亦邪", "亦正,亦邪,中立,两可"}
+    };
+
+    private void handleFactionMapApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String query = exchange.getRequestURI().getQuery();
+        String bookPath = getQueryParam(query, "path");
+        if (bookPath == null || !isPathWithinBooksRoot(bookPath)) {
+            sendJson(exchange, 400, "{\"error\":\"path required and must be within books directory\"}");
+            return;
+        }
+        try {
+            sendJson(exchange, 200, buildFactionMapJson(Paths.get(bookPath)));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** 势力分布地图：聚合角色归属 → 势力档案（范围/特点/风格/下辖）+ 正文增强 + 势力关系。 */
+    private String buildFactionMapJson(Path bookDir) throws Exception {
+        TruthState state = new TruthState(bookDir);
+        JsonNode chars = state.characters().listAll();
+        JsonNode world = state.world().getData();
+
+        // ---- 1. 角色势力归属（复用图谱推断策略：显式 faction > world 名 > 描述正则 + 后缀归并）----
+        java.util.Set<String> worldFactions = new java.util.HashSet<>();
+        if (world != null && world.has("factions") && world.get("factions").isArray()) {
+            for (JsonNode f : world.get("factions")) {
+                String fn = f.isTextual() ? f.asText() : f.path("name").asText("");
+                if (!fn.isBlank()) worldFactions.add(fn);
+            }
+        }
+        java.util.Map<String, String> charFaction = new java.util.HashMap<>();
+        java.util.Map<String, java.util.List<String>> charCandidates = new java.util.HashMap<>();
+        java.util.Set<String> allCands = new java.util.HashSet<>();
+        java.util.Map<String, String> charDesc = new java.util.HashMap<>();
+        java.util.Map<String, String> merge = new java.util.HashMap<>();   // 势力后缀归并表（正文扫描复用）
+        if (chars != null && chars.isArray()) {
+            for (JsonNode c : chars) {
+                String name = c.path("name").asText("");
+                if (name.isBlank()) continue;
+                String desc = c.path("description").asText("");
+                charDesc.put(name, desc);
+                java.util.List<String> cands = new java.util.ArrayList<>();
+                String faction = c.path("faction").asText("");
+                if (!faction.isBlank()) cands.add(faction);
+                if (!desc.isBlank()) {
+                    if (!worldFactions.isEmpty()) {
+                        for (String fn : worldFactions) { if (desc.contains(fn)) { cands.add(fn); break; } }
+                    }
+                    java.util.regex.Matcher m2 = FACTION_PAT_2.matcher(desc);
+                    if (m2.find()) cands.add(m2.group());
+                    else {
+                        java.util.regex.Matcher m34 = FACTION_PAT_34.matcher(desc);
+                        if (m34.find()) cands.add(m34.group());
+                    }
+                }
+                charCandidates.put(name, cands);
+                allCands.addAll(cands);
+            }
+            for (String a : allCands) {
+                String best = a;
+                for (String b : allCands) {
+                    if (!b.equals(a) && a.endsWith(b) && b.length() < best.length()) best = b;
+                }
+                merge.put(a, best);
+            }
+            for (java.util.Map.Entry<String, java.util.List<String>> en : charCandidates.entrySet()) {
+                if (en.getValue().isEmpty()) continue;
+                String best = null;
+                for (String cd : en.getValue()) {
+                    String norm = merge.getOrDefault(cd, cd);
+                    if (best == null || norm.length() < best.length()) best = norm;
+                }
+                if (best != null && !best.isBlank()) charFaction.put(en.getKey(), best);
+            }
+        }
+
+        // ---- 2. world.json 显式势力（补充档案字段：domain/traits/subordinates/relation）----
+        java.util.LinkedHashMap<String, ObjectNode> factionMap = new java.util.LinkedHashMap<>();
+        java.util.Map<String, ObjectNode> worldFactionDefs = new java.util.LinkedHashMap<>();
+        if (world != null && world.has("factions") && world.get("factions").isArray()) {
+            for (JsonNode f : world.get("factions")) {
+                String fn = f.isTextual() ? f.asText() : f.path("name").asText("");
+                if (fn.isBlank() || worldFactionDefs.containsKey(fn)) continue;
+                ObjectNode def = mapper.createObjectNode();
+                def.put("name", fn);
+                def.put("desc", f.isObject() ? f.path("description").asText("") : "");
+                def.put("domain", f.isObject() ? f.path("domain").asText("") : "");
+                def.put("style", f.isObject() ? f.path("style").asText("") : "");
+                worldFactionDefs.put(fn, def);
+                if (!factionMap.containsKey(fn)) factionMap.put(fn, def.deepCopy());
+            }
+        }
+
+        // ---- 3. 正文扫描：势力提及频次 + 下辖关系 + 地域 + 例句 ----
+        java.util.Map<String, Integer> factionMentions = new java.util.HashMap<>();
+        java.util.Map<String, java.util.List<String>> factionExamples = new java.util.HashMap<>();
+        java.util.Map<String, java.util.Set<String>> factionPlaces = new java.util.HashMap<>();
+        java.util.Map<String, java.util.Set<String>> factionSubords = new java.util.HashMap<>();
+        java.util.List<String> chapterTexts = new java.util.ArrayList<>();
+        Path chaptersDir = bookDir.resolve("chapters");
+        if (Files.isDirectory(chaptersDir)) {
+            try (java.util.stream.Stream<Path> stream = Files.list(chaptersDir)) {
+                for (Path f : stream.filter(p -> p.getFileName().toString().endsWith(".md"))
+                        .filter(p -> !p.getFileName().toString().contains(".draft."))
+                        .sorted().limit(20).toList()) {
+                    String text = Files.readString(f, StandardCharsets.UTF_8);
+                    chapterTexts.add(text);
+                    // 下辖正/反模式（以已知或候选势力名为锚，先扫描全部势力名）
+                    java.util.regex.Matcher sf = SUBORD_FWD_PAT.matcher(text);
+                    while (sf.find()) {
+                        String host = sf.group(1), sub = sf.group(2);
+                        if (sub != null && !sub.isBlank() && !sub.equals(host)) addSub(factionSubords, host, sub);
+                    }
+                    java.util.regex.Matcher sr = SUBORD_REV_PAT.matcher(text);
+                    while (sr.find()) {
+                        String sub = sr.group(1), host = sr.group(2);
+                        if (sub != null && !host.isBlank() && !sub.equals(host)) addSub(factionSubords, host, sub);
+                    }
+                    // 地域与例句：命中已知/候选势力名的句子
+                    for (String line : text.split("\n")) {
+                        if (line.length() < 4 || line.length() > 200) continue;
+                        java.util.Set<String> hit = new java.util.HashSet<>();
+                        for (String fn : allCands) {
+                            if (fn.length() >= 2 && line.contains(fn)) { hit.add(merge.getOrDefault(fn, fn)); factionMentions.merge(merge.getOrDefault(fn, fn), 1, Integer::sum); }
+                        }
+                        if (hit.isEmpty()) continue;
+                        java.util.regex.Matcher pl = PLACE_PAT.matcher(line);
+                        while (pl.find()) {
+                            for (String h : hit) factionPlaces.computeIfAbsent(h, k -> new java.util.HashSet<>()).add(pl.group());
+                        }
+                        for (String h : hit) {
+                            java.util.List<String> ex = factionExamples.computeIfAbsent(h, k -> new java.util.ArrayList<>());
+                            if (ex.size() < 3) ex.add(line.trim());
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- 4. 聚合势力档案 ----
+        java.util.LinkedHashMap<String, ObjectNode> merged = new java.util.LinkedHashMap<>();
+        // 先以角色推断出的势力建档（保证无 world.json 势力的书也能输出）
+        for (String fn : new java.util.LinkedHashSet<>(charFaction.values())) {
+            merged.computeIfAbsent(fn, k -> {
+                ObjectNode n = mapper.createObjectNode();
+                n.put("name", k);
+                n.put("desc", "");
+                n.putArray("traits");
+                n.put("style", "");
+                n.putArray("members");
+                n.putArray("subordinates");
+                n.put("mentions", 0);
+                n.put("weight", 1);
+                return n;
+            });
+        }
+        // 成员按势力归位
+        for (java.util.Map.Entry<String, String> en : charFaction.entrySet()) {
+            ObjectNode f = merged.get(en.getValue());
+            if (f == null) continue;
+            if (!containsText(f.withArray("members"), en.getKey())) f.withArray("members").add(en.getKey());
+            f.put("weight", f.withArray("members").size() + f.path("mentions").asInt() / 50);
+        }
+        // 合并 world.json 显式势力（含无成员势力）
+        for (ObjectNode def : worldFactionDefs.values()) {
+            String fn = def.path("name").asText();
+            ObjectNode f = merged.computeIfAbsent(fn, k -> {
+                ObjectNode n = mapper.createObjectNode();
+                n.put("name", k);
+                n.put("desc", "");
+                n.put("domain", "");
+                n.putArray("traits");
+                n.put("style", "");
+                n.putArray("members");
+                n.putArray("subordinates");
+                n.put("mentions", 0);
+                n.put("weight", 1);
+                return n;
+            });
+            if (f.path("desc").asText().isBlank() && !def.path("desc").asText().isBlank()) f.put("desc", def.path("desc").asText());
+            if (f.path("domain").asText().isBlank() && !def.path("domain").asText().isBlank()) f.put("domain", def.path("domain").asText());
+            if (f.path("style").asText().isBlank() && !def.path("style").asText().isBlank()) f.put("style", def.path("style").asText());
+            f.put("weight", f.withArray("members").size() + f.path("mentions").asInt() / 50);
+        }
+        // 成员描述汇总 → desc / traits / style / domain（自动推断）
+        for (ObjectNode f : merged.values()) {
+            String fn = f.path("name").asText();
+            f.put("mentions", factionMentions.getOrDefault(fn, 0));
+            // 汇总成员描述
+            StringBuilder descSb = new StringBuilder();
+            for (JsonNode m : f.withArray("members")) {
+                String d = charDesc.getOrDefault(m.asText(), "");
+                if (!d.isBlank()) descSb.append(m.asText()).append("：").append(d).append("；");
+            }
+            if (f.path("desc").asText().isBlank() && descSb.length() > 0) {
+                f.put("desc", descSb.substring(0, Math.min(descSb.length(), 300)));
+            }
+            // 特点标签：聚合成员描述 + 例句
+            String corpus = descSb.toString() + String.join(" ", factionExamples.getOrDefault(fn, java.util.List.of()));
+            ArrayNode traits = (ArrayNode) f.get("traits");
+            for (String[] t : TRAIT_KEYWORDS) {
+                boolean hit = false;
+                for (String kw : t[1].split(",")) { if (corpus.contains(kw)) { hit = true; break; } }
+                if (hit && traits.size() < 4 && !containsText(traits, t[0])) traits.add(t[0]);
+            }
+            // 风格：world 显式 > 描述规则叠加
+            if (f.path("style").asText().isBlank()) {
+                StringBuilder st = new StringBuilder();
+                for (String[] p : STYLE_PATTERNS) {
+                    boolean hit = false;
+                    for (String kw : p[1].split(",")) { if (corpus.contains(kw)) { hit = true; break; } }
+                    if (hit) {
+                        if (st.length() > 0) st.append(" · ");
+                        st.append(p[0]);
+                        if (st.toString().split("·").length >= 3) break;
+                    }
+                }
+                f.put("style", st.length() > 0 ? st.toString() : "势力待考");
+            }
+            // 地域：显式 > 正文提取 > 成员描述
+            if (f.path("domain").asText().isBlank()) {
+                java.util.Set<String> places = factionPlaces.getOrDefault(fn, new java.util.HashSet<>());
+                java.util.regex.Matcher dm = PLACE_PAT.matcher(descSb.toString());
+                while (dm.find()) places.add(dm.group());
+                if (!places.isEmpty()) {
+                    String top = null; int bestCnt = 0;
+                    for (String p : places) {
+                        int c = descSb.toString().split(p, -1).length - 1;
+                        if (c > bestCnt) { bestCnt = c; top = p; }
+                    }
+                    f.put("domain", top != null ? top : places.iterator().next());
+                }
+            }
+            // 下辖势力：正文模式 + world 显式子域
+            java.util.Set<String> subs = factionSubords.getOrDefault(fn, new java.util.HashSet<>());
+            if (world != null && world.has("factions") && world.get("factions").isArray()) {
+                for (JsonNode wf : world.get("factions")) {
+                    if (wf.isObject()) {
+                        String wfn = wf.path("name").asText("");
+                        String parent = wf.path("parent").asText("");
+                        if (!wfn.isBlank() && parent.equals(fn)) subs.add(wfn);
+                    }
+                }
+            }
+            for (String s : subs) if (!containsText(f.withArray("subordinates"), s)) f.withArray("subordinates").add(s);
+            f.put("weight", f.withArray("members").size() + f.path("mentions").asInt() / 50 + f.withArray("subordinates").size() * 2);
+        }
+
+        // ---- 5. 势力间关系（敌对/同盟/竞争，正文同句共现 + 关系词）----
+        ArrayNode relations = mapper.createArrayNode();
+        java.util.Set<String> relKeys = new java.util.HashSet<>();
+        java.util.List<String> factionNames = new java.util.ArrayList<>(merged.keySet());
+        String allText = String.join("\n", chapterTexts);
+        for (int i = 0; i < factionNames.size(); i++) {
+            for (int j = i + 1; j < factionNames.size(); j++) {
+                String a = factionNames.get(i), b = factionNames.get(j);
+                int co = 0; String rel = null;
+                for (String line : allText.split("\n")) {
+                    if (line.contains(a) && line.contains(b)) {
+                        co++;
+                        String r = inferRelation(line);
+                        if (r != null && (rel == null || r.equals("敌对") || r.equals("友盟"))) rel = r;
+                    }
+                }
+                if (co > 0 && rel != null) {
+                    ObjectNode r = mapper.createObjectNode();
+                    r.put("source", a);
+                    r.put("target", b);
+                    r.put("type", rel);
+                    r.put("weight", co);
+                    relations.add(r);
+                    relKeys.add(a + "\u0000" + b);
+                }
+            }
+        }
+        // world.json 显式关系补充
+        if (world != null && world.has("factions") && world.get("factions").isArray()) {
+            for (JsonNode wf : world.get("factions")) {
+                if (wf.isObject() && wf.has("relation")) {
+                    String a = wf.path("name").asText("");
+                    JsonNode rn = wf.get("relation");
+                    if (rn.isArray()) {
+                        for (JsonNode rr : rn) {
+                            String b = rr.path("with").asText("");
+                            String t = rr.path("type").asText("");
+                            if (a.isBlank() || b.isBlank() || t.isBlank()) continue;
+                            String key = a.compareTo(b) <= 0 ? a + "\u0000" + b : b + "\u0000" + a;
+                            if (relKeys.contains(key)) continue;
+                            ObjectNode r = mapper.createObjectNode();
+                            r.put("source", a);
+                            r.put("target", b);
+                            r.put("type", t);
+                            r.put("weight", 1);
+                            relations.add(r);
+                            relKeys.add(key);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- 6. 输出 ----
+        ArrayNode factions = mapper.createArrayNode();
+        for (ObjectNode f : merged.values()) factions.add(f);
+        ObjectNode resp = mapper.createObjectNode();
+        resp.put("ok", true);
+        resp.put("book", bookDir.getFileName() != null ? bookDir.getFileName().toString() : bookDir.toString());
+        resp.set("factions", factions);
+        resp.set("relations", relations);
+        ObjectNode stats = mapper.createObjectNode();
+        stats.put("factions", factions.size());
+        stats.put("characters", chars != null && chars.isArray() ? chars.size() : 0);
+        stats.put("covered", charFaction.size());
+        int subCnt = 0; for (JsonNode f : factions) subCnt += f.path("subordinates").size();
+        stats.put("subordinates", subCnt);
+        stats.put("relations", relations.size());
+        stats.put("chaptersScanned", Math.min(20, chapterTexts.size()));
+        resp.set("stats", stats);
+        return mapper.writeValueAsString(resp);
+    }
+
+    private void addSub(java.util.Map<String, java.util.Set<String>> map, String host, String sub) {
+        if (host == null || sub == null || host.isBlank() || sub.isBlank() || host.equals(sub)) return;
+        map.computeIfAbsent(host, k -> new java.util.HashSet<>()).add(sub);
+    }
+
+    // ===================== 智能取名引擎 =====================
+
+    private static final String[] NAMING_SURNAMES = {
+        "李","王","张","刘","陈","杨","赵","萧","林","叶","沈","苏","顾","楼","楚",
+        "慕容","上官","欧阳","南宫","东方","司马","独孤","轩辕","公孙","令狐","长孙",
+        "宇文","百里","北冥","西门","司空","拓跋","赫连"
+    };
+
+    private static final java.util.Map<String, String> NAMING_STYLE_DESC = new java.util.LinkedHashMap<>();
+    static {
+        NAMING_STYLE_DESC.put("xianxia", "仙侠飘逸");
+        NAMING_STYLE_DESC.put("wuxia", "武侠刚正");
+        NAMING_STYLE_DESC.put("xuanhuan", "玄幻霸气");
+        NAMING_STYLE_DESC.put("classic", "古典文雅");
+        NAMING_STYLE_DESC.put("fierce", "凶煞凌厉");
+        NAMING_STYLE_DESC.put("elegant", "清丽雅致");
+    }
+
+    private static final java.util.Map<String, String[]> NAMING_GIVEN = new java.util.LinkedHashMap<>();
+    static {
+        NAMING_GIVEN.put("xianxia", new String[]{"霄","尘","渊","墨","凌","云","逸","清","玄","霜","夜","星","河","羽","辰","苍","溟","琅","瑾","珩","皓","绮"});
+        NAMING_GIVEN.put("wuxia", new String[]{"风","云","龙","虎","啸","英","杰","豪","烈","锋","岩","峰","松","柏","涛","岳","霆","骁","翊","铮","崚","瀚"});
+        NAMING_GIVEN.put("xuanhuan", new String[]{"穹","荒","蛮","焱","雷","狱","帝","皇","乾","坤","霸","绝","焚","戮","煌","烬","渊","溟","煞","苍","阙","熠"});
+        NAMING_GIVEN.put("classic", new String[]{"瑾","瑜","琰","珩","珂","瑶","璋","璇","诗","书","礼","乐","润","彦","睿","哲","翰","霖","楚","晏","徽","翊"});
+        NAMING_GIVEN.put("fierce", new String[]{"煞","冥","幽","血","骨","魂","殇","灭","寂","枯","寒","刑","斩","黯","凄","狱","夜","霜","戮","绝","枭","魇"});
+        NAMING_GIVEN.put("elegant", new String[]{"芷","兰","荷","露","月","笙","弦","婉","嫣","霏","绮","黛","韵","绾","婳","汐","苓","苒","缦","纭","媱","翎"});
+    }
+
+    private static final String[] NAMING_FEM_PREFIX = {"婉","嫣","芷","兰","月","笙","弦","露","霏","绮","黛","韵","绾","婳","汐","苓","苒","缦","瑶","璇","翎","媱"};
+    private static final String[] NAMING_MASC_PREFIX = {"锋","岩","豪","烈","霆","骁","啸","杰","岳","苍","焱","渊","峥","铮","瀚","翊","崚","戬","朔","翎"};
+
+    private static final java.util.Map<String, String> NAMING_GLOSS = new java.util.LinkedHashMap<>();
+    static {
+        String[] g = {
+            "霄=高远九霄","尘=超然出尘","渊=深不可测","墨=翰墨儒雅","凌=凌云之上","云=自在如云","逸=洒脱飘逸","清=清雅纯粹","玄=玄妙莫测","霜=清冷如霜",
+            "夜=幽夜深沉","星=星辰璀璨","河=河汉浩瀚","羽=轻灵如羽","辰=北辰指引","苍=苍茫辽阔","溟=溟海无垠","琅=琅玕美玉","瑾=怀瑾握瑜","珩=玉珩生辉",
+            "风=逐风而行","龙=潜龙在渊","虎=虎踞龙盘","啸=长啸凌空","英=英雄豪杰","杰=卓尔不群","豪=豪迈洒脱","烈=刚烈如火","锋=锋芒毕露","岩=坚如磐石",
+            "峰=登峰造极","松=岁寒松柏","柏=贞松劲柏","涛=惊涛拍岸","岳=山岳巍峨","霆=雷霆万钧","骁=骁勇善战","翊=翊赞辅翼","铮=铁骨铮铮","瀚=浩瀚无边",
+            "穹=天穹苍穹","荒=洪荒古远","蛮=蛮荒之力","焱=烈焰焚天","雷=雷动九天","狱=幽狱深沉","帝=帝王之尊","皇=皇者之气","乾=乾纲独断","坤=坤厚载物",
+            "霸=霸绝天下","绝=绝世独立","焚=焚尽八荒","戮=戮破苍穹","煌=金煌夺目","烬=劫灰余烬","阙=宫阙高耸","熠=熠熠生辉","煞=凶煞凌厉","枭=枭雄并起","魇=梦魇缠身",
+            "琰=琰圭温润","珂=鸣珂锵玉","瑶=瑶台仙姿","璋=圭璋特达","璇=璇玑玉衡","诗=诗书传家","书=书香门第","礼=彬彬有礼","乐=礼乐和鸣","润=温润如玉",
+            "彦=俊彦才士","睿=睿智清明","哲=哲思明达","翰=翰墨文章","霖=甘霖普润","楚=楚楚不凡","徽=徽音远扬","崚=崚嶒奇崛","戬=戬谷降祥","朔=朔风凛冽",
+            "冥=幽冥莫测","幽=幽深静远","血=血气方刚","骨=铮铮铁骨","魂=魂牵梦萦","殇=国殇悲壮","灭=寂灭无常","寂=万籁俱寂","枯=枯荣有数","寒=寒英傲雪",
+            "刑=刑天猛志","斩=斩浪破军","黯=黯然销魂","凄=凄清孤高","芷=芷兰幽芳","兰=兰心蕙质","荷=荷韵清涟","露=朝露晶莹","月=月华如练","笙=笙歌婉转",
+            "弦=弦音清越","婉=婉约风流","嫣=嫣然巧笑","霏=霏微烟雨","绮=绮丽如锦","黛=黛色参天","韵=风韵天成","绾=青丝轻绾","婳=婳静姝丽","汐=潮汐有信",
+            "苓=茯苓灵秀","苒=荏苒时光","缦=缦立远视","纭=纷纭多姿","媱=媱娥仙姿","翎=翠翎轻扬"
+        };
+        for (String s : g) { int i = s.indexOf('='); NAMING_GLOSS.put(s.substring(0, i), s.substring(i + 1)); }
+    }
+
+    private static final String[] SKILL_PREFIX = {"太乙","玄冥","九幽","焚天","天罡","紫霄","太虚","两仪","三才","四象","五行","六合","七星","八卦","无极","浑天","凌霄","碧落","黄泉","沧海","北冥","昆仑"};
+    private static final String[] SKILL_CORE = {"剑","掌","指","拳","腿","刀","枪","棍","拂","鞭","气","元","神","魂","心","意","虚","影","风","雷","火","冰","霜","空"};
+    private static final String[] SKILL_SUFFIX = {"式","诀","经","功","法","劲","罡","真解","心法","残卷","奥义","玄机"};
+    private static final String[] SKILL_VERB = {"破","斩","惊","落","焚","镇","碎","裂","逐月","摘星","揽月","傲","啸","惊鸿","踏雪","听风","断","扫"};
+    private static final String[] SKILL_FORM = {"斩","式","指","剑","掌","击","刺","挑","撩","劈","绝","破"};
+
+    private static final String[] ITEM_MAT = {"琉璃","寒玉","玄铁","紫金","赤铜","星纹","月华","幽冥","碧落","混沌","太初","九天","云锦","青霜","灵晶","血玉"};
+    private static final String[] ITEM_OBJ = {"瓶","鼎","炉","镜","灯","符","印","玺","珠","幡","铃","环","簪","匣","卷","盘","葫","梭","圭","铃铛"};
+    private static final String[] ITEM_GRADE = {"天品","地品","玄品","上品","绝品","圣物","神器","灵宝","仙品","太古遗珍"};
+
+    private static final String[] WEAPON_IMG = {"龙吟","凤鸣","霜刃","裂空","惊鸿","逐月","斩浪","破岳","吞日","饮血","鸣鸿","承影","赤霄","青锋","秋水","寒星","破军","绝影","流光","苍雷"};
+    private static final String[] WEAPON_CLS = {"刀","剑","枪","戟","斧","钺","钩","叉","鞭","锏","锤","槊","弓","弩","拂尘","双钩","长戟","重剑"};
+
+    private static final String[] FACTION_TERR = {"青冥","北荒","南疆","沧海","苍梧","凌霄","幽都","中州","东溟","西极","九幽","天雍","云梦","碧落","大荒","星陨","赤霄","白帝","玄霜","炎域","太虚","苍澜"};
+    private static final String[] FACTION_SUF = {"宗","门","阁","殿","教","盟","谷","山庄","世家","王朝","圣地","天宫","书院","洞天","魔域","神庙","剑派","道观"};
+
+    private static final String[] MOUNT_IMG = {"踏云","追风","凌霄","焚天","裂空","墨鳞","赤焰","玄霜","惊雷","逐月","栖霞","饮涧","御风","星驰","踏雪","破空","游霄","贯日"};
+    private static final String[] MOUNT_SP = {"麒麟","白虎","青鸾","龙驹","玄狼","雷鹰","朱雀","玄武","白泽","狻猊","貔貅","天马","火凤","玉蟾","蛟","鹏","鲲","猊","驺虞","角端"};
+
+    private final java.util.concurrent.ThreadLocalRandom namingRnd = java.util.concurrent.ThreadLocalRandom.current();
+
+    private String npick(String[] a) { return a[namingRnd.nextInt(a.length)]; }
+
+    private void handleNamingApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String query = exchange.getRequestURI().getQuery();
+        String type = getQueryParam(query, "type");
+        String style = getQueryParam(query, "style");
+        String gender = getQueryParam(query, "gender");
+        String surname = getQueryParam(query, "surname");
+        String keyword = getQueryParam(query, "keyword");
+        String countStr = getQueryParam(query, "count");
+        String bookPath = getQueryParam(query, "path");
+        try {
+            sendJson(exchange, 200, buildNamingJson(type, style, gender, surname, keyword, countStr, bookPath));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    private String buildNamingJson(String type, String style, String gender, String surname, String keyword, String countStr, String bookPath) throws Exception {
+        ObjectNode resp = mapper.createObjectNode();
+        if (type == null || type.isBlank()) { resp.put("ok", false); resp.put("error", "缺少 type 参数"); return mapper.writeValueAsString(resp); }
+        if (!java.util.Arrays.asList("person", "skill", "item", "weapon", "faction", "mount").contains(type)) {
+            resp.put("ok", false); resp.put("error", "未知 type: " + type); return mapper.writeValueAsString(resp);
+        }
+        int count = 10;
+        try { if (countStr != null) count = Math.max(1, Math.min(30, Integer.parseInt(countStr.trim()))); } catch (Exception ignore) {}
+        if (style == null || style.isBlank() || !NAMING_STYLE_DESC.containsKey(style)) style = "xianxia";
+        if (gender == null || gender.isBlank()) gender = "male";
+        if (keyword == null) keyword = "";
+        if (surname == null) surname = "";
+
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        if (bookPath != null && isPathWithinBooksRoot(bookPath)) {
+            Path charsFile = Paths.get(bookPath, "truth", "characters.json");
+            if (Files.exists(charsFile)) {
+                try {
+                    JsonNode arr = mapper.readTree(Files.readAllBytes(charsFile));
+                    if (arr.isArray()) for (JsonNode n : arr) { String nm = n.path("name").asText("").trim(); if (!nm.isEmpty()) existing.add(nm); }
+                } catch (Exception ignore) {}
+            }
+        }
+
+        java.util.List<ObjectNode> names = new java.util.ArrayList<>();
+        java.util.Set<String> used = new java.util.HashSet<>();
+        int guard = 0;
+        while (names.size() < count && guard < count * 30 + 300) {
+            guard++;
+            String[] pair = generateOneName(type, style, gender, surname, keyword);
+            if (pair == null) break;
+            String name = pair[0];
+            if (name.isEmpty() || used.contains(name)) continue;
+            if (type.equals("person") && existing.contains(name)) continue;
+            used.add(name);
+            ObjectNode o = mapper.createObjectNode();
+            o.put("name", name);
+            o.put("meaning", pair[1]);
+            names.add(o);
+        }
+        resp.put("ok", true);
+        resp.put("type", type);
+        resp.put("style", style);
+        resp.put("generated", names.size());
+        ArrayNode arr = mapper.createArrayNode();
+        for (ObjectNode o : names) arr.add(o);
+        resp.set("names", arr);
+        return mapper.writeValueAsString(resp);
+    }
+
+    private String[] generateOneName(String type, String style, String gender, String surname, String keyword) {
+        String styleLabel = NAMING_STYLE_DESC.getOrDefault(style, "古风");
+        switch (type) {
+            case "person": {
+                String[] base = NAMING_GIVEN.get(style);
+                java.util.List<String> pool = new java.util.ArrayList<>(java.util.Arrays.asList(base));
+                if (gender.equals("female")) pool.addAll(java.util.Arrays.asList(NAMING_FEM_PREFIX));
+                else pool.addAll(java.util.Arrays.asList(NAMING_MASC_PREFIX));
+                String[] poolArr = pool.toArray(new String[0]);
+                String sur = surname.isEmpty() ? npick(NAMING_SURNAMES) : surname;
+                if (!keyword.isEmpty()) {
+                    String given = keyword.length() <= 2 ? keyword : keyword.substring(0, 2);
+                    String name = sur + given;
+                    return new String[]{name, "【" + styleLabel + "】" + sur + "姓，取「" + given + "」为意，依用户关键字而定。"};
+                }
+                int n = namingRnd.nextDouble() < 0.35 ? 1 : 2;
+                String g1 = npick(poolArr);
+                StringBuilder gb = new StringBuilder(g1);
+                if (n == 2) { String g2 = npick(poolArr); int t = 0; while (g2.equals(g1) && t++ < 8) g2 = npick(poolArr); gb.append(g2); }
+                String given = gb.toString();
+                String name = sur + given;
+                return new String[]{name, "【" + styleLabel + "】" + sur + "姓，" + glossPhrase(given) + "。"};
+            }
+            case "skill": {
+                String name; String meaning;
+                if (namingRnd.nextBoolean()) {
+                    String prefix = npick(SKILL_PREFIX);
+                    String core = npick(SKILL_CORE);
+                    String suffix = npick(SKILL_SUFFIX);
+                    name = prefix + core + suffix;
+                    meaning = "【" + styleLabel + "】" + prefix + "门意境，以" + core + "为体，" + suffix + "成法，威力深不可测。";
+                } else {
+                    String verb = npick(SKILL_VERB);
+                    String core = npick(SKILL_CORE);
+                    String form = namingRnd.nextBoolean() ? npick(SKILL_FORM) : "";
+                    name = verb + core + form;
+                    meaning = "【招式】" + verb + core + (form.isEmpty() ? "" : form) + "，凌厉杀招，出其不意。";
+                }
+                return withKeyword(name, meaning, keyword);
+            }
+            case "item": {
+                String grade = namingRnd.nextDouble() < 0.5 ? npick(ITEM_GRADE) : "";
+                String mat = npick(ITEM_MAT);
+                String obj = npick(ITEM_OBJ);
+                String name = grade + mat + obj;
+                String meaning = "【" + (grade.isEmpty() ? "灵物" : grade) + "】以" + mat + "所制" + obj + "，光华内蕴，灵性自生。";
+                return withKeyword(name, meaning, keyword);
+            }
+            case "weapon": {
+                String img = npick(WEAPON_IMG);
+                String cls = npick(WEAPON_CLS);
+                String name = img + cls;
+                String meaning = "【神兵】" + img + "之" + cls + "，锋锐无匹，饮血封喉。";
+                return withKeyword(name, meaning, keyword);
+            }
+            case "faction": {
+                String terr = npick(FACTION_TERR);
+                String suf = npick(FACTION_SUF);
+                String name = terr + suf;
+                String meaning = "【势力】据" + terr + "之地而立" + suf + "，号令一方，威震四海。";
+                return withKeyword(name, meaning, keyword);
+            }
+            case "mount": {
+                String img = npick(MOUNT_IMG);
+                String sp = npick(MOUNT_SP);
+                String name = img + sp;
+                String meaning = "【坐骑】" + img + sp + "，神骏通灵，日行万里。";
+                return withKeyword(name, meaning, keyword);
+            }
+            default:
+                return null;
+        }
+    }
+
+    private String[] withKeyword(String name, String meaning, String keyword) {
+        if (!keyword.isEmpty()) return new String[]{keyword + name, meaning + "（嵌关键字「" + keyword + "」）"};
+        return new String[]{name, meaning};
+    }
+
+    private String glossPhrase(String given) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < given.length(); i++) {
+            String c = given.substring(i, i + 1);
+            String g = NAMING_GLOSS.get(c);
+            if (g != null) sb.append("「").append(c).append("」").append(g).append("，");
+        }
+        if (sb.length() == 0) sb.append("寓意清雅出尘");
+        else sb.setLength(sb.length() - 1);
+        return sb.toString();
+    }
+
+    private boolean containsText(JsonNode arr, String s) {
+        if (arr == null) return false;
+        for (JsonNode n : arr) if (n.isTextual() && n.asText().equals(s)) return true;
+        return false;
     }
 
     /** Merge a weighted edge into the edge map (dedup by unordered pair). */

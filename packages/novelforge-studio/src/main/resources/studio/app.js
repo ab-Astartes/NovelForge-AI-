@@ -910,6 +910,8 @@ const PANEL_MAP = {
   'audit': 'audit',
   'config': 'config',
   'graph': 'graph',
+  'factionmap': 'factionmap',
+  'naming': 'naming',
   // Legacy panel names → redirect to new panels
   'state': 'toolbox',
   'style': 'toolbox',
@@ -966,6 +968,14 @@ function showPanel(name) {
   if (targetName === 'graph') {
     populateBookSelects();
     loadGraph();
+  }
+  if (targetName === 'factionmap') {
+    populateBookSelects();
+    loadFactionMap();
+  }
+  if (targetName === 'naming') {
+    populateBookSelects();
+    renderNamingPanel();
   }
   if (targetName === 'audit') populateBookSelects();
 }
@@ -1608,7 +1618,7 @@ async function populateBookSelects(books) {
   const selects = ['global-book','toolbox-book','ledger-book','write-book', 'state-book', 'audit-book',
     'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book',
     'hooks-book', 'synopsis-book', 'synopsis-source-book', 'outline-editor-book', 'intent-editor-book',
-    'book-edit-book', 'search-book', 'graph-book'];
+    'book-edit-book', 'search-book', 'graph-book', 'factionmap-book', 'naming-book'];
   const globalVal = document.getElementById('global-book')?.value || '';
   const opts = books.map(b =>
     `<option value="${safePath(b.path)}">${escapeHtml(b.title)} · ${GENRE_LABELS[b.genre] || b.genre}</option>`

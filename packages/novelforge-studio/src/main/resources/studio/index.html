@@ -40,6 +40,12 @@
       <button onclick="showPanel('graph')" class="sidebar-nav-item" id="nav-graph">
         <span class="nav-icon">🕸</span><span class="nav-label">图谱</span>
       </button>
+      <button onclick="showPanel('factionmap')" class="sidebar-nav-item" id="nav-factionmap">
+        <span class="nav-icon">🗺</span><span class="nav-label">疆域</span>
+      </button>
+      <button onclick="showPanel('naming')" class="sidebar-nav-item" id="nav-naming">
+        <span class="nav-icon">✨</span><span class="nav-label">取名</span>
+      </button>
       <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
         <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
       </button>
@@ -1194,6 +1200,96 @@
         </div>
       </section>
 
+      <!-- ========== 疆域：实力分布地图 ========== -->
+      <section id="panel-factionmap" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">实力分布地图</h2>
+          <p class="panel-desc">势力疆域 · 下辖归属 · 特点风格 —— 从角色档案与章节正文自动挖掘，Voronoi 色块呈现势力版图</p>
+        </div>
+
+        <div class="graph-toolbar">
+          <label class="gbs-label" style="margin:0">书目</label>
+          <select id="factionmap-book" class="input-field gbs-select" style="min-width:220px"><option value="">（选择书籍）</option></select>
+          <button class="btn-ink btn-sm" onclick="loadFactionMap()">⟳ 刷新地图</button>
+          <button class="btn-ghost btn-sm" onclick="relayoutFactionMap()">↺ 重新布局</button>
+          <span id="factionmap-stats" class="graph-stats"></span>
+        </div>
+
+        <div class="graph-layout">
+          <div class="graph-canvas-wrap">
+            <div id="factionmap-canvas" class="graph-canvas fm-canvas">
+              <div class="empty-hint">选择书籍并刷新，绘制势力版图</div>
+            </div>
+            <div id="factionmap-tooltip" class="graph-tooltip fm-tooltip hidden"></div>
+          </div>
+          <div class="graph-side">
+            <div class="card">
+              <div class="card-title"><span class="card-icon">🗺</span> 疆域图例</div>
+              <div id="factionmap-legend" class="graph-legend"></div>
+              <div class="card-hint">色块大小 ≈ 势力权重；虚线 = 敌对（红）/ 同盟（绿）；点击色块查看势力档案。</div>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="card-icon">🏛</span> 势力档案</div>
+              <div id="factionmap-detail" class="fm-detail">
+                <div class="card-hint">点击色块查看势力档案：范围、下辖、特点与风格。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 取名：智能取名 ========== -->
+      <section id="panel-naming" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">智能取名</h2>
+          <p class="panel-desc">人物姓名 · 武功招式 · 道具 · 兵器 · 势力 · 坐骑 —— 本地词库一键生成，附寓意释义，可嵌关键字并排除现有角色重名</p>
+        </div>
+
+        <div class="naming-wrap">
+          <div class="naming-controls card">
+            <div class="naming-block">
+              <div class="naming-label">书目（排除现有角色重名，可选）</div>
+              <select id="naming-book" class="input-field" style="min-width:200px"><option value="">（不校验重名）</option></select>
+            </div>
+            <div class="naming-block">
+              <div class="naming-label">取名类别</div>
+              <div id="naming-types" class="naming-chips"></div>
+            </div>
+            <div id="naming-person-only" class="naming-block">
+              <div class="naming-label">性别</div>
+              <div class="naming-radios">
+                <label><input type="radio" name="naming-gender" value="male" checked /> 男</label>
+                <label><input type="radio" name="naming-gender" value="female" /> 女</label>
+              </div>
+              <div class="naming-label" style="margin-top:10px">指定姓氏（可选）</div>
+              <input id="naming-surname" class="input-field" placeholder="如：萧 / 慕容" style="max-width:160px" />
+            </div>
+            <div class="naming-block">
+              <div class="naming-label">风格</div>
+              <select id="naming-styles" class="input-field"></select>
+            </div>
+            <div class="naming-block">
+              <div class="naming-label">关键字（嵌入名称，可选）</div>
+              <input id="naming-keyword" class="input-field" placeholder="如：苍 / 星河" style="max-width:200px" />
+            </div>
+            <div class="naming-block">
+              <div class="naming-label">数量</div>
+              <select id="naming-count" class="input-field" style="max-width:90px">
+                <option>6</option><option selected>10</option><option>15</option><option>20</option><option>30</option>
+              </select>
+            </div>
+            <div class="naming-block naming-actions">
+              <button id="naming-generate" class="btn-ink" onclick="doNaming()">✦ 生成名称</button>
+              <span id="naming-hint" class="naming-hint"></span>
+            </div>
+          </div>
+
+          <div id="naming-results" class="naming-results">
+            <div class="empty-hint">选择类别与风格，点击「生成名称」获取灵感。</div>
+          </div>
+        </div>
+      </section>
+
       <!-- ========== 用量：Token 账单 ========== -->
       <section id="panel-usage" class="panel">
         <div class="panel-header">
@@ -1316,5 +1412,7 @@
 
 <script src="/app.js"></script>
 <script src="/graph.js"></script>
+<script src="/factionmap.js"></script>
+<script src="/naming.js"></script>
 </body>
 </html>

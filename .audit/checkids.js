@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const base = path.join(__dirname, '..', 'packages', 'novelforge-studio', 'src', 'main', 'resources', 'studio');
-const js = fs.readFileSync(path.join(base, 'app.js'), 'utf8') + '\n' + fs.readFileSync(path.join(base, 'graph.js'), 'utf8');
+const js = ['app.js', 'graph.js', 'factionmap.js', 'naming.js']
+  .map(f => fs.readFileSync(path.join(base, f), 'utf8')).join('\n');
 const html = fs.readFileSync(path.join(base, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(base, 'style.css'), 'utf8');
 
