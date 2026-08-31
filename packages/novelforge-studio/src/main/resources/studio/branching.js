@@ -12,6 +12,9 @@ let branchCollapsed = new Set();
 let branchZoom = 1, branchPanX = 0, branchPanY = 0;
 let branchColorByVolume = false;
 let branchEdgeCond = new Set();
+let branchState = null;
+let branchStateDebugOn = false;
+let branchSuggestions = [];
 
 async function loadBranching() {
   const book = document.getElementById('branching-book')?.value?.trim();
@@ -245,11 +248,21 @@ function renderBranchGraph() {
     const a = pos[e.from], b = pos[e.to];
     if (!a || !b) return;
     const mx = (a.x + b.x) / 2;
-    const cond = (e.requires && Object.keys(e.requires).length) ? ' bg-edge-cond' : '';
-    svg += `<path d="M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}" class="bg-edge${cond}" marker-end="url(#bg-arrow)"/>`;
+    let cls = 'bg-edge';
+    let labelCls = 'bg-edge-label';
+    if (branchStateDebugOn && branchState && branchState.edges) {
+      const st = branchState.edges[e.from + '|' + e.to];
+      if (st && st.status === 'unsatisfiable') { cls += ' bg-edge-unsat'; labelCls += ' bg-cond-label'; }
+      else if (st && st.status === 'conditional') { cls += ' bg-edge-cond2'; labelCls += ' bg-cond-label'; }
+      else if (st && st.status === 'guaranteed') { cls += ' bg-edge-guaranteed'; }
+      else if (st && st.status === 'open') { cls += ' bg-edge-open'; }
+    } else if (e.requires && Object.keys(e.requires).length) {
+      cls += ' bg-edge-cond'; labelCls += ' bg-cond-label';
+    }
+    svg += `<path d="M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}" class="${cls}" marker-end="url(#bg-arrow)"/>`;
     const my = (a.y + b.y) / 2;
     const label = branchXmlEsc(e.choice || '继续');
-    svg += `<text x="${mx}" y="${my - 4}" text-anchor="middle" class="bg-edge-label${cond ? ' bg-cond-label' : ''}">${label}</text>`;
+    svg += `<text x="${mx}" y="${my - 4}" text-anchor="middle" class="${labelCls}">${label}</text>`;
   });
 
   // 节点
@@ -619,4 +632,223 @@ render();
 <\/script>
 </body>
 </html>`;
+}
+
+// ===================== 分支增强①：状态机可视化调试 =====================
+async function loadBranchState() {
+  if (!branchBook) { showToast('请先选择书目并读取剧情树', 'warning'); return; }
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/state?path=' + encodeURIComponent(branchBook)), { headers: authHeaders() });
+    const j = await r.json();
+    if (j && j.ok === false && j.error) { showToast('状态机调试失败：' + j.error, 'error'); return; }
+    branchState = j;
+    renderBranchStateDebug();
+  } catch (e) { showToast('状态机调试请求失败：' + e.message, 'error'); }
+}
+
+async function toggleBranchStateDebug() {
+  branchStateDebugOn = !branchStateDebugOn;
+  const box = document.getElementById('branch-state-debug');
+  const btn = document.querySelector('[onclick="toggleBranchStateDebug()"]');
+  if (branchStateDebugOn) {
+    box.classList.remove('hidden');
+    if (btn) btn.classList.add('active');
+    if (!branchState || branchState.empty) await loadBranchState(); else renderBranchStateDebug();
+    renderBranching();
+  } else {
+    box.classList.add('hidden');
+    if (btn) btn.classList.remove('active');
+    renderBranching();
+  }
+}
+
+function renderBranchStateDebug() {
+  const box = document.getElementById('branch-state-body');
+  if (!box) return;
+  if (!branchState || branchState.empty) { box.innerHTML = '<div class="empty-hint">尚无分支结构，先「读取剧情树」或「从章节生成骨架」。</div>'; return; }
+  let html = '';
+  const unsat = branchState.unsatisfiableCount || 0;
+  html += '<div class="glossary-warn ' + (unsat ? 'warn-error' : 'warn-ok') + '"><span class="warn-tag">' + (unsat ? 'state' : 'ok') + '</span>'
+    + (unsat ? ('检测到 ' + unsat + ' 条「永不满足」的门槛边（requires 在任何路径都无法达成），读者将永远看不到该选项：') : '所有门槛边（requires）在状态机中均可达成。')
+    + '</div>';
+  (branchState.unsatisfiableEdges || []).forEach(b => {
+    html += '<div class="bo-gap">· 「' + branchXmlEsc(b.fromTitle) + '」→「' + branchXmlEsc(b.toTitle) + '」：' + branchXmlEsc(b.reason) + '</div>';
+  });
+  let rows = '';
+  branchNodes.forEach(n => {
+    const st = branchState.nodes ? branchState.nodes[n.id] : null;
+    const flags = st && st.flags ? st.flags : [];
+    const attrs = st && st.attrs ? st.attrs : [];
+    const stateTxt = (flags.length || attrs.length) ? ('Flags: ' + flags.join(', ') + (attrs.length ? ('；Attrs: ' + attrs.join(', ')) : '')) : '∅';
+    rows += '<tr><td>' + escapeHtml(n.title || n.id) + '</td><td class="branch-state-cell">' + escapeHtml(stateTxt) + '</td></tr>';
+  });
+  if (rows) html += '<div class="bf-sub" style="margin-top:8px">各节点可达状态（任意路径可获得的 Flag / Attr）</div>'
+    + '<table class="branch-state-table"><thead><tr><th>节点</th><th>可达状态</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  html += '<div class="bf-hint" style="margin-top:8px">图例中：<span style="color:#c0392b">红</span>=永不满足门槛，<span style="color:#d98f1e">橙</span>=条件满足，<span style="color:#2e9d5b">绿</span>=必满足，灰=无门槛。</div>';
+  box.innerHTML = html;
+}
+
+// ===================== 分支增强②：大纲抉择点反向建议 =====================
+async function loadBranchSuggest(useLlm) {
+  const box = document.getElementById('branch-suggest');
+  if (box) box.classList.remove('hidden');
+  const body = document.getElementById('branch-suggest-body');
+  if (!body) return;
+  if (!branchBook) { showToast('请先选择书目', 'warning'); return; }
+  body.innerHTML = '<div class="empty-hint">正在生成建议…</div>';
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/suggest'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: branchBook, useLlm: !!useLlm })
+    });
+    const j = await r.json();
+    if (!j.ok) { body.innerHTML = '<div class="empty-hint">建议生成失败：' + escapeHtml(j.error || '') + '</div>'; return; }
+    renderBranchSuggest(j);
+  } catch (e) { body.innerHTML = '<div class="empty-hint">请求失败：' + escapeHtml(e.message) + '</div>'; }
+}
+
+function renderBranchSuggest(j) {
+  const body = document.getElementById('branch-suggest-body');
+  if (!body) return;
+  branchSuggestions = j.edgeSuggestions || [];
+  let html = '<div class="branch-suggest-actions">'
+    + '<button class="btn-ghost btn-sm" onclick="loadBranchSuggest(false)">↻ 规则式重算</button>'
+    + '<button class="btn-ink btn-sm" onclick="loadBranchSuggest(true)">✨ LLM 增强建议</button>'
+    + '<span class="graph-stats">' + (j.llm ? 'LLM 模式' : '规则式') + ' · 大纲抉择点 ' + (j.decisionCount || 0) + '</span></div>';
+  const schema = j.schema || {};
+  const flags = schema.flags || [];
+  const attrs = schema.attrs || [];
+  if (flags.length || attrs.length) {
+    html += '<div class="bf-sub">建议追踪的状态变量</div><div class="branch-chips">';
+    flags.forEach(f => html += '<span class="branch-chip">🚩 ' + branchXmlEsc(f) + '</span>');
+    attrs.forEach(a => html += '<span class="branch-chip branch-chip-attr">📊 ' + branchXmlEsc(a) + '</span>');
+    html += '</div>';
+  }
+  const dec = j.decisions || [];
+  if (dec.length) {
+    html += '<div class="bf-sub">抉择点 → 状态变量映射</div>';
+    dec.forEach(d => {
+      html += '<div class="bo-gap">· 抉择「' + branchXmlEsc(d.point) + '」→ 建议 Flag「<b>' + branchXmlEsc(d.flag) + '</b>」<br><span class="branch-note">' + branchXmlEsc(d.note || '') + '</span></div>';
+    });
+  }
+  const es = j.edgeSuggestions || [];
+  if (es.length) {
+    html += '<div class="bf-sub">建议的边（requires / sets）</div>';
+    es.forEach((s, i) => {
+      const sets = s.sets || {};
+      const setsTxt = (sets.flags ? 'flags:[' + (sets.flags || []).join(',') + ']' : '') + (sets.attrs ? ' attrs:' + JSON.stringify(sets.attrs) : '');
+      html += '<div class="branch-edge-sug">'
+        + '<div class="branch-edge-sug-head">「' + branchXmlEsc(s.from) + '」→「' + branchXmlEsc(s.to) + '」'
+        + '<button class="btn-ghost btn-xs" onclick="applyEdgeSuggestion(' + i + ')">应用 sets</button></div>'
+        + '<div class="branch-note">' + branchXmlEsc(s.note || '') + '</div>'
+        + '<code class="branch-code">sets: ' + branchXmlEsc(setsTxt) + '</code></div>';
+    });
+  } else {
+    html += '<div class="empty-hint" style="margin-top:8px">当前剧情树中未找到与大纲抉择点匹配的出边；可先在树上为抉择点补充分支，再点「规则式重算」。</div>';
+  }
+  html += '<div class="branch-note" style="margin-top:8px">' + branchXmlEsc(j.note || '') + '</div>';
+  body.innerHTML = html;
+}
+
+function applyEdgeSuggestion(i) {
+  const s = branchSuggestions[i];
+  if (!s) return;
+  const e = branchEdges.find(x => x.from === s.from && x.to === s.to);
+  if (!e) { showToast('未找到该边（id 不匹配），请检查剧情树节点 id', 'warning'); return; }
+  if (s.sets && Object.keys(s.sets).length) e.sets = s.sets;
+  if (s.requires && Object.keys(s.requires).length) e.requires = s.requires;
+  renderBranching();
+  showToast('已应用 sets 到「' + s.from + '→' + s.to + '」，记得点「保存结构」', 'success');
+}
+
+// ===================== 分支增强③：剧情树版本对比 =====================
+function toggleBranchDiff() {
+  const box = document.getElementById('branch-diff');
+  const btn = document.querySelector('[onclick="toggleBranchDiff()"]');
+  const on = box.classList.contains('hidden');
+  if (on) { box.classList.remove('hidden'); if (btn) btn.classList.add('active'); renderBranchDiffUI(); }
+  else { box.classList.add('hidden'); if (btn) btn.classList.remove('active'); }
+}
+
+function renderBranchDiffUI() {
+  const body = document.getElementById('branch-diff-body');
+  if (!body) return;
+  let snaps = [];
+  try { snaps = JSON.parse(localStorage.getItem('nf_branch_snaps') || '[]'); } catch (e) {}
+  const snapOpts = snaps.map((s, i) => '<option value="' + i + '">' + branchXmlEsc(s.label) + ' (' + (s.nodes || 0) + '节点)</option>').join('');
+  body.innerHTML = '<div class="form-grid">'
+    + '<div class="form-group" style="grid-column:1/-1"><div class="bf-sub">版本 A（基准）</div>'
+    + '<textarea id="diff-a" class="input-field" rows="6" placeholder="粘贴剧情树 JSON（含 nodes/edges），或点下方「载入当前树」"></textarea></div>'
+    + '<div class="form-group" style="grid-column:1/-1"><div class="bf-sub">版本 B（对比）</div>'
+    + '<textarea id="diff-b" class="input-field" rows="6" placeholder="粘贴另一版剧情树 JSON，或从下方快照选择"></textarea></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'
+    + '<button class="btn-ghost btn-sm" onclick="loadCurrentToDiffA()">⬇ 载入当前树到 A</button>'
+    + '<button class="btn-ghost btn-sm" onclick="loadCurrentToDiffB()">⬇ 载入当前树到 B</button>'
+    + '<button class="btn-ghost btn-sm" onclick="saveBranchSnapshot()">💾 保存当前树为快照</button>'
+    + '<select id="diff-snap" class="input-field" onchange="loadSnapToDiffB(this.value)"><option value="">— 选择快照载入 B —</option>' + snapOpts + '</select>'
+    + '<button class="btn-ink btn-sm" onclick="runBranchDiff()">🔍 对比</button>'
+    + '</div>'
+    + '<div id="branch-diff-result" style="margin-top:10px"></div>';
+}
+
+function currentTreeJson() { return JSON.stringify({ nodes: branchNodes, edges: branchEdges }); }
+function loadCurrentToDiffA() { const t = document.getElementById('diff-a'); if (t) t.value = currentTreeJson(); showToast('已载入当前树到 A', 'success', 1000); }
+function loadCurrentToDiffB() { const t = document.getElementById('diff-b'); if (t) t.value = currentTreeJson(); showToast('已载入当前树到 B', 'success', 1000); }
+
+function saveBranchSnapshot() {
+  let snaps = [];
+  try { snaps = JSON.parse(localStorage.getItem('nf_branch_snaps') || '[]'); } catch (e) {}
+  const label = prompt('快照名称（如 v1 / 修改前）：', '快照' + (snaps.length + 1));
+  if (!label) return;
+  snaps.push({ label: label, ts: Date.now(), nodes: branchNodes.length, edges: branchEdges.length, tree: { nodes: branchNodes, edges: branchEdges } });
+  localStorage.setItem('nf_branch_snaps', JSON.stringify(snaps));
+  showToast('已保存快照「' + label + '」', 'success');
+  renderBranchDiffUI();
+}
+
+function loadSnapToDiffB(idx) {
+  if (idx === '' || idx == null) return;
+  let snaps = [];
+  try { snaps = JSON.parse(localStorage.getItem('nf_branch_snaps') || '[]'); } catch (e) {}
+  const s = snaps[Number(idx)];
+  const t = document.getElementById('diff-b');
+  if (s && t) t.value = JSON.stringify(s.tree);
+}
+
+async function runBranchDiff() {
+  const ta = document.getElementById('diff-a'), tb = document.getElementById('diff-b');
+  const box = document.getElementById('branch-diff-result');
+  if (!ta || !tb) return;
+  let a, b;
+  try { a = JSON.parse(ta.value); } catch (e) { box.innerHTML = '<div class="empty-hint">版本 A 不是合法 JSON</div>'; return; }
+  try { b = JSON.parse(tb.value); } catch (e) { box.innerHTML = '<div class="empty-hint">版本 B 不是合法 JSON</div>'; return; }
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/diff'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ treeA: a, treeB: b })
+    });
+    const j = await r.json();
+    if (!j.ok) { box.innerHTML = '<div class="empty-hint">对比失败：' + escapeHtml(j.error || '') + '</div>'; return; }
+    renderBranchDiffResult(j);
+  } catch (e) { box.innerHTML = '<div class="empty-hint">请求失败：' + escapeHtml(e.message) + '</div>'; }
+}
+
+function renderBranchDiffResult(j) {
+  const box = document.getElementById('branch-diff-result');
+  if (!box) return;
+  const s = j.summary || {};
+  let html = '<div class="graph-stats">节点 +' + (s.nodesAdded || 0) + ' / -' + (s.nodesRemoved || 0) + ' / ~' + (s.nodesChanged || 0)
+    + ' ｜ 连线 +' + (s.edgesAdded || 0) + ' / -' + (s.edgesRemoved || 0) + ' / ~' + (s.edgesChanged || 0) + '</div>';
+  const nd = j.nodes || {}, ed = j.edges || {};
+  const added = nd.added || [];
+  if (added.length) { html += '<div class="bf-sub">新增节点</div>'; added.forEach(t => html += '<div class="bo-gap">＋ ' + branchXmlEsc(t) + '</div>'); }
+  if ((nd.removed || []).length) { html += '<div class="bf-sub">删除节点</div>'; nd.removed.forEach(t => html += '<div class="bo-gap">－ ' + branchXmlEsc(t) + '</div>'); }
+  if ((nd.changed || []).length) { html += '<div class="bf-sub">变更节点</div>'; nd.changed.forEach(c => { html += '<div class="bo-gap">~ ' + branchXmlEsc(c.title) + '：' + (c.fields || []).map(f => branchXmlEsc(f.field) + '(' + branchXmlEsc(f.from) + '→' + branchXmlEsc(f.to) + ')').join('，') + '</div>'; }); }
+  if ((ed.added || []).length) { html += '<div class="bf-sub">新增连线</div>'; ed.added.forEach(e => html += '<div class="bo-gap">＋ ' + branchXmlEsc(e.from) + '→' + branchXmlEsc(e.to) + '「' + branchXmlEsc(e.choice) + '」</div>'); }
+  if ((ed.removed || []).length) { html += '<div class="bf-sub">删除连线</div>'; ed.removed.forEach(e => html += '<div class="bo-gap">－ ' + branchXmlEsc(e.from) + '→' + branchXmlEsc(e.to) + '</div>'); }
+  if ((ed.changed || []).length) { html += '<div class="bf-sub">变更连线</div>'; ed.changed.forEach(e => { html += '<div class="bo-gap">~ ' + branchXmlEsc(e.from) + '→' + branchXmlEsc(e.to) + '：' + (e.fields || []).map(f => branchXmlEsc(f.field)).join('，') + '</div>'; }); }
+  if (!added.length && !(nd.removed||[]).length && !(nd.changed||[]).length && !(ed.added||[]).length && !(ed.removed||[]).length && !(ed.changed||[]).length)
+    html += '<div class="empty-hint">两版剧情树完全一致。</div>';
+  box.innerHTML = html;
 }

@@ -322,6 +322,9 @@ public class StudioServer {
         server.createContext("/api/ledger", corsWrap(this::handleLedgerApi));
         server.createContext("/api/tension", corsWrap(this::handleTensionApi));
         server.createContext("/api/branching", corsWrap(this::handleBranchingApi));
+        server.createContext("/api/branching/state", corsWrap(this::handleBranchingStateApi));
+        server.createContext("/api/branching/diff", corsWrap(this::handleBranchingDiffApi));
+        server.createContext("/api/branching/suggest", corsWrap(this::handleBranchingSuggestApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -2445,14 +2448,72 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             // 3) 清理多余空格与标点粘连
             cleaned = cleaned.replaceAll("[ \t]{2,}", " ").replaceAll("， +", "，").replaceAll("。 +", "。").trim();
 
+            String mode = deAi.path("mode").asText("rule");
+            if (body.has("mode") && !body.get("mode").asText("").isEmpty()) mode = body.get("mode").asText("rule");
             ObjectNode result = mapper.createObjectNode();
             result.put("status", "ok");
             result.put("originalLength", text.length());
-            result.put("cleanedLength", cleaned.length());
             result.put("removedCount", removed);
-            result.put("mode", deAi.path("mode").asText("rule"));
-            result.put("cleanedText", cleaned);
-            result.put("note", "规则式去AI：已剥离禁用词与 AI 腔句式（LLM 增强改写为后续模块）");
+            result.put("mode", mode);
+
+            if ("llm".equals(mode)) {
+                // LLM 增强改写：规则清洗作为预处理，再交给模型做语义级润色
+                ModelRouter router = resolveModelRouter(body);
+                ModelRouter.ModelConfig cfg = router.getGlobalDefault();
+                if (cfg == null || cfg.apiKey() == null || cfg.apiKey().isBlank()) {
+                    result.put("status", "error");
+                    result.put("cleanedText", cleaned);
+                    result.put("cleanedLength", cleaned.length());
+                    result.put("note", "LLM 模式需要配置 API Key：请在「设置」填写全局 LLM，或在请求体中携带 apiKey/baseUrl/model。");
+                    sendJson(exchange, 400, mapper.writeValueAsString(result));
+                    return;
+                }
+                try {
+                    LlmClient client = router.getClientForAgent("Editor");
+                    String model = router.getModelForAgent("Editor");
+                    int est = client.estimateTokens(cleaned);
+                    int maxTokens = Math.min(8000, Math.max(400, est * 2 + 600));
+                    StringBuilder gb = new StringBuilder();
+                    gb.append("基调准则：").append(deAi.path("rewriteGuidance").asText("")).append("\n");
+                    if (deAi.has("bannedPhrases") && deAi.get("bannedPhrases").isArray()) {
+                        gb.append("禁用词（直接删除，不要替换保留）：");
+                        for (JsonNode p : deAi.get("bannedPhrases")) gb.append(p.asText()).append("、");
+                        gb.append("\n");
+                    }
+                    if (deAi.has("aiTellPatterns") && deAi.get("aiTellPatterns").isArray()) {
+                        gb.append("避免的 AI 腔句式（参考模式，不必逐字匹配）：").append(deAi.get("aiTellPatterns").toString()).append("\n");
+                    }
+                    double strength = deAi.path("strength").asDouble(0.7);
+                    gb.append("改写强度（0~1，越大改动越激进）：").append(strength).append("\n");
+                    String guidance = gb.toString();
+                    String system = "你是一名资深中文小说编辑，擅长去除 AI 生成痕迹。根据用户给出的改写准则，对文本进行润色："
+                            + "删除禁用词；剥离 AI 腔句式（如工整对仗、排比、过度总结、空泛升华）；"
+                            + "用具体动作、感官细节与人物反应替代抽象概括；缩短平均句长，避免连续短句堆砌；"
+                            + "保留原意、信息量与情节，不新增虚构内容，不写解释。直接返回改写后的中文正文，不要任何前后缀说明。";
+                    String user = "【改写准则】\n" + guidance + "\n\n【待改写文本】\n" + cleaned;
+                    String llmOut = client.chatComplete(java.util.List.of(
+                            java.util.Map.of("role", "system", "content", system),
+                            java.util.Map.of("role", "user", "content", user)), model, 0.4, maxTokens);
+                    if (llmOut != null && !llmOut.isBlank()) {
+                        cleaned = llmOut.trim();
+                        result.put("cleanedText", cleaned);
+                        result.put("cleanedLength", cleaned.length());
+                        result.put("note", "LLM 增强改写完成（规则预处理 + 语义润色）。");
+                    } else {
+                        result.put("cleanedText", cleaned);
+                        result.put("cleanedLength", cleaned.length());
+                        result.put("note", "LLM 返回为空，已回退规则清洗结果。");
+                    }
+                } catch (Exception llmEx) {
+                    result.put("cleanedText", cleaned);
+                    result.put("cleanedLength", cleaned.length());
+                    result.put("note", "LLM 调用失败：" + sanitizeForJson(llmEx.getMessage()) + "（已回退规则清洗结果）");
+                }
+            } else {
+                result.put("cleanedText", cleaned);
+                result.put("cleanedLength", cleaned.length());
+                result.put("note", "规则式去AI：已剥离禁用词与 AI 腔句式。");
+            }
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
@@ -4250,6 +4311,384 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else {
             sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
         }
+    }
+
+    // ===================== 分支增强①：状态机可视化调试 =====================
+    private void handleBranchingStateApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return;
+            }
+            Path bf = Paths.get(bookPath).resolve("truth").resolve("branching.json");
+            if (!Files.exists(bf)) { sendJson(exchange, 200, "{\"ok\":true,\"empty\":true,\"nodes\":{},\"edges\":{}}"); return; }
+            JsonNode root = mapper.readTree(Files.readAllBytes(bf));
+            ObjectNode out = branchStateDebug(root.path("nodes"), root.path("edges"));
+            sendJson(exchange, 200, mapper.writeValueAsString(out));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** 状态机诊断：对节点状态做正向不动点传播，对每条边的 requires 做三态判定 */
+    private ObjectNode branchStateDebug(JsonNode nodesArr, JsonNode edgesArr) {
+        ObjectNode resp = mapper.createObjectNode();
+        if (!nodesArr.isArray() || !edgesArr.isArray()) { resp.put("ok", false).put("error", "nodes/edges 必须是数组"); return resp; }
+        java.util.Set<String> universeFlags = new java.util.LinkedHashSet<>();
+        java.util.Set<String> universeAttrs = new java.util.LinkedHashSet<>();
+        java.util.Map<String, java.util.Set<String>> initFlags = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> initAttrs = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> unionF = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> unionA = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> guaranteedF = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> guaranteedA = new java.util.LinkedHashMap<>();
+        java.util.Map<String, JsonNode> nodeMap = new java.util.LinkedHashMap<>();
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        for (JsonNode n : nodesArr) {
+            String id = n.path("id").asText("").trim();
+            if (id.isEmpty()) continue;
+            ids.add(id); nodeMap.put(id, n);
+            java.util.Set<String> f = new java.util.LinkedHashSet<>(), a = new java.util.LinkedHashSet<>();
+            absorbState(f, a, n.path("state"));
+            initFlags.put(id, f); initAttrs.put(id, a);
+            universeFlags.addAll(f); universeAttrs.addAll(a);
+            unionF.put(id, new java.util.LinkedHashSet<>());
+            unionA.put(id, new java.util.LinkedHashSet<>());
+            guaranteedF.put(id, new java.util.LinkedHashSet<>(universeFlags));
+            guaranteedA.put(id, new java.util.LinkedHashSet<>(universeAttrs));
+        }
+        java.util.List<JsonNode> edgeList = new java.util.ArrayList<>();
+        for (JsonNode e : edgesArr) {
+            String f = e.path("from").asText("").trim(), t = e.path("to").asText("").trim();
+            if (!ids.contains(f) || !ids.contains(t)) continue;
+            edgeList.add(e);
+            absorbState(universeFlags, universeAttrs, e.path("sets"));
+        }
+        for (String id : ids) {
+            if ("start".equals(nodeMap.get(id).path("type").asText(""))) {
+                unionF.put(id, new java.util.LinkedHashSet<>(initFlags.get(id)));
+                unionA.put(id, new java.util.LinkedHashSet<>(initAttrs.get(id)));
+                guaranteedF.put(id, new java.util.LinkedHashSet<>(initFlags.get(id)));
+                guaranteedA.put(id, new java.util.LinkedHashSet<>(initAttrs.get(id)));
+            }
+        }
+        // 不动点：并集传播
+        boolean changed = true; int guard = 0;
+        while (changed && guard++ < 10000) {
+            changed = false;
+            for (JsonNode e : edgeList) {
+                String u = e.path("from").asText(""), v = e.path("to").asText("");
+                java.util.Set<String> f = new java.util.LinkedHashSet<>(unionF.get(u));
+                java.util.Set<String> a = new java.util.LinkedHashSet<>(unionA.get(u));
+                absorbState(f, a, e.path("sets"));
+                if (!unionF.get(v).containsAll(f) || !unionA.get(v).containsAll(a)) {
+                    unionF.get(v).addAll(f); unionA.get(v).addAll(a); changed = true;
+                }
+            }
+        }
+        // 不动点：交集（保证态）传播
+        changed = true; guard = 0;
+        while (changed && guard++ < 10000) {
+            changed = false;
+            for (JsonNode e : edgeList) {
+                String u = e.path("from").asText(""), v = e.path("to").asText("");
+                java.util.Set<String> af = new java.util.LinkedHashSet<>(guaranteedF.get(u));
+                java.util.Set<String> aa = new java.util.LinkedHashSet<>(guaranteedA.get(u));
+                absorbState(af, aa, e.path("sets"));
+                java.util.Set<String> nf = new java.util.LinkedHashSet<>(guaranteedF.get(v));
+                java.util.Set<String> na = new java.util.LinkedHashSet<>(guaranteedA.get(v));
+                nf.retainAll(af); na.retainAll(aa);
+                if (!nf.equals(guaranteedF.get(v)) || !na.equals(guaranteedA.get(v))) {
+                    guaranteedF.put(v, nf); guaranteedA.put(v, na); changed = true;
+                }
+            }
+        }
+        ObjectNode nodesOut = mapper.createObjectNode();
+        for (String id : ids) {
+            ObjectNode o = mapper.createObjectNode();
+            ArrayNode fArr = mapper.createArrayNode(); unionF.get(id).forEach(fArr::add);
+            ArrayNode aArr = mapper.createArrayNode(); unionA.get(id).forEach(aArr::add);
+            o.set("flags", fArr); o.set("attrs", aArr);
+            nodesOut.set(id, o);
+        }
+        ObjectNode edgesOut = mapper.createObjectNode();
+        int unsatisfiable = 0;
+        ArrayNode badEdges = mapper.createArrayNode();
+        for (JsonNode e : edgeList) {
+            String u = e.path("from").asText(""), v = e.path("to").asText("");
+            JsonNode req = e.path("requires");
+            String status, reason = "";
+            if (!req.isObject() || req.size() == 0) {
+                status = "open";
+            } else {
+                java.util.Set<String> reqF = new java.util.LinkedHashSet<>(), reqA = new java.util.LinkedHashSet<>();
+                if (req.has("flags") && req.get("flags").isArray()) for (JsonNode x : req.get("flags")) reqF.add(x.asText());
+                if (req.has("attrs") && req.get("attrs").isObject()) { java.util.Iterator<String> it = req.get("attrs").fieldNames(); while (it.hasNext()) reqA.add(it.next()); }
+                boolean unsat = false, cond = false;
+                for (String rf : reqF) {
+                    if (!unionF.get(u).contains(rf)) { unsat = true; reason = "缺少 Flag: " + rf; break; }
+                    if (!guaranteedF.get(u).contains(rf)) cond = true;
+                }
+                if (!unsat) for (String ra : reqA) {
+                    if (!unionA.get(u).contains(ra)) { unsat = true; reason = "缺少属性: " + ra; break; }
+                    if (!guaranteedA.get(u).contains(ra)) cond = true;
+                }
+                if (unsat) status = "unsatisfiable";
+                else if (cond) status = "conditional";
+                else status = "guaranteed";
+            }
+            ObjectNode ed = mapper.createObjectNode();
+            ed.put("status", status); ed.put("reason", reason);
+            ed.put("from", u); ed.put("to", v);
+            if ("unsatisfiable".equals(status)) {
+                unsatisfiable++;
+                ObjectNode b = mapper.createObjectNode();
+                b.put("from", u); b.put("to", v);
+                b.put("fromTitle", nodeMap.get(u).path("title").asText(u));
+                b.put("toTitle", nodeMap.get(v).path("title").asText(v));
+                b.put("reason", reason);
+                badEdges.add(b);
+            }
+            edgesOut.set(u + "|" + v, ed);
+        }
+        resp.put("ok", true);
+        resp.set("nodes", nodesOut);
+        resp.set("edges", edgesOut);
+        resp.put("unsatisfiableCount", unsatisfiable);
+        resp.set("unsatisfiableEdges", badEdges);
+        return resp;
+    }
+
+    private void absorbState(java.util.Set<String> flags, java.util.Set<String> attrs, JsonNode st) {
+        if (st == null || !st.isObject()) return;
+        if (st.has("flags") && st.get("flags").isArray()) for (JsonNode x : st.get("flags")) { String s = x.asText(); if (!s.isEmpty()) flags.add(s); }
+        if (st.has("attrs") && st.get("attrs").isObject()) { java.util.Iterator<String> it = st.get("attrs").fieldNames(); while (it.hasNext()) { String k = it.next(); if (!k.isEmpty()) attrs.add(k); } }
+    }
+
+    // ===================== 分支增强②：剧情树版本 diff =====================
+    private void handleBranchingDiffApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            JsonNode a = body.path("treeA"), b = body.path("treeB");
+            if (!a.isObject() || !b.isObject()) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"treeA 与 treeB 为必填对象（各含 nodes/edges）\"}"); return; }
+            ObjectNode out = branchDiff(a.path("nodes"), a.path("edges"), b.path("nodes"), b.path("edges"));
+            sendJson(exchange, 200, mapper.writeValueAsString(out));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private ObjectNode branchDiff(JsonNode aN, JsonNode aE, JsonNode bN, JsonNode bE) {
+        ObjectNode resp = mapper.createObjectNode();
+        if (!aN.isArray()) aN = mapper.createArrayNode();
+        if (!aE.isArray()) aE = mapper.createArrayNode();
+        if (!bN.isArray()) bN = mapper.createArrayNode();
+        if (!bE.isArray()) bE = mapper.createArrayNode();
+        java.util.Map<String, JsonNode> am = new java.util.LinkedHashMap<>(), bm = new java.util.LinkedHashMap<>();
+        for (JsonNode n : aN) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) am.put(id, n); }
+        for (JsonNode n : bN) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) bm.put(id, n); }
+        ArrayNode nodesAdded = mapper.createArrayNode(), nodesRemoved = mapper.createArrayNode(), nodesChanged = mapper.createArrayNode();
+        for (String id : bm.keySet()) if (!am.containsKey(id)) nodesAdded.add(bm.get(id).path("title").asText(id));
+        for (String id : am.keySet()) if (!bm.containsKey(id)) nodesRemoved.add(am.get(id).path("title").asText(id));
+        for (String id : am.keySet()) {
+            if (bm.containsKey(id)) {
+                ArrayNode fields = nodeFieldDiff(am.get(id), bm.get(id));
+                if (fields.size() > 0) {
+                    ObjectNode c = mapper.createObjectNode();
+                    c.put("id", id); c.put("title", bm.get(id).path("title").asText(id)); c.set("fields", fields);
+                    nodesChanged.add(c);
+                }
+            }
+        }
+        java.util.Map<String, JsonNode> ae = edgeMap(aE), be = edgeMap(bE);
+        ArrayNode edgesAdded = mapper.createArrayNode(), edgesRemoved = mapper.createArrayNode(), edgesChanged = mapper.createArrayNode();
+        for (String k : be.keySet()) if (!ae.containsKey(k)) { ObjectNode o = mapper.createObjectNode(); edgeSummary(o, be.get(k)); edgesAdded.add(o); }
+        for (String k : ae.keySet()) if (!be.containsKey(k)) { ObjectNode o = mapper.createObjectNode(); edgeSummary(o, ae.get(k)); edgesRemoved.add(o); }
+        for (String k : ae.keySet()) {
+            if (be.containsKey(k)) {
+                ArrayNode f = edgeFieldDiff(ae.get(k), be.get(k));
+                if (f.size() > 0) { ObjectNode o = mapper.createObjectNode(); edgeSummary(o, be.get(k)); o.set("fields", f); edgesChanged.add(o); }
+            }
+        }
+        ObjectNode nodesO = mapper.createObjectNode(); nodesO.set("added", nodesAdded); nodesO.set("removed", nodesRemoved); nodesO.set("changed", nodesChanged);
+        ObjectNode edgesO = mapper.createObjectNode(); edgesO.set("added", edgesAdded); edgesO.set("removed", edgesRemoved); edgesO.set("changed", edgesChanged);
+        resp.put("ok", true); resp.set("nodes", nodesO); resp.set("edges", edgesO);
+        resp.set("summary", mapper.createObjectNode()
+                .put("nodesAdded", nodesAdded.size()).put("nodesRemoved", nodesRemoved.size()).put("nodesChanged", nodesChanged.size())
+                .put("edgesAdded", edgesAdded.size()).put("edgesRemoved", edgesRemoved.size()).put("edgesChanged", edgesChanged.size()));
+        return resp;
+    }
+
+    private java.util.Map<String, JsonNode> edgeMap(JsonNode edges) {
+        java.util.Map<String, JsonNode> m = new java.util.LinkedHashMap<>();
+        if (edges.isArray()) for (JsonNode e : edges) {
+            String k = e.path("from").asText("").trim() + "|" + e.path("to").asText("").trim();
+            if (!k.equals("|")) m.put(k, e);
+        }
+        return m;
+    }
+    private void edgeSummary(ObjectNode o, JsonNode e) { o.put("from", e.path("from").asText("")); o.put("to", e.path("to").asText("")); o.put("choice", e.path("choice").asText("")); }
+    private ArrayNode nodeFieldDiff(JsonNode x, JsonNode y) {
+        ArrayNode f = mapper.createArrayNode();
+        String[] fields = {"title", "type", "excerpt", "volume", "chapterRef"};
+        for (String fld : fields) {
+            String a = x.path(fld).asText(""), b = y.path(fld).asText("");
+            if (!a.equals(b)) { ObjectNode o = mapper.createObjectNode(); o.put("field", fld); o.put("from", a); o.put("to", b); f.add(o); }
+        }
+        if (!jsonEq(x.path("state"), y.path("state"))) { ObjectNode o = mapper.createObjectNode(); o.put("field", "state"); o.put("from", x.path("state").toString()); o.put("to", y.path("state").toString()); f.add(o); }
+        return f;
+    }
+    private ArrayNode edgeFieldDiff(JsonNode x, JsonNode y) {
+        ArrayNode f = mapper.createArrayNode();
+        if (!x.path("choice").asText("").equals(y.path("choice").asText(""))) { ObjectNode o = mapper.createObjectNode(); o.put("field", "choice"); o.put("from", x.path("choice").asText("")); o.put("to", y.path("choice").asText("")); f.add(o); }
+        if (!jsonEq(x.path("requires"), y.path("requires"))) { ObjectNode o = mapper.createObjectNode(); o.put("field", "requires"); o.put("from", x.path("requires").toString()); o.put("to", y.path("requires").toString()); f.add(o); }
+        if (!jsonEq(x.path("sets"), y.path("sets"))) { ObjectNode o = mapper.createObjectNode(); o.put("field", "sets"); o.put("from", x.path("sets").toString()); o.put("to", y.path("sets").toString()); f.add(o); }
+        return f;
+    }
+    private boolean jsonEq(JsonNode a, JsonNode b) { if (a == null || b == null) return a == b; return a.toString().equals(b.toString()); }
+
+    // ===================== 分支增强③：大纲抉择点反向建议 needed/requires/sets =====================
+    private void handleBranchingSuggestApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return; }
+            Path bookDir = Paths.get(bookPath);
+            java.util.List<String> points = outlineDecisionPoints(bookDir);
+            java.util.List<JsonNode> nodes = new java.util.ArrayList<>(), edges = new java.util.ArrayList<>();
+            Path bf = bookDir.resolve("truth").resolve("branching.json");
+            if (Files.exists(bf)) {
+                JsonNode root = mapper.readTree(Files.readAllBytes(bf));
+                if (root.path("nodes").isArray()) for (JsonNode n : root.path("nodes")) nodes.add(n);
+                if (root.path("edges").isArray()) for (JsonNode e : root.path("edges")) edges.add(e);
+            }
+            boolean useLlm = body.has("useLlm") && body.get("useLlm").asBoolean(false);
+            ObjectNode out;
+            if (useLlm) {
+                ModelRouter router = resolveModelRouter(body);
+                ModelRouter.ModelConfig cfg = router.getGlobalDefault();
+                if (cfg == null || cfg.apiKey() == null || cfg.apiKey().isBlank()) {
+                    out = branchSuggestRule(points, nodes, edges);
+                    out.put("note", "未配置 LLM API Key，已回退规则式建议。");
+                } else {
+                    try { out = branchSuggestLlm(points, nodes, edges, router); }
+                    catch (Exception ex) { out = branchSuggestRule(points, nodes, edges); out.put("note", "LLM 建议失败：" + sanitizeForJson(ex.getMessage()) + "，已回退规则式。"); }
+                }
+            } else {
+                out = branchSuggestRule(points, nodes, edges);
+            }
+            out.put("ok", true);
+            out.put("decisionCount", points.size());
+            sendJson(exchange, 200, mapper.writeValueAsString(out));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private java.util.List<String> outlineDecisionPoints(Path bookDir) {
+        java.util.List<String> pts = new java.util.ArrayList<>();
+        Path ol = bookDir.resolve("outline.md");
+        if (!Files.exists(ol)) return pts;
+        String text;
+        try { text = Files.readString(ol, StandardCharsets.UTF_8); } catch (Exception e) { return pts; }
+        for (String raw : text.split("\n")) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            if (line.matches("(?i).*(抉择|分支|选择|分歧|分歧点|关键节点|岔路|岔道|拐点|decision|branch|choice|diverge).*")) {
+                String name = line.replaceAll("^#{1,6}\\s*", "")
+                        .replaceAll("^[-*+]\\s*", "")
+                        .replaceAll("^\\d+[.、)\\]]\s*", "")
+                        .replaceAll("^第\\s*\\d+\\s*[章回节]\\s*", "")
+                        .replaceAll("(?i)(关键抉择|关键决策|抉择|分支|选择|分歧|分歧点|关键节点|岔路|岔道|拐点|decision|branch|choice|diverge)", "")
+                        .replaceAll("^[:：、.\\s]+", "")
+                        .replaceAll("[：:、，。.\\s]+$", "")
+                        .trim();
+                if (name != null && name.length() >= 2) pts.add(name);
+            }
+        }
+        return pts;
+    }
+
+    private String toFlag(String point) {
+        String s = point.replaceAll("^(是否要?|要不要|可否|能否|该不该|应不应该|是否)", "").trim();
+        s = s.replaceAll("[吗呢吧么？?。.!！]$", "").trim();
+        if (s.isEmpty()) s = point;
+        return s.length() > 10 ? s.substring(0, 10) : s;
+    }
+
+    private ObjectNode branchSuggestRule(java.util.List<String> points, java.util.List<JsonNode> nodes, java.util.List<JsonNode> edges) {
+        ObjectNode out = mapper.createObjectNode();
+        ArrayNode decisions = mapper.createArrayNode();
+        ArrayNode schemaFlags = mapper.createArrayNode();
+        java.util.Set<String> flagSet = new java.util.LinkedHashSet<>();
+        for (String p : points) {
+            String flag = toFlag(p);
+            flagSet.add(flag);
+            ObjectNode d = mapper.createObjectNode();
+            d.put("point", p); d.put("flag", flag);
+            d.put("note", "建议在作出该抉择的分支出边上 sets 记录 Flag「" + flag + "」，后续需要它的场景用 requires 校验。");
+            decisions.add(d);
+        }
+        flagSet.forEach(schemaFlags::add);
+        ArrayNode edgeSugs = mapper.createArrayNode();
+        for (JsonNode e : edges) {
+            String from = e.path("from").asText(""), to = e.path("to").asText("");
+            String choice = e.path("choice").asText("");
+            JsonNode tgt = null;
+            for (JsonNode n : nodes) if (n.path("id").asText("").equals(to)) { tgt = n; break; }
+            String tgtTitle = tgt != null ? tgt.path("title").asText("") : "";
+            for (String p : points) {
+                String kw = p.length() > 2 ? p.substring(0, Math.min(4, p.length())) : p;
+                if (choice.contains(kw) || tgtTitle.contains(kw)) {
+                    String flag = toFlag(p);
+                    ObjectNode s = mapper.createObjectNode();
+                    s.put("from", from); s.put("to", to);
+                    ObjectNode sets = mapper.createObjectNode();
+                    ArrayNode fa = mapper.createArrayNode(); fa.add(flag); sets.set("flags", fa);
+                    s.set("sets", sets); s.set("requires", mapper.createObjectNode());
+                    s.put("note", "出边「" + choice + "」对应抉择点「" + p + "」，建议 sets Flag「" + flag + "」记录该选择。");
+                    edgeSugs.add(s);
+                    break;
+                }
+            }
+        }
+        ObjectNode schema = mapper.createObjectNode();
+        schema.set("flags", schemaFlags); schema.set("attrs", mapper.createArrayNode());
+        out.set("schema", schema);
+        out.set("decisions", decisions);
+        out.set("edgeSuggestions", edgeSugs);
+        out.put("note", "规则式反向建议：依据大纲抉择点推断需追踪的状态变量（Flag）。携带 useLlm:true 并配置 API Key 可获得语义级建议。");
+        out.put("llm", false);
+        return out;
+    }
+
+    private ObjectNode branchSuggestLlm(java.util.List<String> points, java.util.List<JsonNode> nodes, java.util.List<JsonNode> edges, ModelRouter router) throws Exception {
+        LlmClient client = router.getClientForAgent("Architect");
+        String model = router.getModelForAgent("Architect");
+        StringBuilder treeSb = new StringBuilder();
+        for (JsonNode n : nodes) treeSb.append("- 节点[").append(n.path("type").asText("")).append("] ").append(n.path("title").asText("")).append("\n");
+        for (JsonNode e : edges) treeSb.append("  分支：").append(e.path("from").asText("")).append(" -> ").append(e.path("to").asText("")).append(" （").append(e.path("choice").asText("")).append("）\n");
+        String system = "你是互动小说架构师。给定小说大纲中的抉择点列表与当前剧情树结构，推断故事需要追踪的「状态变量」（用于条件分支的 requires/sets）。"
+                + "状态变量分两类：flags（布尔标记，如「接受委托」「获得钥匙」）与 attrs（数值属性，如「好感度」「金币」）。"
+                + "只输出 JSON，结构：{\"schema\":{\"flags\":[...],\"attrs\":[...]},\"decisions\":[{\"point\":\"抉择点名\",\"flag\":\"建议Flag名\",\"note\":\"简短说明\"}],"
+                + "\"edgeSuggestions\":[{\"from\":\"节点id\",\"to\":\"节点id\",\"requires\":{},\"sets\":{\"flags\":[\"Flag名\"]},\"note\":\"简短说明\"}]}。"
+                + "edgeSuggestions 要把每个大纲抉择点映射到作出该选择的出边（sets 记录 Flag），并视情况给 requires。只给确有依据的建议，不要编造不存在的节点 id。";
+        String user = "【大纲抉择点】\n" + (points.isEmpty() ? "（无）" : points.stream().map(s -> "- " + s).collect(java.util.stream.Collectors.joining("\n")))
+                + "\n\n【当前剧情树】\n" + (treeSb.length() == 0 ? "（空）" : treeSb.toString());
+        String raw = client.chatComplete(java.util.List.of(
+                java.util.Map.of("role", "system", "content", system),
+                java.util.Map.of("role", "user", "content", user)), model, 0.3, 4000);
+        String cleaned = raw == null ? "" : raw.trim();
+        if (cleaned.startsWith("```")) cleaned = cleaned.replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("```$", "").trim();
+        JsonNode tn = mapper.readTree(cleaned);
+        if (!tn.isObject()) throw new RuntimeException("LLM 未返回 JSON 对象");
+        ObjectNode parsed = (ObjectNode) tn;
+        parsed.put("llm", true);
+        if (!parsed.has("note")) parsed.put("note", "LLM 反向建议完成。");
+        return parsed;
     }
 
     private String ollamaGet(String baseUrl, String path) throws Exception {

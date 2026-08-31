@@ -42,4 +42,7 @@ npm-out.txt
 compile-err.txt
 compile-out.txt
 
+# Generated runtime classpath (regenerated via dependency:build-classpath)
+studio-cp.txt
+
 *.vsix

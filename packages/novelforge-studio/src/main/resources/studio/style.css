@@ -2951,3 +2951,25 @@ body {
 .bc-inherit-tag.global { background: rgba(80,140,255,0.16); color: #8fb6ff; }
 .bc-inherit-tag.book { background: rgba(201,162,39,0.16); color: var(--gold-light, #e0c060); }
 .code-block { margin-top: 10px; padding: 12px 14px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px; color: var(--text-soft, #d0d0d0); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+
+/* ========== 分支增强：状态机调试 / 反向建议 / 版本对比 ========== */
+.branch-debug-body, .branch-suggest-body, .branch-diff-body { font-size: 13px; line-height: 1.7; }
+.branch-state-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+.branch-state-table th, .branch-state-table td { border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; text-align: left; vertical-align: top; }
+.branch-state-table th { background: rgba(255,255,255,0.05); color: var(--text-soft, #e8e8e8); }
+.branch-state-cell { font-family: ui-monospace, "Cascadia Code", monospace; color: var(--gold-light, #e0c060); }
+.branch-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.branch-chip { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 20px; background: rgba(192,57,43,0.16); color: #f0a89c; border: 1px solid rgba(192,57,43,0.3); }
+.branch-chip-attr { background: rgba(46,125,127,0.16); color: #8fd0d2; border-color: rgba(46,125,127,0.3); }
+.branch-note { font-size: 12px; color: var(--text-dim, #9a9a9a); line-height: 1.6; }
+.branch-suggest-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.branch-edge-sug { margin: 6px 0; padding: 8px 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+.branch-edge-sug-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; }
+.branch-code { display: block; margin-top: 4px; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 11px; color: var(--gold-light, #e0c060); }
+/* SVG 边状态着色（状态机调试） */
+.bg-edge-unsat { stroke: #c0392b !important; stroke-width: 3px !important; stroke-dasharray: 5 4; }
+.bg-edge-cond2 { stroke: #d98f1e !important; stroke-width: 2.6px !important; }
+.bg-edge-guaranteed { stroke: #2e9d5b !important; stroke-width: 2.6px !important; }
+.bg-edge-open { stroke: #6b7a8a !important; }
+/* 工具栏激活态 */
+.graph-toolbar .btn-ghost.active, .btn-ghost.active { background: rgba(201,162,39,0.22); border-color: var(--gold-light, #e0c060); color: var(--gold-light, #e0c060); }

@@ -2701,16 +2701,31 @@ async function applyDeAi() {
   const out = document.getElementById('bc-deai-output');
   if (!path) { showToast('请先选择书目', 'warning'); return; }
   if (!input.trim()) { showToast('请粘贴待处理文本', 'warning'); return; }
+  const tryMode = document.getElementById('bc-deai-try-mode')?.value || '';
+  const apiKey = document.getElementById('bc-deai-apikey')?.value || '';
+  const baseUrl = document.getElementById('bc-deai-baseurl')?.value || '';
+  const model = document.getElementById('bc-deai-model')?.value || '';
+  const body = { path, text: input };
+  if (tryMode) body.mode = tryMode;
+  if (apiKey) body.apiKey = apiKey;
+  if (baseUrl) body.baseUrl = baseUrl;
+  if (model) body.model = model;
   try {
     const res = await fetch(authUrl(API + '/api/deai/apply'), {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ path, text: input })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     out.style.display = 'block';
-    out.textContent = (data.cleanedText != null ? data.cleanedText : '') +
-      '\n\n— 已剥离 ' + (data.removedCount || 0) + ' 处 · 模式 ' + (data.mode || 'rule');
-    showToast('去AI 完成，剥离 ' + (data.removedCount || 0) + ' 处', 'success');
+    if (data.status === 'error') {
+      out.textContent = '⚠ ' + (data.note || data.error || '失败') + '\n\n' + (data.cleanedText != null ? data.cleanedText : '');
+      showToast('去AI 未完全成功：' + (data.note || ''), 'warning');
+    } else {
+      out.textContent = (data.cleanedText != null ? data.cleanedText : '') +
+        '\n\n— 已剥离 ' + (data.removedCount || 0) + ' 处 · 模式 ' + (data.mode || 'rule') +
+        (data.note ? ('\n' + data.note) : '');
+      showToast('去AI 完成，剥离 ' + (data.removedCount || 0) + ' 处', 'success');
+    }
   } catch (e) {
     out.style.display = 'block';
     out.textContent = '失败: ' + e.message;

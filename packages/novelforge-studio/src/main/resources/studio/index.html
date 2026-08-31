@@ -1141,7 +1141,7 @@
                   <label class="form-label">模式</label>
                   <select id="bc-deai-mode" class="input-field">
                     <option value="rule">规则式（免API）</option>
-                    <option value="llm">LLM增强（后续模块）</option>
+                    <option value="llm">LLM增强（需API Key）</option>
                   </select>
                 </div>
               </div>
@@ -1183,8 +1183,26 @@
           <!-- 去AI 试用 -->
           <div class="bc-block" style="margin-top:12px">
             <div class="bc-block-head"><span>🧪 去AI 痕迹试用</span></div>
-            <textarea id="bc-deai-input" class="input-field" rows="4" placeholder="粘贴一段含 AI 腔的段落，点下方按钮试跑规则式去AI…"></textarea>
-            <button onclick="applyDeAi()" class="btn-ink btn-sm">规则式去AI</button>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">试用模式</label>
+                <select id="bc-deai-try-mode" class="input-field">
+                  <option value="">沿用本书/全局配置</option>
+                  <option value="rule">规则式</option>
+                  <option value="llm">LLM增强</option>
+                </select>
+              </div>
+            </div>
+            <details>
+              <summary style="cursor:pointer;color:#8b7355;font-size:13px;margin-bottom:6px">LLM 设置（可选，留空用全局配置，仅本次试用不保存）</summary>
+              <div class="form-grid">
+                <div class="form-group" style="grid-column:1/-1"><label class="form-label">API Key</label><input id="bc-deai-apikey" class="input-field" placeholder="sk-... / 自定义密钥"></div>
+                <div class="form-group" style="grid-column:1/-1"><label class="form-label">Base URL</label><input id="bc-deai-baseurl" class="input-field" placeholder="https://api.openai.com/v1"></div>
+                <div class="form-group" style="grid-column:1/-1"><label class="form-label">模型</label><input id="bc-deai-model" class="input-field" placeholder="gpt-4o / deepseek-chat"></div>
+              </div>
+            </details>
+            <textarea id="bc-deai-input" class="input-field" rows="4" placeholder="粘贴一段含 AI 腔的段落，点下方按钮试跑去AI…"></textarea>
+            <button onclick="applyDeAi()" class="btn-ink btn-sm">运行去AI</button>
             <pre id="bc-deai-output" class="code-block" style="display:none"></pre>
           </div>
         </div>
@@ -1498,6 +1516,28 @@
           <button class="btn-ink btn-sm" onclick="saveBranching()">💾 保存结构</button>
           <button class="btn-ghost btn-sm" onclick="exportBranching()">⬇ 导出互动阅读器</button>
           <span id="branching-stats" class="graph-stats"></span>
+        </div>
+
+        <div class="graph-toolbar card" style="margin-top:8px">
+          <button class="btn-ghost btn-sm" onclick="toggleBranchStateDebug()">🐞 状态机调试</button>
+          <button class="btn-ghost btn-sm" onclick="loadBranchSuggest()">💡 抉择点反向建议</button>
+          <button class="btn-ghost btn-sm" onclick="toggleBranchDiff()">🔬 版本对比</button>
+          <span id="branching-ext-hint" class="graph-stats"></span>
+        </div>
+
+        <div id="branch-state-debug" class="card hidden" style="margin-top:8px">
+          <div class="card-title">🐞 状态机可视化调试</div>
+          <div id="branch-state-body" class="branch-debug-body"></div>
+        </div>
+
+        <div id="branch-suggest" class="card hidden" style="margin-top:8px">
+          <div class="card-title">💡 大纲抉择点反向建议（needed / requires / sets）</div>
+          <div id="branch-suggest-body" class="branch-suggest-body"></div>
+        </div>
+
+        <div id="branch-diff" class="card hidden" style="margin-top:8px">
+          <div class="card-title">🔬 剧情树版本对比（diff）</div>
+          <div id="branch-diff-body" class="branch-diff-body"></div>
         </div>
 
         <div id="branching-body" class="branching-body">
