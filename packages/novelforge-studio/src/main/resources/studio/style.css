@@ -2666,3 +2666,42 @@ body {
   transition: all 0.15s;
 }
 .naming-copy:hover { border-color: var(--gold); color: var(--gold-light); }
+
+.naming-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+.naming-fav {
+  flex: 1;
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-border);
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.naming-fav:hover { border-color: var(--gold); color: var(--gold-light); }
+.naming-card.fav { border-color: var(--gold); }
+.naming-card.fav .naming-fav { background: var(--gold); color: #1a140a; border-color: var(--gold); }
+
+.naming-favs-card { margin-top: 18px; }
+.naming-favs { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; margin: 8px 0; }
+.fav-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: var(--radius);
+  background: var(--ink-soft); border: 1px solid var(--ink-border);
+}
+.fav-type { font-size: 11px; color: var(--paper-dim); background: rgba(255,255,255,0.05); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.fav-name { flex: 1; font-size: 14px; color: var(--gold-light); font-weight: 600; }
+.fav-remove { border: none; background: transparent; color: var(--paper-dim); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 6px; }
+.fav-remove:hover { color: #e06363; background: rgba(224,99,99,0.12); }
+.naming-fav-actions { display: flex; gap: 8px; margin-top: 6px; }
+
+/* 疆域图拖拽手柄 */
+.fm-drag-dot {
+  fill: #fff; stroke: var(--gold); stroke-width: 2.5;
+  cursor: grab; opacity: 0.9;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+.fm-drag-dot:hover { fill: var(--gold); }
+#factionmap-drag-toggle.active { background: var(--gold); color: #1a140a; border-color: var(--gold); }
+

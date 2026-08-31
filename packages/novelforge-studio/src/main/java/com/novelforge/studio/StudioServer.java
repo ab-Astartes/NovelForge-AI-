@@ -31,6 +31,10 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -302,6 +306,9 @@ public class StudioServer {
         server.createContext("/api/graph", corsWrap(this::handleGraphApi));
         server.createContext("/api/faction-map", corsWrap(this::handleFactionMapApi));
         server.createContext("/api/naming", corsWrap(this::handleNamingApi));
+        server.createContext("/api/naming/save", corsWrap(this::handleNamingSaveApi));
+        server.createContext("/api/ollama/models", corsWrap(this::handleOllamaModelsApi));
+        server.createContext("/api/ollama/health", corsWrap(this::handleOllamaHealthApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -3407,6 +3414,12 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         NAMING_STYLE_DESC.put("classic", "古典文雅");
         NAMING_STYLE_DESC.put("fierce", "凶煞凌厉");
         NAMING_STYLE_DESC.put("elegant", "清丽雅致");
+        // —— 第六轮新增：恐怖 / 科幻 / 奇幻 / 神秘 / 诡异 ——
+        NAMING_STYLE_DESC.put("horror", "恐怖惊悚");
+        NAMING_STYLE_DESC.put("scifi", "科幻硬核");
+        NAMING_STYLE_DESC.put("fantasy", "奇幻瑰丽");
+        NAMING_STYLE_DESC.put("mystery", "神秘悬疑");
+        NAMING_STYLE_DESC.put("eerie", "诡异怪谈");
     }
 
     private static final java.util.Map<String, String[]> NAMING_GIVEN = new java.util.LinkedHashMap<>();
@@ -3417,6 +3430,12 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         NAMING_GIVEN.put("classic", new String[]{"瑾","瑜","琰","珩","珂","瑶","璋","璇","诗","书","礼","乐","润","彦","睿","哲","翰","霖","楚","晏","徽","翊"});
         NAMING_GIVEN.put("fierce", new String[]{"煞","冥","幽","血","骨","魂","殇","灭","寂","枯","寒","刑","斩","黯","凄","狱","夜","霜","戮","绝","枭","魇"});
         NAMING_GIVEN.put("elegant", new String[]{"芷","兰","荷","露","月","笙","弦","婉","嫣","霏","绮","黛","韵","绾","婳","汐","苓","苒","缦","纭","媱","翎"});
+        // —— 第六轮新增风格字池（均为单字，拼接为字号）——
+        NAMING_GIVEN.put("horror", new String[]{"尸","血","骨","咒","煞","怨","棺","魇","凄","黯","晦","冥","疫","疡","髓","蛊","怖","殁","瘴","髑","祟","殇"});
+        NAMING_GIVEN.put("scifi", new String[]{"星","舰","弦","码","芯","枢","维","熵","极","曦","寰","岚","崖","澈","湛","煜","烁","烁","璇","珂","琅","珀"});
+        NAMING_GIVEN.put("fantasy", new String[]{"璃","鳞","冠","蕾","薇","晶","歌","蔻","翎","瑟","缇","梵","檀","珈","璎","珑","旎","绯","霁","蘅","玥","珣"});
+        NAMING_GIVEN.put("mystery", new String[]{"谜","雾","影","秘","幻","符","隐","渊","寂","谲","邃","翳","杳","寞","澜","黯","幽","徊","岚","霭","澹","澈"});
+        NAMING_GIVEN.put("eerie", new String[]{"诡","畸","裂","呓","蜃","错","悖","魇","魍","魉","黯","黠","瘆","愔","惘","悚","悱","惚","杳","冥","晦","祟"});
     }
 
     private static final String[] NAMING_FEM_PREFIX = {"婉","嫣","芷","兰","月","笙","弦","露","霏","绮","黛","韵","绾","婳","汐","苓","苒","缦","瑶","璇","翎","媱"};
@@ -3439,6 +3458,15 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             "苓=茯苓灵秀","苒=荏苒时光","缦=缦立远视","纭=纷纭多姿","媱=媱娥仙姿","翎=翠翎轻扬"
         };
         for (String s : g) { int i = s.indexOf('='); NAMING_GLOSS.put(s.substring(0, i), s.substring(i + 1)); }
+        // —— 第六轮新增风格字释义 ——
+        String[] g2 = {
+            "尸=尸山血海","血=血气方殷","骨=铮铮铁骨","咒=咒术缠身","煞=凶煞凌厉","怨=怨念难消","棺=棺柩沉沉","魇=梦魇缠身","凄=凄清孤高","黯=黯然销魂","晦=晦暗不明","冥=幽冥莫测","疫=瘟疫横行","疡=溃疡不愈","髓=髓海深邃","蛊=蛊毒诡秘","怖=惊怖悚然","殁=殁于幽暗","瘴=瘴气弥漫","髑=髑髅森森","祟=鬼祟作乱","殇=国殇悲壮",
+            "舰=星舰巡游","码=代码如织","芯=晶芯内蕴","枢=枢机运转","维=维度交错","熵=熵增无序","寰=寰宇浩渺","崖=崖岸嵯峨","湛=湛蓝澄澈","煜=煜煜生辉","烁=闪烁流光","璇=璇玑玉衡","珂=鸣珂锵玉","琅=琅玕美玉","珀=琥珀温润",
+            "璃=琉璃剔透","鳞=龙鳞生辉","冠=冠冕堂皇","蕾=花蕾待放","薇=紫薇馥郁","晶=晶石璀璨","歌=歌吟悠远","蔻=豆蔻梢头","翎=翠翎轻扬","瑟=锦瑟华年","缇=缇绮流光","梵=梵音清远","檀=檀香袅袅","珈=珈蓝宝相","璎=璎珞垂珠","珑=玲珑剔透","旎=旖旎风光","绯=绯色灼灼","霁=霁月清风","蘅=蘅皋杜若","玥=玥玉含光","珣=珣玗美石",
+            "谜=谜团深锁","雾=雾隐迷蒙","谲=诡谲多变","邃=深邃难测","翳=翳影蔽日","杳=杳渺无踪","寞=寂寞清寒","澜=波澜暗涌","徊=徘徊往复","岚=山岚氤氲","霭=暮霭沉沉","澹=澹泊宁静",
+            "诡=诡谲莫测","畸=畸零异形","裂=裂隙横生","呓=呓语喃喃","蜃=蜃楼虚幻","错=错乱颠倒","悖=悖谬乖离","魍=魍魉徘徊","魉=魉魅随形","黠=黠慧狡黠","瘆=瘆人寒意","愔=愔愔寂然","惘=惘然若失","悚=悚然生惧","悱=悱恻缠绵","惚=惚兮恍兮"
+        };
+        for (String s : g2) { int i = s.indexOf('='); NAMING_GLOSS.put(s.substring(0, i), s.substring(i + 1)); }
     }
 
     private static final String[] SKILL_PREFIX = {"太乙","玄冥","九幽","焚天","天罡","紫霄","太虚","两仪","三才","四象","五行","六合","七星","八卦","无极","浑天","凌霄","碧落","黄泉","沧海","北冥","昆仑"};
@@ -3459,6 +3487,73 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
     private static final String[] MOUNT_IMG = {"踏云","追风","凌霄","焚天","裂空","墨鳞","赤焰","玄霜","惊雷","逐月","栖霞","饮涧","御风","星驰","踏雪","破空","游霄","贯日"};
     private static final String[] MOUNT_SP = {"麒麟","白虎","青鸾","龙驹","玄狼","雷鹰","朱雀","玄武","白泽","狻猊","貔貅","天马","火凤","玉蟾","蛟","鹏","鲲","猊","驺虞","角端"};
+
+    // —— 第六轮：按风格着色的词池（恐怖/科幻/奇幻/神秘/诡异），命中即用，未命中回退默认池 ——
+    private static final java.util.Map<String, String[]> SKILL_PREFIX_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> SKILL_CORE_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> ITEM_MAT_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> ITEM_OBJ_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> WEAPON_IMG_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> FACTION_TERR_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> FACTION_SUF_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> MOUNT_IMG_BY_STYLE = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<String, String[]> MOUNT_SP_BY_STYLE = new java.util.LinkedHashMap<>();
+    static {
+        SKILL_PREFIX_BY_STYLE.put("horror", new String[]{"血祭","亡灵","诅咒","噬魂","腐朽","怨念","骨咒","冥河","煞血","尸傀"});
+        SKILL_PREFIX_BY_STYLE.put("scifi", new String[]{"量子","星舰","曲速","纳米","基因","引力","熵增","矩阵","数据","脉冲"});
+        SKILL_PREFIX_BY_STYLE.put("fantasy", new String[]{"精灵","巨龙","符文","圣光","奥术","德鲁伊","秘银","元素","自然","星辉"});
+        SKILL_PREFIX_BY_STYLE.put("mystery", new String[]{"迷雾","幻影","秘仪","星象","虚空","低语","回响","命轮","残像","卦象"});
+        SKILL_PREFIX_BY_STYLE.put("eerie", new String[]{"诡谲","错乱","畸变","呓语","裂瞳","幽冥","蜃楼","悖谬","畸零","幻肢"});
+
+        SKILL_CORE_BY_STYLE.put("horror", new String[]{"咒","噬","葬","蚀","煞","怨","血祭"});
+        SKILL_CORE_BY_STYLE.put("scifi", new String[]{"弦","场","网","链","核","波","码"});
+        SKILL_CORE_BY_STYLE.put("fantasy", new String[]{"术","歌","印","光","鳞","冠","誓"});
+        SKILL_CORE_BY_STYLE.put("mystery", new String[]{"影","谜","卦","象","符","秘","回"});
+        SKILL_CORE_BY_STYLE.put("eerie", new String[]{"裂","畸","诡","呓","蜃","悖"});
+
+        ITEM_MAT_BY_STYLE.put("horror", new String[]{"枯骨","怨血","腐朽","尸","咒","幽冥"});
+        ITEM_MAT_BY_STYLE.put("scifi", new String[]{"量子","纳米","能量","合金","机甲","义体","芯片","反应堆"});
+        ITEM_MAT_BY_STYLE.put("fantasy", new String[]{"精灵","龙鳞","秘银","符文","圣晶","神木","星辉"});
+        ITEM_MAT_BY_STYLE.put("mystery", new String[]{"星盘","罗盘","秘典","符印","残卷","幻"});
+        ITEM_MAT_BY_STYLE.put("eerie", new String[]{"畸","呓","裂","诡","蜃","错"});
+        ITEM_OBJ_BY_STYLE.put("horror", new String[]{"棺","颅","瓶","幡","偶","匣","珠","铃"});
+        ITEM_OBJ_BY_STYLE.put("scifi", new String[]{"核","芯","舱","甲","仪","片","阵","端"});
+        ITEM_OBJ_BY_STYLE.put("fantasy", new String[]{"冠","杖","匣","晶","铃","盘","卷","圭"});
+        ITEM_OBJ_BY_STYLE.put("mystery", new String[]{"盘","典","镜","印","卷","珠","匣"});
+        ITEM_OBJ_BY_STYLE.put("eerie", new String[]{"匣","镜","偶","珠","卷","铃"});
+
+        WEAPON_IMG_BY_STYLE.put("horror", new String[]{"噬魂","饮血","碎骨","哀嚎","锈刃","怨灵"});
+        WEAPON_IMG_BY_STYLE.put("scifi", new String[]{"脉冲","激光","离子","磁轨","湮灭","量子"});
+        WEAPON_IMG_BY_STYLE.put("fantasy", new String[]{"龙牙","精灵","符文","圣光","秘银"});
+        WEAPON_IMG_BY_STYLE.put("mystery", new String[]{"幻影","星陨","残响","秘银"});
+        WEAPON_IMG_BY_STYLE.put("eerie", new String[]{"裂瞳","呓语","畸变","诡刃"});
+
+        FACTION_TERR_BY_STYLE.put("horror", new String[]{"血月","枯骨","亡灵","怨灵","幽冥","尸潮"});
+        FACTION_TERR_BY_STYLE.put("scifi", new String[]{"星舰","轨道","银河","矩阵","赛博","新京"});
+        FACTION_TERR_BY_STYLE.put("fantasy", new String[]{"精灵","龙裔","秘银","符文","圣光","星陨"});
+        FACTION_TERR_BY_STYLE.put("mystery", new String[]{"迷雾","星象","秘社","虚空","低语"});
+        FACTION_TERR_BY_STYLE.put("eerie", new String[]{"诡域","裂界","畸零","呓语","蜃楼"});
+        FACTION_SUF_BY_STYLE.put("horror", new String[]{"教团","墓域","血族","瘟疫","魔渊"});
+        FACTION_SUF_BY_STYLE.put("scifi", new String[]{"联邦","财团","议会","公司","枢纽"});
+        FACTION_SUF_BY_STYLE.put("fantasy", new String[]{"王国","议会","圣堂","同盟","林地"});
+        FACTION_SUF_BY_STYLE.put("mystery", new String[]{"学会","结社","圣殿","隐会","秘社"});
+        FACTION_SUF_BY_STYLE.put("eerie", new String[]{"异教","错会","诡社","畸盟"});
+
+        MOUNT_IMG_BY_STYLE.put("horror", new String[]{"骨翼","尸鸦","怨灵","幽骑"});
+        MOUNT_IMG_BY_STYLE.put("scifi", new String[]{"机甲","悬浮","反重力","光翼"});
+        MOUNT_IMG_BY_STYLE.put("fantasy", new String[]{"龙裔","独角","狮鹫","飞马"});
+        MOUNT_IMG_BY_STYLE.put("mystery", new String[]{"星兽","幻驹","秘鳞"});
+        MOUNT_IMG_BY_STYLE.put("eerie", new String[]{"畸兽","呓影","裂空"});
+        MOUNT_SP_BY_STYLE.put("horror", new String[]{"骸骨","亡魂","尸鸦","魇马"});
+        MOUNT_SP_BY_STYLE.put("scifi", new String[]{"机甲兽","悬浮车","光翼兽","纳米兽"});
+        MOUNT_SP_BY_STYLE.put("fantasy", new String[]{"巨龙","独角兽","狮鹫","飞马","雪豹"});
+        MOUNT_SP_BY_STYLE.put("mystery", new String[]{"星兽","幻驹","秘鳞兽"});
+        MOUNT_SP_BY_STYLE.put("eerie", new String[]{"畸兽","呓影","裂空兽"});
+    }
+
+    private static String[] stylePool(java.util.Map<String, String[]> m, String style, String[] def) {
+        String[] v = m.get(style); return v != null ? v : def;
+    }
 
     private final java.util.concurrent.ThreadLocalRandom namingRnd = java.util.concurrent.ThreadLocalRandom.current();
 
@@ -3500,7 +3595,11 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             if (Files.exists(charsFile)) {
                 try {
                     JsonNode arr = mapper.readTree(Files.readAllBytes(charsFile));
-                    if (arr.isArray()) for (JsonNode n : arr) { String nm = n.path("name").asText("").trim(); if (!nm.isEmpty()) existing.add(nm); }
+                    java.util.Iterator<JsonNode> it = null;
+                    if (arr.isArray()) it = arr.elements();
+                    else if (arr.isObject() && arr.path("characters").isArray()) it = arr.path("characters").elements();
+                    else if (arr.isObject()) { java.util.Iterator<String> ks = arr.fieldNames(); while (ks.hasNext()) existing.add(ks.next()); }
+                    if (it != null) while (it.hasNext()) { String nm = it.next().path("name").asText("").trim(); if (!nm.isEmpty()) existing.add(nm); }
                 } catch (Exception ignore) {}
             }
         }
@@ -3547,7 +3646,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                     return new String[]{name, "【" + styleLabel + "】" + sur + "姓，取「" + given + "」为意，依用户关键字而定。"};
                 }
                 int n = namingRnd.nextDouble() < 0.35 ? 1 : 2;
-                String g1 = npick(poolArr);
+                // 首字必取风格主池，保证风格辨识度；次字可从性别扩展池取
+                String g1 = npick(base);
                 StringBuilder gb = new StringBuilder(g1);
                 if (n == 2) { String g2 = npick(poolArr); int t = 0; while (g2.equals(g1) && t++ < 8) g2 = npick(poolArr); gb.append(g2); }
                 String given = gb.toString();
@@ -3557,8 +3657,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             case "skill": {
                 String name; String meaning;
                 if (namingRnd.nextBoolean()) {
-                    String prefix = npick(SKILL_PREFIX);
-                    String core = npick(SKILL_CORE);
+                    String prefix = npick(stylePool(SKILL_PREFIX_BY_STYLE, style, SKILL_PREFIX));
+                    String core = npick(stylePool(SKILL_CORE_BY_STYLE, style, SKILL_CORE));
                     String suffix = npick(SKILL_SUFFIX);
                     name = prefix + core + suffix;
                     meaning = "【" + styleLabel + "】" + prefix + "门意境，以" + core + "为体，" + suffix + "成法，威力深不可测。";
@@ -3573,29 +3673,35 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             }
             case "item": {
                 String grade = namingRnd.nextDouble() < 0.5 ? npick(ITEM_GRADE) : "";
-                String mat = npick(ITEM_MAT);
-                String obj = npick(ITEM_OBJ);
+                String mat = npick(stylePool(ITEM_MAT_BY_STYLE, style, ITEM_MAT));
+                String obj = npick(stylePool(ITEM_OBJ_BY_STYLE, style, ITEM_OBJ));
                 String name = grade + mat + obj;
                 String meaning = "【" + (grade.isEmpty() ? "灵物" : grade) + "】以" + mat + "所制" + obj + "，光华内蕴，灵性自生。";
                 return withKeyword(name, meaning, keyword);
             }
             case "weapon": {
-                String img = npick(WEAPON_IMG);
+                String img = npick(stylePool(WEAPON_IMG_BY_STYLE, style, WEAPON_IMG));
                 String cls = npick(WEAPON_CLS);
                 String name = img + cls;
                 String meaning = "【神兵】" + img + "之" + cls + "，锋锐无匹，饮血封喉。";
                 return withKeyword(name, meaning, keyword);
             }
             case "faction": {
-                String terr = npick(FACTION_TERR);
-                String suf = npick(FACTION_SUF);
+                String terr = npick(stylePool(FACTION_TERR_BY_STYLE, style, FACTION_TERR));
+                String suf = npick(stylePool(FACTION_SUF_BY_STYLE, style, FACTION_SUF));
                 String name = terr + suf;
                 String meaning = "【势力】据" + terr + "之地而立" + suf + "，号令一方，威震四海。";
                 return withKeyword(name, meaning, keyword);
             }
             case "mount": {
-                String img = npick(MOUNT_IMG);
-                String sp = npick(MOUNT_SP);
+                String img = npick(stylePool(MOUNT_IMG_BY_STYLE, style, MOUNT_IMG));
+                String sp = npick(stylePool(MOUNT_SP_BY_STYLE, style, MOUNT_SP));
+                // 避免叠加重复词（如「狮鹫狮鹫」）：img 与 sp 相同或互含时直接用 sp
+                if (sp.contains(img) || img.contains(sp)) {
+                    String name = sp;
+                    String meaning = "【坐骑】" + name + "，神骏通灵，日行万里。";
+                    return withKeyword(name, meaning, keyword);
+                }
                 String name = img + sp;
                 String meaning = "【坐骑】" + img + sp + "，神骏通灵，日行万里。";
                 return withKeyword(name, meaning, keyword);
@@ -3620,6 +3726,139 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         if (sb.length() == 0) sb.append("寓意清雅出尘");
         else sb.setLength(sb.length() - 1);
         return sb.toString();
+    }
+
+    // ===================== 取名收藏 / 批量落库 =====================
+
+    private void handleNamingSaveApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String path = body.path("path").asText("").trim();
+            String target = body.path("target").asText("favorites").trim();
+            JsonNode entries = body.path("entries");
+            if (path.isEmpty() || !isPathWithinBooksRoot(path)) {
+                sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("ok", false).put("error", "无效书目路径")));
+                return;
+            }
+            if (!entries.isArray()) {
+                sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("ok", false).put("error", "entries 必须是数组")));
+                return;
+            }
+            Path bookDir = Paths.get(path);
+            Path truthDir = bookDir.resolve("truth");
+            Files.createDirectories(truthDir);
+            int saved = 0, skipped = 0;
+            if ("characters".equals(target)) {
+                Path charsFile = truthDir.resolve("characters.json");
+                java.util.List<ObjectNode> list = new java.util.ArrayList<>();
+                java.util.Set<String> existNames = new java.util.HashSet<>();
+                if (Files.exists(charsFile)) {
+                    JsonNode existing = mapper.readTree(Files.readAllBytes(charsFile));
+                    if (existing.isArray()) {
+                        for (JsonNode n : existing) { list.add((ObjectNode) n.deepCopy()); if (n.has("name")) existNames.add(n.path("name").asText("")); }
+                    } else if (existing.isObject() && existing.path("characters").isArray()) {
+                        // 标准形态 {"characters":[{name,description},...]}
+                        for (JsonNode n : existing.path("characters")) { list.add((ObjectNode) n.deepCopy()); if (n.has("name")) existNames.add(n.path("name").asText("")); }
+                    } else if (existing.isObject()) {
+                        // 兼容 {"张三":{...}} 映射形态
+                        java.util.Iterator<String> it = existing.fieldNames();
+                        while (it.hasNext()) { String k = it.next(); ObjectNode o = mapper.createObjectNode(); o.put("name", k); list.add(o); existNames.add(k); }
+                    }
+                }
+                for (JsonNode e : entries) {
+                    if (!"person".equals(e.path("type").asText(""))) continue;
+                    String nm = e.path("name").asText("").trim();
+                    if (nm.isEmpty() || existNames.contains(nm)) { skipped++; continue; }
+                    ObjectNode o = mapper.createObjectNode();
+                    o.put("name", nm);
+                    o.put("role", "（取名器生成）");
+                    if (e.has("meaning")) o.put("meaning", e.path("meaning").asText(""));
+                    o.put("source", "naming");
+                    list.add(o); existNames.add(nm); saved++;
+                }
+                ObjectNode root = mapper.createObjectNode();
+                ArrayNode arr = mapper.createArrayNode();
+                for (ObjectNode o : list) arr.add(o);
+                root.set("characters", arr);   // 写回标准形态 {"characters":[...]}，与既有 ledger 兼容
+                Files.write(charsFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root));
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                        .put("ok", true).put("target", "characters").put("saved", saved).put("skipped", skipped)
+                        .put("message", "已导入 " + saved + " 个角色，跳过 " + skipped + " 个（重名或非人物）")));
+            } else {
+                Path favFile = truthDir.resolve("naming_favorites.json");
+                java.util.List<ObjectNode> list = new java.util.ArrayList<>();
+                if (Files.exists(favFile)) {
+                    JsonNode existing = mapper.readTree(Files.readAllBytes(favFile));
+                    if (existing.isArray()) for (JsonNode n : existing) list.add((ObjectNode) n.deepCopy());
+                }
+                for (JsonNode e : entries) {
+                    String nm = e.path("name").asText("").trim();
+                    if (nm.isEmpty()) { skipped++; continue; }
+                    ObjectNode o = mapper.createObjectNode();
+                    o.put("type", e.path("type").asText(""));
+                    o.put("name", nm);
+                    if (e.has("meaning")) o.put("meaning", e.path("meaning").asText(""));
+                    list.add(o); saved++;
+                }
+                ArrayNode arr = mapper.createArrayNode();
+                for (ObjectNode o : list) arr.add(o);
+                Files.write(favFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(arr));
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                        .put("ok", true).put("target", "favorites").put("saved", saved).put("skipped", skipped)
+                        .put("message", "已收藏 " + saved + " 条到素材库（naming_favorites.json）")));
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    // ===================== Ollama 离线链路 =====================
+
+    private void handleOllamaModelsApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String q = exchange.getRequestURI().getQuery();
+        String base = getQueryParam(q, "baseUrl");
+        if (base == null || base.isBlank()) base = "http://localhost:11434";
+        try {
+            String resp = ollamaGet(base, "/api/tags");
+            JsonNode node = mapper.readTree(resp);
+            java.util.List<String> models = new java.util.ArrayList<>();
+            JsonNode ms = node.path("models");
+            if (ms.isArray()) for (JsonNode m : ms) models.add(m.path("name").asText(""));
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                    .put("ok", true).put("baseUrl", base).put("count", models.size()).set("models", mapper.valueToTree(models))));
+        } catch (Exception e) {
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                    .put("ok", false).put("baseUrl", base).put("error", e.getMessage()).set("models", mapper.createArrayNode())));
+        }
+    }
+
+    private void handleOllamaHealthApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String q = exchange.getRequestURI().getQuery();
+        String base = getQueryParam(q, "baseUrl");
+        if (base == null || base.isBlank()) base = "http://localhost:11434";
+        try {
+            String resp = ollamaGet(base, "/api/tags");
+            JsonNode node = mapper.readTree(resp);
+            int count = node.path("models").isArray() ? node.path("models").size() : 0;
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                    .put("ok", true).put("reachable", true).put("baseUrl", base).put("count", count)));
+        } catch (Exception e) {
+            sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                    .put("ok", true).put("reachable", false).put("baseUrl", base).put("error", e.getMessage())));
+        }
+    }
+
+    private String ollamaGet(String baseUrl, String path) throws Exception {
+        String url = baseUrl.replaceAll("/+$", "") + path;
+        HttpClient hc = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).build();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url))
+                .header("Accept", "application/json").GET().timeout(java.time.Duration.ofSeconds(8)).build();
+        HttpResponse<String> resp = hc.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() >= 400) throw new RuntimeException("Ollama HTTP " + resp.statusCode());
+        return resp.body();
     }
 
     private boolean containsText(JsonNode arr, String s) {

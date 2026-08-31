@@ -62,6 +62,7 @@ public class ModelRouter {
         switch (config.provider()) {
             case "openai":   return new OpenAiClient(config.baseUrl(), config.apiKey());
             case "anthropic": return new AnthropicClient(config.baseUrl(), config.apiKey());
+            case "ollama":   return new OpenAiClient(config.baseUrl(), config.apiKey()); // Ollama 暴露 OpenAI 兼容 /v1 端点
             default:         return new OpenAiClient(config.baseUrl(), config.apiKey()); // custom = OpenAI-compatible
         }
     }

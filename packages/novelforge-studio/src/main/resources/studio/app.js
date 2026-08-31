@@ -230,7 +230,8 @@ const BUILTIN_PROVIDERS = {
   qwen:      { name: '通义千问',   baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-max' },
   glm:       { name: '智谱GLM',   baseUrl: 'https://open.bigmodel.cn/api/paas/v4',               model: 'glm-4' },
   kimi:      { name: 'Moonshot',  baseUrl: 'https://api.moonshot.cn/v1',                          model: 'moonshot-v1-8k' },
-  minimax:   { name: 'MiniMax',   baseUrl: 'https://api.minimax.chat/v1',                         model: 'abab6.5s-chat' }
+  minimax:   { name: 'MiniMax',   baseUrl: 'https://api.minimax.chat/v1',                         model: 'abab6.5s-chat' },
+  ollama:    { name: 'Ollama',    baseUrl: 'http://localhost:11434/v1',                           model: 'qwen2.5:7b' }
 };
 
 function applyProviderPreset(key) {
@@ -257,6 +258,35 @@ function applyProviderPreset(key) {
     }
   }
   showToast('已切换到 ' + p.name + ' (' + p.model + ')', 'success', 2000);
+}
+
+// ========== Ollama 离线链路：检测本地模型 ==========
+function detectOllamaModels(btn) {
+  const baseEl = document.getElementById('cfg-global-baseurl');
+  const modelEl = document.getElementById('cfg-global-model');
+  const base = (baseEl && baseEl.value.trim()) || 'http://localhost:11434/v1';
+  // Ollama 管理端口是 :11434（不带 /v1），这里把 base 规整到主机根
+  const m = base.match(/^(https?:\/\/[^/]+)/);
+  const root = m ? m[1] : 'http://localhost:11434';
+  if (btn) { btn.disabled = true; btn.textContent = '检测中…'; }
+  fetch(authUrl(API + '/api/ollama/models?baseUrl=' + encodeURIComponent(root)))
+    .then(r => r.json()).then(j => {
+      if (j.ok && j.models && j.models.length) {
+        if (modelEl) {
+          modelEl.value = j.models[0];
+          // 用 datalist 提供候选
+          let dl = document.getElementById('ollama-models-list');
+          if (!dl) { dl = document.createElement('datalist'); dl.id = 'ollama-models-list'; modelEl.setAttribute('list', 'ollama-models-list'); document.body.appendChild(dl); }
+          dl.innerHTML = j.models.map(n => '<option value="' + escapeHtml(n) + '">').join('');
+        }
+        sharedConfig.modelId = j.models[0];
+        showToast('检测到 ' + j.models.length + ' 个本地模型，已填入首个：' + j.models[0], 'success');
+      } else {
+        showToast('未检测到 Ollama 模型：' + (j.error || 'Ollama 未运行？'), 'warning');
+      }
+    })
+    .catch(e => showToast('检测失败：' + e.message, 'error'))
+    .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '🔍 检测本地 Ollama 模型'; } });
 }
 
 

@@ -977,18 +977,21 @@
                 <button class="provider-btn" onclick="applyProviderPreset('glm')">智谱GLM</button>
                 <button class="provider-btn" onclick="applyProviderPreset('kimi')">Moonshot</button>
                 <button class="provider-btn" onclick="applyProviderPreset('minimax')">MiniMax</button>
+                <button class="provider-btn" onclick="applyProviderPreset('ollama')">Ollama</button>
               </div>
 <div class="form-group">
               <label class="form-label">Provider</label>
               <select id="cfg-global-provider" class="input-field">
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
+                <option value="ollama">Ollama（本地离线）</option>
                 <option value="custom">自定义</option>
               </select>
             </div>
             <div class="form-group">
               <label class="form-label">Model</label>
               <input type="text" id="cfg-global-model" class="input-field" value="gpt-4o">
+              <div style="margin-top:6px"><button class="btn-ghost btn-sm" onclick="detectOllamaModels(this)">🔍 检测本地 Ollama 模型</button></div>
             </div>
             <div class="form-group">
               <label class="form-label">Base URL</label>
@@ -1212,6 +1215,8 @@
           <select id="factionmap-book" class="input-field gbs-select" style="min-width:220px"><option value="">（选择书籍）</option></select>
           <button class="btn-ink btn-sm" onclick="loadFactionMap()">⟳ 刷新地图</button>
           <button class="btn-ghost btn-sm" onclick="relayoutFactionMap()">↺ 重新布局</button>
+          <button id="factionmap-drag-toggle" class="btn-ghost btn-sm" onclick="toggleFmDrag()">🖐 拖拽调整</button>
+          <button class="btn-ink btn-sm" onclick="exportFmPng()">💾 导出 PNG</button>
           <span id="factionmap-stats" class="graph-stats"></span>
         </div>
 
@@ -1286,6 +1291,17 @@
 
           <div id="naming-results" class="naming-results">
             <div class="empty-hint">选择类别与风格，点击「生成名称」获取灵感。</div>
+          </div>
+
+          <div class="naming-favs-card card">
+            <div class="card-title"><span class="card-icon">♥</span> 收藏夹（<span id="naming-fav-count">0</span>）</div>
+            <div id="naming-favs" class="naming-favs">
+              <div class="card-hint">点击结果卡片上的 ♡ 收藏名称，可在此批量落库。</div>
+            </div>
+            <div class="naming-fav-actions">
+              <button class="btn-ghost btn-sm" onclick="saveNamingFavs('favorites')">💾 收藏到素材库</button>
+              <button class="btn-ink btn-sm" onclick="saveNamingFavs('characters')">📥 批量落库角色表</button>
+            </div>
           </div>
         </div>
       </section>

@@ -20,6 +20,9 @@ let fmData = null;          // 后端原始数据 {factions, relations, stats}
 let fmSelected = null;      // 当前选中势力名
 let fmSeedPts = [];         // Voronoi 种子点 [{x,y,faction}]
 let fmCells = [];           // 计算好的单元 [{points:[[x,y],...], faction, cx, cy}]
+let fmDragMode = false;     // 拖拽调整势力中心模式
+let fmDragging = null;      // 当前正在拖拽的势力名
+let fmSeedOverride = new Map();   // faction -> {x,y} 手动调整的势力中心
 const FM_W = 920, FM_H = 620;   // 地图画布逻辑尺寸
 
 // ========== 数据加载 ==========
@@ -44,6 +47,8 @@ async function loadFactionMap() {
     if (!data.ok) throw new Error(data.error || '加载失败');
     fmData = data;
     fmSelected = null;
+    fmSeedOverride = new Map();   // 新数据重置手动调整
+    fmDragMode = false;
     if (statsEl) {
       const s = data.stats || {};
       statsEl.textContent =
@@ -128,11 +133,10 @@ function fmCellCenter(pts) {
   return { x: sx / pts.length, y: sy / pts.length };
 }
 
-/** 生成 Voronoi 单元：格点布局（重要势力居中）+ 权重控抖动（权重高=块大稳定）。 */
-function computeFactionCells(factions) {
+/** 默认格点布局（重要势力居中）+ 权重控抖动（权重高=块大稳定）。 */
+function fmBuildSeeds(factions) {
   const n = factions.length;
   if (n === 0) return [];
-  // 格点：按距画布中心距离排序，重要势力（weight 高）优先取中心格 → 核心势力居中
   const cols = Math.max(1, Math.ceil(Math.sqrt(n * 1.6)));
   const rows = Math.max(1, Math.ceil(n / cols));
   const grid = [];
@@ -146,7 +150,7 @@ function computeFactionCells(factions) {
   }
   grid.sort((a, b) => a.d - b.d);
   const rng = mulberry32(factions.reduce((s, f) => s + (f.name ? f.name.length : 1), 7));
-  const seeds = factions.map((f, i) => {
+  return factions.map((f, i) => {
     const g = grid[Math.min(i, grid.length - 1)];
     const jitter = Math.max(0, 1 - (f.weight || 1) / 6) * 90;   // 权重越高扰动越小 → 色块越大越稳
     return {
@@ -154,6 +158,17 @@ function computeFactionCells(factions) {
       y: Math.max(30, Math.min(FM_H - 30, g.y + (rng() - 0.5) * jitter)),
       faction: f.name, weight: f.weight || 1
     };
+  });
+}
+
+/** 生成 Voronoi 单元；override 为手动拖拽调整后的势力中心（faction -> {x,y}）。 */
+function computeFactionCells(factions, override) {
+  const n = factions.length;
+  if (n === 0) return [];
+  const base = fmBuildSeeds(factions);
+  const seeds = base.map(s => {
+    const o = override && override.get(s.faction);
+    return o ? { x: o.x, y: o.y, faction: s.faction, weight: s.weight } : s;
   });
   // Voronoi 裁剪（Sutherland–Hodgman 半平面求交）
   const rect = [
@@ -202,7 +217,7 @@ function renderFactionMap() {
     renderFactionLegend([]);
     return;
   }
-  const cells = computeFactionCells(factions);
+  const cells = computeFactionCells(factions, fmSeedOverride);
   fmCells = cells;
   fmSeedPts = cells.map(c => ({ x: c.cx, y: c.cy, faction: c.faction }));
 
@@ -293,6 +308,9 @@ function renderFactionMap() {
     t1.setAttribute('text-anchor', 'middle');
     t1.setAttribute('class', 'fm-label-main');
     t1.setAttribute('fill', FM_COLORS.textStrong);
+    t1.setAttribute('font-size', '15');
+    t1.setAttribute('font-weight', '700');
+    t1.setAttribute('font-family', 'sans-serif');
     t1.textContent = f.name;
     labelG.appendChild(t1);
     const sub = document.createElementNS(svgNS, 'text');
@@ -300,6 +318,8 @@ function renderFactionMap() {
     sub.setAttribute('text-anchor', 'middle');
     sub.setAttribute('class', 'fm-label-sub');
     sub.setAttribute('fill', FM_COLORS.text);
+    sub.setAttribute('font-size', '11');
+    sub.setAttribute('font-family', 'sans-serif');
     const subTxt = [];
     if (f.domain) subTxt.push(f.domain);
     if (f.subordinates && f.subordinates.length) subTxt.push('辖' + f.subordinates.length);
@@ -308,6 +328,19 @@ function renderFactionMap() {
     labelG.appendChild(sub);
   });
   svg.appendChild(labelG);
+
+  // 拖拽调整模式：在每个势力中心渲染可拖动手柄
+  if (fmDragMode) {
+    cells.forEach(c => {
+      const dot = document.createElementNS(svgNS, 'circle');
+      dot.setAttribute('cx', c.cx); dot.setAttribute('cy', c.cy);
+      dot.setAttribute('r', 7);
+      dot.setAttribute('class', 'fm-drag-dot');
+      dot.setAttribute('data-faction', c.faction);
+      dot.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault(); fmDragging = c.faction; });
+      svg.appendChild(dot);
+    });
+  }
 
   // 交互：hover 高亮 + tooltip；点击选中
   const tooltip = document.getElementById('factionmap-tooltip');
@@ -356,6 +389,7 @@ function renderFactionMap() {
     });
   });
   svg.addEventListener('click', (evt) => {
+    if (fmDragMode) return;   // 拖拽模式下点击不触发选中
     const fname = hit(evt);
     if (fname) {
       fmSelected = fmSelected === fname ? null : fname;
@@ -438,4 +472,70 @@ function renderFactionDetail(name) {
     }).join(' ') + '</div>';
   }
   el.innerHTML = html;
+}
+
+// ========== 拖拽调整势力中心 ==========
+
+function toggleFmDrag() {
+  fmDragMode = !fmDragMode;
+  const btn = document.getElementById('factionmap-drag-toggle');
+  if (btn) btn.classList.toggle('active', fmDragMode);
+  renderFactionMap();
+}
+
+function fmSvgPoint(svg, evt) {
+  const rect = svg.getBoundingClientRect();
+  return {
+    x: (evt.clientX - rect.left) / rect.width * FM_W,
+    y: (evt.clientY - rect.top) / rect.height * FM_H
+  };
+}
+
+// 全局拖拽：仅在按住手柄时重算 Voronoi
+window.addEventListener('mousemove', (evt) => {
+  if (!fmDragging) return;
+  const svg = document.querySelector('#factionmap-canvas svg');
+  if (!svg) return;
+  const p = fmSvgPoint(svg, evt);
+  fmSeedOverride.set(fmDragging, {
+    x: Math.max(12, Math.min(FM_W - 12, p.x)),
+    y: Math.max(12, Math.min(FM_H - 12, p.y))
+  });
+  renderFactionMap();
+});
+window.addEventListener('mouseup', () => { fmDragging = null; });
+
+// ========== 导出 PNG ==========
+
+function exportFmPng() {
+  const svg = document.querySelector('#factionmap-canvas svg');
+  if (!svg) { showToast('请先生成地图', 'warning'); return; }
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', FM_W);
+  clone.setAttribute('height', FM_H);
+  const data = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const scale = 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = FM_W * scale; canvas.height = FM_H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = FM_COLORS.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(b => {
+      if (!b) { showToast('导出失败', 'error'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = '实力分布地图_' + (document.getElementById('factionmap-book')?.value.split(/[\\/]/).pop() || 'NovelForge') + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      showToast('已导出高清 PNG（' + (FM_W * scale) + '×' + (FM_H * scale) + '）', 'success');
+    }, 'image/png');
+  };
+  img.onerror = () => { showToast('PNG 渲染失败', 'error'); URL.revokeObjectURL(url); };
+  img.src = url;
 }
