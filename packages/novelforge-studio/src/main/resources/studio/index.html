@@ -46,6 +46,12 @@
       <button onclick="showPanel('naming')" class="sidebar-nav-item" id="nav-naming">
         <span class="nav-icon">✨</span><span class="nav-label">取名</span>
       </button>
+      <button onclick="showPanel('glossary')" class="sidebar-nav-item" id="nav-glossary">
+        <span class="nav-icon">📖</span><span class="nav-label">设定集</span>
+      </button>
+      <button onclick="showPanel('assets')" class="sidebar-nav-item" id="nav-assets">
+        <span class="nav-icon">💰</span><span class="nav-label">账本</span>
+      </button>
       <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
         <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
       </button>
@@ -1306,6 +1312,48 @@
         </div>
       </section>
 
+      <!-- ========== 设定集：术语表自动抽取 ========== -->
+      <section id="panel-glossary" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">设定集 · 术语表</h2>
+          <p class="panel-desc">从正文与设定文件自动抽取人物 / 功法典籍 / 法宝兵器 / 地名 / 境界 / 术语，统计词频与首现章节，并校验「高频未登记」「疑似异写」「低频孤词」三类设定漏洞（纯本地抽取，零 AI 成本）</p>
+        </div>
+
+        <div class="graph-toolbar card">
+          <select id="glossary-book" class="input-field" style="min-width:220px"></select>
+          <button class="btn-ink btn-sm" onclick="loadGlossary()">⟳ 抽取设定</button>
+          <button class="chip" id="glossary-undef-toggle" onclick="toggleGlossaryUndef()">仅未登记</button>
+          <input id="glossary-search" class="input-field" placeholder="搜索名称或释义…" style="max-width:220px" oninput="filterGlossary()" />
+          <button class="btn-ghost btn-sm" onclick="exportGlossary()">⬇ 导出设定集 MD</button>
+          <span id="glossary-stats" class="graph-stats"></span>
+        </div>
+
+        <div id="glossary-types" class="naming-chips" style="margin:12px 0"></div>
+        <div id="glossary-body" class="glossary-body">
+          <div class="empty-hint">选择书目后点击「抽取设定」，自动生成全书设定集。</div>
+        </div>
+      </section>
+
+      <!-- ========== 账本：资源与战力 ========== -->
+      <section id="panel-assets" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">资源与战力账本</h2>
+          <p class="panel-desc">按章抽取灵石 / 丹药 / 贡献点等资源收支并结算余额，追踪人物境界进阶；对「凭空支出」「战力膨胀」「数值无上下文」自动告警。可在 truth/ledger.json 手工补账</p>
+        </div>
+
+        <div class="graph-toolbar card">
+          <select id="assets-book" class="input-field" style="min-width:220px"></select>
+          <button class="btn-ink btn-sm" onclick="loadAssets()">⟳ 结算账本</button>
+          <button class="btn-ghost btn-sm" onclick="exportAssets()">⬇ 导出 CSV</button>
+          <span id="assets-stats" class="graph-stats"></span>
+        </div>
+
+        <div id="assets-tabs" class="naming-chips" style="margin:12px 0"></div>
+        <div id="assets-body" class="ledger-body">
+          <div class="empty-hint">选择书目后点击「结算账本」，自动核算全书资源流水与境界曲线。</div>
+        </div>
+      </section>
+
       <!-- ========== 用量：Token 账单 ========== -->
       <section id="panel-usage" class="panel">
         <div class="panel-header">
@@ -1430,5 +1478,7 @@
 <script src="/graph.js"></script>
 <script src="/factionmap.js"></script>
 <script src="/naming.js"></script>
+<script src="/glossary.js"></script>
+<script src="/ledger.js"></script>
 </body>
 </html>

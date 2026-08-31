@@ -309,6 +309,8 @@ public class StudioServer {
         server.createContext("/api/naming/save", corsWrap(this::handleNamingSaveApi));
         server.createContext("/api/ollama/models", corsWrap(this::handleOllamaModelsApi));
         server.createContext("/api/ollama/health", corsWrap(this::handleOllamaHealthApi));
+        server.createContext("/api/glossary", corsWrap(this::handleGlossaryApi));
+        server.createContext("/api/ledger", corsWrap(this::handleLedgerApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -461,6 +463,14 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else if (path.equals("/naming.js")) {
 
             serveResource(exchange, "/studio/naming.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/glossary.js")) {
+
+            serveResource(exchange, "/studio/glossary.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/ledger.js")) {
+
+            serveResource(exchange, "/studio/ledger.js", "application/javascript; charset=utf-8");
 
         } else {
 
@@ -3848,6 +3858,38 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } catch (Exception e) {
             sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
                     .put("ok", true).put("reachable", false).put("baseUrl", base).put("error", e.getMessage())));
+        }
+    }
+
+    // ===================== 设定集术语表 / 资源战力账本 =====================
+
+    private void handleGlossaryApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}");
+                return;
+            }
+            ObjectNode resp = GlossaryBuilder.build(mapper, Paths.get(bookPath));
+            sendJson(exchange, 200, mapper.writeValueAsString(resp));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    private void handleLedgerApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}");
+                return;
+            }
+            ObjectNode resp = LedgerBuilder.build(mapper, Paths.get(bookPath));
+            sendJson(exchange, 200, mapper.writeValueAsString(resp));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
         }
     }
 

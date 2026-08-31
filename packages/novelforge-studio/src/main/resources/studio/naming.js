@@ -71,7 +71,7 @@ function doNaming() {
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
   if (hint) hint.textContent = '正在生成…';
 
-  fetch('/api/naming?' + params.toString())
+  fetch(authUrl(API + '/api/naming?' + params.toString()), { headers: authHeaders() })
     .then(r => r.json())
     .then(j => {
       if (!j.ok) { if (hint) hint.textContent = '生成失败：' + (j.error || '未知错误'); return; }

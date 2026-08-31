@@ -942,6 +942,8 @@ const PANEL_MAP = {
   'graph': 'graph',
   'factionmap': 'factionmap',
   'naming': 'naming',
+  'glossary': 'glossary',
+  'assets': 'assets',
   // Legacy panel names → redirect to new panels
   'state': 'toolbox',
   'style': 'toolbox',
@@ -1006,6 +1008,14 @@ function showPanel(name) {
   if (targetName === 'naming') {
     populateBookSelects();
     renderNamingPanel();
+  }
+  if (targetName === 'glossary') {
+    populateBookSelects();
+    loadGlossary();
+  }
+  if (targetName === 'assets') {
+    populateBookSelects();
+    loadAssets();
   }
   if (targetName === 'audit') populateBookSelects();
 }
@@ -1648,7 +1658,8 @@ async function populateBookSelects(books) {
   const selects = ['global-book','toolbox-book','ledger-book','write-book', 'state-book', 'audit-book',
     'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book',
     'hooks-book', 'synopsis-book', 'synopsis-source-book', 'outline-editor-book', 'intent-editor-book',
-    'book-edit-book', 'search-book', 'graph-book', 'factionmap-book', 'naming-book'];
+    'book-edit-book', 'search-book', 'graph-book', 'factionmap-book', 'naming-book',
+    'glossary-book', 'assets-book'];
   const globalVal = document.getElementById('global-book')?.value || '';
   const opts = books.map(b =>
     `<option value="${safePath(b.path)}">${escapeHtml(b.title)} · ${GENRE_LABELS[b.genre] || b.genre}</option>`
@@ -2940,6 +2951,16 @@ function closeDiffModal() {
 function escapeHtml(text) {
   if (!text) return '';
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/** 通用文本下载（设定集 / 账本 CSV 等共用） */
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ========== Style Panel ==========
