@@ -191,6 +191,34 @@ Studio 功能：
 
 接口：`GET /api/tension?path=<书目录绝对路径>`。
 
+### 分支剧情 · 互动小说（P9）
+
+零 LLM 成本，把长篇小说组织成可视化的**剧情树**，支持多结局、多选择支的互动叙事编排（纯本地统计与 SVG 渲染，导出物可直接浏览器打开，无需后端）。
+
+**数据模型**（`truth/branching.json`）：
+
+| 字段 | 说明 |
+|---|---|
+| `nodes[].id / title / type` | 节点唯一 id、标题、类型：`start`(起点) / `scene`(场景) / `ending`(结局) |
+| `nodes[].chapterRef` | 关联的章节号（用于回跳正文、在互动阅读器中标注「第 N 章」） |
+| `nodes[].excerpt` | 该节点的正文摘要 / 剧情要点 |
+| `edges[].from / to / choice` | 有向选择支：从 A 节点到 B 节点，选择文案（如「东行」「决战」） |
+
+**骨架生成**：书暂无 `branching.json` 时，按章节目录自动建骨架 —— 每章一个节点，首章为 `start`，标题含「结局」标记的章记为 `ending`，其余为 `scene`。
+
+**剧情树统计与六类结构告警**（BFS 可达性分析）：
+
+1. **死胡同 deadend**（error）— 非结局节点无出边，读者无路可走
+2. **孤立 isolated**（warn）— 既无入边也无出边
+3. **不可达 unreachable**（warn）— 从起点 BFS 无法到达
+4. **缺少结局 noending**（error）— 无 `ending` 节点，读者无法通关
+5. **多起点 multistart**（info）— 互动小说通常仅一个入口
+6. **环路 cycle**（info）— 分支回到已走过的节点
+
+**编辑与导出**：侧栏「🌿 分支」面板用分层 SVG 渲染剧情树（起点绿 / 场景蓝 / 结局金，不可达节点置灰），支持点击编辑节点、增删选择支、保存结构，并**一键导出零依赖互动阅读器**（自包含 HTML，DFS 渲染、可前进/返回/重开，纯本地离线可用）。
+
+接口：`GET /api/branching?path=<书目录绝对路径>`（加 `&scaffold=1` 强制按章节重建骨架）；`POST /api/branching` 保存 `{path, nodes[], edges[]}`（自动校验边不可悬空/自环，pretty-print 写入 `truth/branching.json`）。
+
 ## 内置 Genre Profiles
 
 **中文网文**：玄幻、仙侠、都市、恐怖、言情

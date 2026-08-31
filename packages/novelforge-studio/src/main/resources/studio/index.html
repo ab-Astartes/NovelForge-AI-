@@ -55,6 +55,9 @@
       <button onclick="showPanel('tension')" class="sidebar-nav-item" id="nav-tension">
         <span class="nav-icon">📈</span><span class="nav-label">节奏</span>
       </button>
+      <button onclick="showPanel('branching')" class="sidebar-nav-item" id="nav-branching">
+        <span class="nav-icon">🌿</span><span class="nav-label">分支</span>
+      </button>
       <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
         <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
       </button>
@@ -1376,6 +1379,28 @@
         </div>
       </section>
 
+      <!-- ========== 分支剧情 / 互动小说 ========== -->
+      <section id="panel-branching" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">分支剧情 · 互动小说</h2>
+          <p class="panel-desc">以剧情树组织章节分支：起点 / 场景 / 结局三态节点 + 选择支（SVG 分层可视化、实时结构校验、一键导出零依赖互动阅读器，纯本地，零 AI 成本）</p>
+        </div>
+
+        <div class="graph-toolbar card">
+          <select id="branching-book" class="input-field" style="min-width:220px"></select>
+          <button class="btn-ink btn-sm" onclick="loadBranching()">⟳ 读取剧情树</button>
+          <button class="btn-ghost btn-sm" onclick="scaffoldBranching()">🌱 从章节生成骨架</button>
+          <button class="btn-ghost btn-sm" onclick="addBranchNode()">＋ 新增节点</button>
+          <button class="btn-ink btn-sm" onclick="saveBranching()">💾 保存结构</button>
+          <button class="btn-ghost btn-sm" onclick="exportBranching()">⬇ 导出互动阅读器</button>
+          <span id="branching-stats" class="graph-stats"></span>
+        </div>
+
+        <div id="branching-body" class="branching-body">
+          <div class="empty-hint">选择书目后点击「读取剧情树」，或「从章节生成骨架」自动构建初始分支结构。</div>
+        </div>
+      </section>
+
       <!-- ========== 用量：Token 账单 ========== -->
       <section id="panel-usage" class="panel">
         <div class="panel-header">
@@ -1503,5 +1528,6 @@
 <script src="/glossary.js"></script>
 <script src="/ledger.js"></script>
 <script src="/tension.js"></script>
+<script src="/branching.js"></script>
 </body>
 </html>

@@ -2841,3 +2841,57 @@ body {
 .tension-table-wrap table { margin: 0; }
 .tension-row { cursor: pointer; }
 .tension-row.row-sel td { background: rgba(201,162,39,0.10); }
+
+/* ===================== 分支剧情 / 互动小说 ===================== */
+.branching-body { margin-top: 6px; }
+.branching-graph-wrap {
+  border-radius: 8px; border: 1px solid var(--border, #333);
+  background: var(--panel, #1e1e24); padding: 8px 4px 4px; overflow-x: auto;
+}
+.branching-svg { width: 100%; height: auto; min-width: 560px; display: block; }
+.bg-edge { fill: none; stroke: #8b7355; stroke-width: 1.6; }
+.bg-edge-label { fill: var(--text-dim, #8a8a8a); font-size: 11px; }
+.bg-node { cursor: pointer; }
+.bg-rect { fill: #241b14; stroke: #5a4632; stroke-width: 1.5; transition: stroke .12s; }
+.bg-node:hover .bg-rect { stroke: #7a5e3e; }
+.bg-title { fill: var(--text, #e8d5b7); font-size: 13px; font-weight: 600; font-family: 'Noto Serif SC', serif; }
+.bg-type { fill: var(--text-dim, #8a8a8a); font-size: 11px; }
+.bg-start .bg-rect { stroke: #2e7d4f; fill: #1e3326; }
+.bg-start .bg-type { fill: #7fd99a; }
+.bg-scene .bg-rect { stroke: #2e5a7d; fill: #1e2a3a; }
+.bg-scene .bg-type { fill: #7fb6d9; }
+.bg-ending .bg-rect { stroke: #8a6d1e; fill: #332a10; }
+.bg-ending .bg-type { fill: #e6c45a; }
+.bg-unreach .bg-rect { stroke: #5a4632; fill: #1a1612; stroke-dasharray: 4 3; }
+.bg-unreach .bg-title, .bg-unreach .bg-type { fill: #6a5a48; }
+.bg-sel .bg-rect { stroke: var(--gold, #c9a227); stroke-width: 2.4; }
+
+.branching-cols { display: grid; grid-template-columns: 320px 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 920px) { .branching-cols { grid-template-columns: 1fr; } }
+.branching-nodelist .branching-nodes { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; }
+.bg-node-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  background: var(--panel, #1e1e24); border: 1px solid var(--border, #333); cursor: pointer; transition: background .12s, border-color .12s;
+}
+.bg-node-row:hover { background: #2a211a; border-color: #5a4632; }
+.bg-node-row.row-sel { border-color: var(--gold, #c9a227); background: rgba(201,162,39,0.10); }
+.bg-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.bg-dot.bg-start { background: #2e7d4f; }
+.bg-dot.bg-scene { background: #2e5a7d; }
+.bg-dot.bg-ending { background: #8a6d1e; }
+.bg-row-title { flex: 1; font-size: 13px; color: var(--text, #e8d5b7); }
+.bg-row-type { font-size: 11px; color: var(--text-dim, #8a8a8a); }
+
+.branching-edit .card-title { margin-bottom: 12px; }
+.bf-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.bf-field > span { font-size: 12px; color: var(--text-dim, #9a9a9a); }
+.bf-field.bf-col > textarea { min-height: 80px; resize: vertical; }
+.bf-edges { margin-top: 12px; border-top: 1px solid var(--border, #333); padding-top: 10px; }
+.bf-sub { font-size: 12px; color: var(--text-dim, #9a9a9a); margin-bottom: 8px; }
+.bf-edge-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft, #c8c8c8); padding: 4px 0; }
+.bf-edge-choice { color: var(--gold-light, #e0c060); font-weight: 600; }
+.bf-addedge { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.btn-xs { font-size: 12px; padding: 4px 10px; }
+.bf-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 4px 0 14px; font-size: 12px; color: var(--text-dim, #9a9a9a); }
+.bf-legend span { display: flex; align-items: center; gap: 6px; }
+.bf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }

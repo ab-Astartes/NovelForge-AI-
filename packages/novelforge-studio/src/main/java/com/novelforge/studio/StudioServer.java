@@ -45,8 +45,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -312,6 +314,7 @@ public class StudioServer {
         server.createContext("/api/glossary", corsWrap(this::handleGlossaryApi));
         server.createContext("/api/ledger", corsWrap(this::handleLedgerApi));
         server.createContext("/api/tension", corsWrap(this::handleTensionApi));
+        server.createContext("/api/branching", corsWrap(this::handleBranchingApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -476,6 +479,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else if (path.equals("/tension.js")) {
 
             serveResource(exchange, "/studio/tension.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/branching.js")) {
+
+            serveResource(exchange, "/studio/branching.js", "application/javascript; charset=utf-8");
 
         } else {
 
@@ -3910,6 +3917,91 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             sendJson(exchange, 200, mapper.writeValueAsString(resp));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    // ===================== 分支剧情 / 互动小说 =====================
+
+    private void handleBranchingApi(HttpExchange exchange) throws IOException {
+        String method = exchange.getRequestMethod();
+        if ("GET".equals(method)) {
+            String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+            String scaffold = getQueryParam(exchange.getRequestURI().getQuery(), "scaffold");
+            try {
+                if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                    sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}");
+                    return;
+                }
+                Path bookDir = Paths.get(bookPath);
+                // scaffold=1：忽略已有 branching.json，强制按章节重建骨架
+                if ("1".equals(scaffold)) {
+                    Path bf = bookDir.resolve("truth").resolve("branching.json");
+                    try { Files.deleteIfExists(bf); } catch (Exception ignore) {}
+                }
+                ObjectNode resp = BranchingBuilder.build(mapper, bookDir);
+                sendJson(exchange, 200, mapper.writeValueAsString(resp));
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+            }
+        } else if ("POST".equals(method)) {
+            try {
+                JsonNode body = readBody(exchange);
+                String path = body.path("path").asText("").trim();
+                if (path.isEmpty() || !isPathWithinBooksRoot(path)) {
+                    sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("ok", false).put("error", "无效书目路径")));
+                    return;
+                }
+                JsonNode nodes = body.path("nodes");
+                JsonNode edges = body.path("edges");
+                if (!nodes.isArray() || !edges.isArray()) {
+                    sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("ok", false).put("error", "nodes 与 edges 必须是数组")));
+                    return;
+                }
+                // 校验：边引用的节点必须存在
+                Set<String> ids = new HashSet<>();
+                for (JsonNode n : nodes) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) ids.add(id); }
+                for (JsonNode e : edges) {
+                    String f = e.path("from").asText("").trim();
+                    String t = e.path("to").asText("").trim();
+                    if (!ids.contains(f) || !ids.contains(t) || f.equals(t)) {
+                        sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("ok", false).put("error", "存在悬空或自环的边：" + f + " -> " + t)));
+                        return;
+                    }
+                }
+                Path truthDir = Paths.get(path).resolve("truth");
+                Files.createDirectories(truthDir);
+                ObjectNode root = mapper.createObjectNode();
+                // 仅保留持久化字段
+                ArrayNode nArr = mapper.createArrayNode();
+                for (JsonNode n : nodes) {
+                    ObjectNode o = mapper.createObjectNode();
+                    o.put("id", n.path("id").asText("").trim());
+                    o.put("title", n.path("title").asText("").trim());
+                    o.put("type", n.path("type").asText("scene").trim());
+                    o.put("chapterRef", n.path("chapterRef").asInt(0));
+                    o.put("excerpt", n.path("excerpt").asText("").trim());
+                    nArr.add(o);
+                }
+                ArrayNode eArr = mapper.createArrayNode();
+                for (JsonNode e : edges) {
+                    ObjectNode o = mapper.createObjectNode();
+                    o.put("from", e.path("from").asText("").trim());
+                    o.put("to", e.path("to").asText("").trim());
+                    o.put("choice", e.path("choice").asText("").trim());
+                    eArr.add(o);
+                }
+                root.set("nodes", nArr);
+                root.set("edges", eArr);
+                Files.write(truthDir.resolve("branching.json"), mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root));
+                sendJson(exchange, 200, mapper.writeValueAsString(mapper.createObjectNode()
+                        .put("ok", true).put("saved", true)
+                        .put("nodes", nArr.size()).put("edges", eArr.size())
+                        .put("message", "已保存分支剧情结构（truth/branching.json）")));
+            } catch (Exception e) {
+                sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+            }
+        } else {
+            sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
         }
     }
 
