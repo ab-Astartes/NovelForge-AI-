@@ -52,6 +52,9 @@
       <button onclick="showPanel('assets')" class="sidebar-nav-item" id="nav-assets">
         <span class="nav-icon">💰</span><span class="nav-label">账本</span>
       </button>
+      <button onclick="showPanel('tension')" class="sidebar-nav-item" id="nav-tension">
+        <span class="nav-icon">📈</span><span class="nav-label">节奏</span>
+      </button>
       <button onclick="showPanel('toolbox')" class="sidebar-nav-item" id="nav-toolbox">
         <span class="nav-icon">🧰</span><span class="nav-label">工具箱</span>
       </button>
@@ -1354,6 +1357,25 @@
         </div>
       </section>
 
+      <!-- ========== 节奏：情绪张力曲线与节拍器 ========== -->
+      <section id="panel-tension" class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">情绪张力曲线 · 章节节拍器</h2>
+          <p class="panel-desc">按章计算张力分（句长节奏 / 对话占比 / 动作冲突词 / 转折词 / 情绪极性），叠加「起承转合」节拍目标带；对「流水账」「高潮疲劳」「节奏断崖」「偏离节拍」自动告警（纯本地统计，零 AI 成本）</p>
+        </div>
+
+        <div class="graph-toolbar card">
+          <select id="tension-book" class="input-field" style="min-width:220px"></select>
+          <button class="btn-ink btn-sm" onclick="loadTension()">⟳ 分析节奏</button>
+          <button class="btn-ghost btn-sm" onclick="exportTension()">⬇ 导出 CSV</button>
+          <span id="tension-stats" class="graph-stats"></span>
+        </div>
+
+        <div id="tension-body" class="tension-body">
+          <div class="empty-hint">选择书目后点击「分析节奏」，自动生成全书张力曲线与节拍诊断。</div>
+        </div>
+      </section>
+
       <!-- ========== 用量：Token 账单 ========== -->
       <section id="panel-usage" class="panel">
         <div class="panel-header">
@@ -1480,5 +1502,6 @@
 <script src="/naming.js"></script>
 <script src="/glossary.js"></script>
 <script src="/ledger.js"></script>
+<script src="/tension.js"></script>
 </body>
 </html>

@@ -944,6 +944,7 @@ const PANEL_MAP = {
   'naming': 'naming',
   'glossary': 'glossary',
   'assets': 'assets',
+  'tension': 'tension',
   // Legacy panel names → redirect to new panels
   'state': 'toolbox',
   'style': 'toolbox',
@@ -1016,6 +1017,10 @@ function showPanel(name) {
   if (targetName === 'assets') {
     populateBookSelects();
     loadAssets();
+  }
+  if (targetName === 'tension') {
+    populateBookSelects();
+    loadTension();
   }
   if (targetName === 'audit') populateBookSelects();
 }
@@ -1659,7 +1664,7 @@ async function populateBookSelects(books) {
     'export-book', 'delete-book', 'progress-book', 'style-book', 'rollback-book', 'characters-book',
     'hooks-book', 'synopsis-book', 'synopsis-source-book', 'outline-editor-book', 'intent-editor-book',
     'book-edit-book', 'search-book', 'graph-book', 'factionmap-book', 'naming-book',
-    'glossary-book', 'assets-book'];
+    'glossary-book', 'assets-book', 'tension-book'];
   const globalVal = document.getElementById('global-book')?.value || '';
   const opts = books.map(b =>
     `<option value="${safePath(b.path)}">${escapeHtml(b.title)} · ${GENRE_LABELS[b.genre] || b.genre}</option>`

@@ -2791,3 +2791,53 @@ body {
   position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%);
   font-size: 10px; color: var(--text-dim, #9a9a9a);
 }
+
+/* ===================== 情绪张力曲线与节拍器 ===================== */
+.tension-body { margin-top: 6px; }
+.tension-chart-wrap {
+  border-radius: 8px; border: 1px solid var(--border, #333);
+  background: var(--panel, #1e1e24); padding: 8px 4px 4px; overflow-x: auto;
+}
+.tension-svg { width: 100%; height: auto; min-width: 560px; display: block; }
+.tv-grid { stroke: var(--border, #2e2e35); stroke-width: 1; }
+.tv-tick { fill: var(--text-dim, #8a8a8a); font-size: 10px; }
+.tv-band-line { fill: none; stroke: rgba(201,162,39,0.45); stroke-width: 1; stroke-dasharray: 4 3; }
+.tv-area { fill: rgba(217,83,79,0.14); stroke: none; }
+.tv-line { fill: none; stroke: #d9534f; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.tv-dot { fill: var(--panel, #1e1e24); stroke: #d9534f; stroke-width: 2; cursor: pointer; transition: r .12s; }
+.tv-dot:hover { fill: #d9534f; }
+.tv-dot.dot-sel { fill: var(--gold, #c9a227); stroke: var(--gold, #c9a227); }
+
+.tension-legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 16px; font-size: 12px; color: var(--text-dim, #9a9a9a); }
+.tension-legend span { display: flex; align-items: center; gap: 6px; }
+.tension-legend i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; }
+.lg-line { background: #d9534f; }
+.lg-band { background: rgba(201,162,39,0.6); }
+.lg-dot { width: 8px !important; height: 8px !important; border-radius: 50%; background: var(--gold, #c9a227); }
+
+.tension-warns { margin-bottom: 18px; }
+.tension-detail { margin-bottom: 18px; }
+.tension-detail-card {
+  padding: 14px 16px; border-radius: 8px;
+  background: var(--panel, #1e1e24); border: 1px solid var(--border, #333);
+}
+.td-head { font-size: 15px; font-weight: 600; color: var(--text, #e8e8e8); margin-bottom: 10px; }
+.td-score { color: #d9534f; margin-left: 8px; }
+.td-target { color: var(--text-dim, #9a9a9a); font-weight: 400; font-size: 13px; margin-left: 8px; }
+.td-verdict { font-size: 12px; font-weight: 400; margin-left: 10px; color: var(--gold-light, #e0c060); }
+.td-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.td-metrics div { display: flex; flex-direction: column; gap: 2px; }
+.td-metrics span { font-size: 11px; color: var(--text-dim, #9a9a9a); }
+.td-metrics b { font-size: 15px; color: var(--text, #e8e8e8); font-variant-numeric: tabular-nums; }
+.td-peak {
+  margin-top: 10px; padding: 8px 10px; border-left: 2px solid #d9534f;
+  font-size: 13px; line-height: 1.6; color: var(--text-soft, #c8c8c8);
+  background: rgba(217,83,79,0.06);
+}
+.td-excerpts { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-dim, #9a9a9a); }
+.td-excerpts li { margin-bottom: 3px; line-height: 1.5; }
+
+.tension-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border, #333); }
+.tension-table-wrap table { margin: 0; }
+.tension-row { cursor: pointer; }
+.tension-row.row-sel td { background: rgba(201,162,39,0.10); }

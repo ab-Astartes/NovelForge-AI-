@@ -311,6 +311,7 @@ public class StudioServer {
         server.createContext("/api/ollama/health", corsWrap(this::handleOllamaHealthApi));
         server.createContext("/api/glossary", corsWrap(this::handleGlossaryApi));
         server.createContext("/api/ledger", corsWrap(this::handleLedgerApi));
+        server.createContext("/api/tension", corsWrap(this::handleTensionApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -471,6 +472,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } else if (path.equals("/ledger.js")) {
 
             serveResource(exchange, "/studio/ledger.js", "application/javascript; charset=utf-8");
+
+        } else if (path.equals("/tension.js")) {
+
+            serveResource(exchange, "/studio/tension.js", "application/javascript; charset=utf-8");
 
         } else {
 
@@ -3887,6 +3892,21 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                 return;
             }
             ObjectNode resp = LedgerBuilder.build(mapper, Paths.get(bookPath));
+            sendJson(exchange, 200, mapper.writeValueAsString(resp));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    private void handleTensionApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}");
+                return;
+            }
+            ObjectNode resp = TensionBuilder.build(mapper, Paths.get(bookPath));
             sendJson(exchange, 200, mapper.writeValueAsString(resp));
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}");
