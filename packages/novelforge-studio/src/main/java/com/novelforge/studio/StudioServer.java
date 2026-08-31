@@ -290,6 +290,13 @@ public class StudioServer {
 
         server.createContext("/api/config/sample", corsWrap(this::handleConfigSampleApi));
 
+        // 🆕 配置基座：全局默认 / 每书配置 / 合并有效配置
+        server.createContext("/api/config/global", corsWrap(this::handleConfigGlobalApi));
+        server.createContext("/api/config/book", corsWrap(this::handleConfigBookApi));
+        server.createContext("/api/config/resolve", corsWrap(this::handleConfigResolveApi));
+        // 🆕 去AI痕迹（规则式改写，立即可用；LLM 增强为后续模块）
+        server.createContext("/api/deai/apply", corsWrap(this::handleDeAiApplyApi));
+
         server.createContext("/api/write/stream", corsWrap(this::handleWriteStreamApi));
 
         server.createContext("/api/progress", corsWrap(this::handleProgressApi));
@@ -2218,6 +2225,239 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
     }
 
+
+
+    // ============ 配置基座：全局默认 / 每书配置 / 合并有效配置 ============
+
+    /** 全局默认配置路径：~/NovelForge/config/bookDefaults.json */
+    private Path globalDefaultsFile() {
+        return Paths.get(System.getProperty("user.home"), "NovelForge", "config", "bookDefaults.json");
+    }
+
+    /** 每书配置路径：<bookDir>/config/bookConfig.json */
+    private Path bookConfigFile(Path bookDir) {
+        return bookDir.resolve("config").resolve("bookConfig.json");
+    }
+
+    /** 读取 JSON 文件，缺失或损坏时返回 fallback */
+    private ObjectNode readJsonFile(Path file, ObjectNode fallback) {
+        try {
+            if (Files.exists(file)) {
+                JsonNode n = mapper.readTree(Files.readString(file, StandardCharsets.UTF_8));
+                if (n.isObject()) return (ObjectNode) n;
+            }
+        } catch (Exception e) { /* 损坏则用默认 */ }
+        return fallback.deepCopy();
+    }
+
+    private void writeJsonFile(Path file, JsonNode node) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node), StandardCharsets.UTF_8);
+    }
+
+    /** 内置全局默认（文件缺失时使用） */
+    private ObjectNode defaultBookDefaults() {
+        ObjectNode d = mapper.createObjectNode();
+        ObjectNode style = d.putObject("style");
+        style.put("name", "全局默认风格");
+        style.put("description", "可在「炼炉调校 → 本书配置」中为每本书覆盖");
+        style.put("vocabularyPattern", "");
+        style.put("sentenceStructure", "");
+        style.put("pacingPattern", "");
+        style.put("dialogueStyle", "");
+        style.put("descriptionStyle", "");
+        style.put("referenceSample", "");
+        ObjectNode deAi = d.putObject("deAi");
+        deAi.put("name", "全局默认去AI");
+        ArrayNode banned = deAi.putArray("bannedPhrases");
+        banned.add("值得注意的是"); banned.add("总而言之"); banned.add("不可否认"); banned.add("在当今社会"); banned.add("首先，其次，最后");
+        ArrayNode tells = deAi.putArray("aiTellPatterns");
+        tells.add("不仅[一-龥]{1,4}，也[一-龥]{1,4}"); tells.add("无论[一-龥]{1,6}，都[一-龥]{1,6}");
+        deAi.put("rewriteGuidance", "去掉总结性套话与工整对仗，改用具体动作与感官细节，缩短平均句长，避免排比。");
+        deAi.put("strength", 0.7);
+        deAi.put("mode", "rule");
+        ObjectNode settings = d.putObject("settings");
+        settings.put("source", "world");
+        settings.put("doc", "world.json");
+        return d;
+    }
+
+    /** 合并全局默认 + 每书覆盖，返回有效配置 */
+    private ObjectNode resolveBookConfig(Path bookDir) {
+        ObjectNode global = readJsonFile(globalDefaultsFile(), defaultBookDefaults());
+        ObjectNode book = readJsonFile(bookConfigFile(bookDir), mapper.createObjectNode());
+
+        ObjectNode out = mapper.createObjectNode();
+
+        String styleSource = book.path("styleSource").asText("global");
+        String deAiSource = book.path("deAiSource").asText("global");
+        out.put("styleSource", styleSource);
+        out.put("deAiSource", deAiSource);
+
+        // 有效写作风格：book 且 book.getStyle() 存在 → 用本书；否则回退全局默认
+        ObjectNode effectiveStyle;
+        boolean styleInherited = true;
+        if ("book".equals(styleSource)) {
+            try {
+                Book b = BookProject.loadBook(bookDir);
+                WritingStyle ws = b.getStyle();
+                if (ws != null) { effectiveStyle = ws.toJson(); styleInherited = false; }
+                else effectiveStyle = global.path("style").deepCopy();
+            } catch (Exception e) { effectiveStyle = global.path("style").deepCopy(); }
+        } else {
+            effectiveStyle = global.path("style").deepCopy();
+        }
+        out.set("style", effectiveStyle);
+        out.put("styleInherited", styleInherited);
+
+        // 有效去AI：deAiSource=book 且 book.deAi 存在 → 用本书；否则回退全局默认
+        ObjectNode effectiveDeAi;
+        boolean deAiInherited = true;
+        if ("book".equals(deAiSource) && book.has("deAi") && book.get("deAi").isObject()) {
+            effectiveDeAi = (ObjectNode) book.get("deAi").deepCopy();
+            deAiInherited = false;
+        } else {
+            effectiveDeAi = global.path("deAi").deepCopy();
+        }
+        out.set("deAi", effectiveDeAi);
+        out.put("deAiInherited", deAiInherited);
+
+        // 设定来源
+        ObjectNode settings = book.has("settings") && book.get("settings").isObject()
+                ? (ObjectNode) book.get("settings").deepCopy() : (ObjectNode) global.path("settings").deepCopy();
+        out.set("settings", settings);
+
+        // 参考资料
+        ObjectNode refs = book.has("references") && book.get("references").isObject()
+                ? (ObjectNode) book.get("references").deepCopy() : mapper.createObjectNode().put("enabled", true);
+        out.set("references", refs);
+
+        return out;
+    }
+
+    /** GET/PUT 全局默认配置 */
+    private void handleConfigGlobalApi(HttpExchange exchange) throws IOException {
+        try {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                ObjectNode d = readJsonFile(globalDefaultsFile(), defaultBookDefaults());
+                sendJson(exchange, 200, mapper.writeValueAsString(d));
+            } else if ("POST".equals(exchange.getRequestMethod())) {
+                JsonNode body = readBody(exchange);
+                ObjectNode d = mapper.createObjectNode();
+                if (body.has("style") && body.get("style").isObject()) d.set("style", body.get("style"));
+                else d.set("style", defaultBookDefaults().get("style"));
+                if (body.has("deAi") && body.get("deAi").isObject()) d.set("deAi", body.get("deAi"));
+                else d.set("deAi", defaultBookDefaults().get("deAi"));
+                if (body.has("settings") && body.get("settings").isObject()) d.set("settings", body.get("settings"));
+                else d.set("settings", defaultBookDefaults().get("settings"));
+                writeJsonFile(globalDefaultsFile(), d);
+                sendJson(exchange, 200, "{\"status\":\"updated\"}");
+            } else {
+                sendJson(exchange, 405, "{\"error\":\"GET or POST only\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** GET/PUT 每书配置（仅继承标志 + deAi 覆盖 + settings/references；风格内容存于 book.getStyle()） */
+    private void handleConfigBookApi(HttpExchange exchange) throws IOException {
+        try {
+            String method = exchange.getRequestMethod();
+            String query = exchange.getRequestURI().getQuery();
+            if ("GET".equals(method)) {
+                String bookPath = getQueryParam(query, "path");
+                if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+                ObjectNode book = readJsonFile(bookConfigFile(Paths.get(bookPath)), mapper.createObjectNode());
+                sendJson(exchange, 200, mapper.writeValueAsString(book));
+            } else if ("POST".equals(method)) {
+                JsonNode body = readBody(exchange);
+                String bookPath = body.has("path") ? body.get("path").asText() : null;
+                if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+                ObjectNode book = mapper.createObjectNode();
+                if (body.has("styleSource")) book.put("styleSource", body.get("styleSource").asText("global"));
+                if (body.has("deAiSource")) book.put("deAiSource", body.get("deAiSource").asText("global"));
+                if (body.has("deAi") && body.get("deAi").isObject()) book.set("deAi", body.get("deAi"));
+                if (body.has("settings") && body.get("settings").isObject()) book.set("settings", body.get("settings"));
+                if (body.has("references") && body.get("references").isObject()) book.set("references", body.get("references"));
+                writeJsonFile(bookConfigFile(Paths.get(bookPath)), book);
+                sendJson(exchange, 200, "{\"status\":\"updated\"}");
+            } else {
+                sendJson(exchange, 405, "{\"error\":\"GET or POST only\"}");
+            }
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** GET 合并后的有效配置（证明继承/兜底语义） */
+    private void handleConfigResolveApi(HttpExchange exchange) throws IOException {
+        try {
+            if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+            String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            ObjectNode resolved = resolveBookConfig(Paths.get(bookPath));
+            sendJson(exchange, 200, mapper.writeValueAsString(resolved));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** POST 去AI痕迹（规则式改写，无需 API） */
+    private void handleDeAiApplyApi(HttpExchange exchange) throws IOException {
+        try {
+            if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            String text = body.has("text") ? body.get("text").asText() : "";
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+
+            ObjectNode deAi = resolveBookConfig(Paths.get(bookPath)).path("deAi").deepCopy();
+            int removed = 0;
+            String cleaned = text;
+
+            // 1) 移除禁用词
+            if (deAi.has("bannedPhrases")) {
+                for (JsonNode p : deAi.get("bannedPhrases")) {
+                    String phrase = p.asText();
+                    if (phrase != null && !phrase.isEmpty()) {
+                        int before = cleaned.length();
+                        cleaned = cleaned.replace(phrase, "");
+                        if (cleaned.length() < before) removed++;
+                    }
+                }
+            }
+            // 2) 正则式 AI 腔句式剥离
+            if (deAi.has("aiTellPatterns")) {
+                for (JsonNode p : deAi.get("aiTellPatterns")) {
+                    String pat = p.asText();
+                    if (pat != null && !pat.isEmpty()) {
+                        try {
+                            java.util.regex.Pattern r = java.util.regex.Pattern.compile(pat);
+                            int c = 0;
+                            java.util.regex.Matcher m = r.matcher(cleaned);
+                            while (m.find()) c++;
+                            if (c > 0) { cleaned = r.matcher(cleaned).replaceAll(""); removed += c; }
+                        } catch (java.util.regex.PatternSyntaxException ignored) { /* 跳过非法正则 */ }
+                    }
+                }
+            }
+            // 3) 清理多余空格与标点粘连
+            cleaned = cleaned.replaceAll("[ \t]{2,}", " ").replaceAll("， +", "，").replaceAll("。 +", "。").trim();
+
+            ObjectNode result = mapper.createObjectNode();
+            result.put("status", "ok");
+            result.put("originalLength", text.length());
+            result.put("cleanedLength", cleaned.length());
+            result.put("removedCount", removed);
+            result.put("mode", deAi.path("mode").asText("rule"));
+            result.put("cleanedText", cleaned);
+            result.put("note", "规则式去AI：已剥离禁用词与 AI 腔句式（LLM 增强改写为后续模块）");
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
 
 
     /** Handle diff API — paragraph-level comparison of draft vs final text for a chapter */

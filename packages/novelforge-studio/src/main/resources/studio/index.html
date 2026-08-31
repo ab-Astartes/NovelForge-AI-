@@ -1085,6 +1085,110 @@
           </div>
         </div>
 
+        <!-- 🆕 本书配置（独立 + 全局继承） -->
+        <div class="card" id="book-config-card">
+          <div class="card-title"><span class="card-icon">📚</span> 本书配置（独立 + 全局继承）</div>
+          <p class="agent-section-desc">当前书目：<b id="bc-book-name">未选择</b>。下列项目可「继承全局默认」或「本书独立」；选独立时本项覆盖全局默认，选继承时自动回退全局（见「查看有效配置」）。</p>
+
+          <!-- 写作风格 -->
+          <div class="bc-block">
+            <div class="bc-block-head">
+              <span>✍ 写作风格</span>
+              <select id="bc-style-source" class="input-field bc-source" onchange="onBookConfigSourceChange()">
+                <option value="global">继承全局默认</option>
+                <option value="book">本书独立</option>
+              </select>
+            </div>
+            <div id="bc-style-body" class="bc-body hidden">
+              <p class="bc-hint">本书独立风格内容请在「工具箱 → 写作风格」中编辑；此处仅控制是否继承全局。</p>
+              <button class="btn-ghost btn-sm" onclick="showPanel('toolbox')">前往工具箱编辑本书风格 →</button>
+            </div>
+            <div id="bc-style-preview" class="bc-preview"></div>
+          </div>
+
+          <!-- 去AI痕迹 -->
+          <div class="bc-block">
+            <div class="bc-block-head">
+              <span>🧹 去AI痕迹</span>
+              <select id="bc-deai-source" class="input-field bc-source" onchange="onBookConfigSourceChange()">
+                <option value="global">继承全局默认</option>
+                <option value="book">本书独立</option>
+              </select>
+            </div>
+            <div id="bc-deai-body" class="bc-body hidden">
+              <div class="form-grid">
+                <div class="form-group" style="grid-column:1/-1">
+                  <label class="form-label">规则名</label>
+                  <input id="bc-deai-name" class="input-field" placeholder="本书去AI规则">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                  <label class="form-label">禁用词（每行一个）</label>
+                  <textarea id="bc-deai-banned" class="input-field" rows="3" placeholder="值得注意的是&#10;总而言之"></textarea>
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                  <label class="form-label">AI腔句式正则（每行一个，Java 正则）</label>
+                  <textarea id="bc-deai-tells" class="input-field" rows="3" placeholder="不仅[一-龥]{1,4}，也[一-龥]{1,4}"></textarea>
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                  <label class="form-label">改写指引</label>
+                  <textarea id="bc-deai-guidance" class="input-field" rows="2" placeholder="去掉套话，改用具体动作…"></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">力度 (0–1)</label>
+                  <input id="bc-deai-strength" type="number" step="0.1" min="0" max="1" class="input-field" value="0.7">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">模式</label>
+                  <select id="bc-deai-mode" class="input-field">
+                    <option value="rule">规则式（免API）</option>
+                    <option value="llm">LLM增强（后续模块）</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div id="bc-deai-preview" class="bc-preview"></div>
+          </div>
+
+          <!-- 设定读取来源 -->
+          <div class="bc-block">
+            <div class="bc-block-head"><span>📖 设定读取来源</span></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">来源</label>
+                <select id="bc-settings-source" class="input-field">
+                  <option value="world">世界观 (world.json)</option>
+                  <option value="custom">自定义文档</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">文档名</label>
+                <input id="bc-settings-doc" class="input-field" value="world.json" placeholder="world.json 或 config/settings.md">
+              </div>
+            </div>
+          </div>
+
+          <!-- 参考资料 -->
+          <div class="bc-block">
+            <div class="bc-block-head"><span>📎 参考资料</span></div>
+            <div id="bc-refs-info" class="bc-preview">—</div>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button onclick="saveBookConfig()" class="btn-ink">保存本书配置</button>
+            <button onclick="showResolvePreview()" class="btn-ghost btn-sm">查看有效配置 (resolve)</button>
+          </div>
+          <div id="bc-result" class="result-box"></div>
+          <pre id="bc-resolve" class="code-block" style="display:none"></pre>
+
+          <!-- 去AI 试用 -->
+          <div class="bc-block" style="margin-top:12px">
+            <div class="bc-block-head"><span>🧪 去AI 痕迹试用</span></div>
+            <textarea id="bc-deai-input" class="input-field" rows="4" placeholder="粘贴一段含 AI 腔的段落，点下方按钮试跑规则式去AI…"></textarea>
+            <button onclick="applyDeAi()" class="btn-ink btn-sm">规则式去AI</button>
+            <pre id="bc-deai-output" class="code-block" style="display:none"></pre>
+          </div>
+        </div>
+
         <button onclick="saveConfig()" class="btn-ink">保存配置</button>
         <div id="config-result" class="result-box"></div>
       </section>

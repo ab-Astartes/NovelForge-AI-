@@ -32,4 +32,19 @@ public class WritingStyle {
     public void setDescriptionStyle(String d) { this.descriptionStyle = d; }
     public String getReferenceSample() { return referenceSample; }
     public void setReferenceSample(String r) { this.referenceSample = r; }
+
+    /** Serialize to Jackson ObjectNode (used by config resolve to merge per-book + global style). */
+    public com.fasterxml.jackson.databind.node.ObjectNode toJson() {
+        com.fasterxml.jackson.databind.node.ObjectNode n =
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        n.put("name", name == null ? "" : name);
+        n.put("description", description == null ? "" : description);
+        n.put("vocabularyPattern", vocabularyPattern == null ? "" : vocabularyPattern);
+        n.put("sentenceStructure", sentenceStructure == null ? "" : sentenceStructure);
+        n.put("pacingPattern", pacingPattern == null ? "" : pacingPattern);
+        n.put("dialogueStyle", dialogueStyle == null ? "" : dialogueStyle);
+        n.put("descriptionStyle", descriptionStyle == null ? "" : descriptionStyle);
+        n.put("referenceSample", referenceSample == null ? "" : referenceSample);
+        return n;
+    }
 }

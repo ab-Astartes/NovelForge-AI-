@@ -1027,6 +1027,10 @@ function showPanel(name) {
     populateBookSelects();
     loadBranching();
   }
+  if (targetName === 'config') {
+    populateBookSelects();
+    loadBookConfig();
+  }
   if (targetName === 'audit') populateBookSelects();
 }
 
@@ -1622,6 +1626,8 @@ function onGlobalBookChange(val) {
   });
   // 当前停留在台账面板时立即刷新数据
   if (currentPanel === 'ledger') reloadLedger();
+  // 当前停留在配置面板时立即刷新本书配置
+  if (currentPanel === 'config') loadBookConfig();
   // Book detail card
   const detailCard = document.getElementById('book-detail-card');
   if (detailCard) {
@@ -2539,6 +2545,175 @@ async function saveConfig() {
     showResult(resultDiv, data.status === 'updated' ? '✦ 配置已入炉' : '✗ ' + (data.error || '更新失败'), data.status !== 'updated');
   } catch (e) {
     showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
+// ========== 配置基座：每书配置（独立 + 全局继承） ==========
+let bcGlobal = null;     // 全局默认
+let bcResolved = null;   // 合并有效配置
+
+function bcBookPath() {
+  return document.getElementById('global-book')?.value || '';
+}
+
+async function loadBookConfig() {
+  const path = bcBookPath();
+  const nameEl = document.getElementById('bc-book-name');
+  if (!path) {
+    if (nameEl) nameEl.textContent = '未选择';
+    return;
+  }
+  const sel = document.getElementById('global-book');
+  if (nameEl) nameEl.textContent = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : path;
+  try {
+    const [gRes, bRes, rRes] = await Promise.all([
+      fetch(authUrl(API + '/api/config/global'), { headers: authHeaders() }),
+      fetch(authUrl(API + '/api/config/book?path=' + encodeURIComponent(path)), { headers: authHeaders() }),
+      fetch(authUrl(API + '/api/config/resolve?path=' + encodeURIComponent(path)), { headers: authHeaders() })
+    ]);
+    bcGlobal = await gRes.json();
+    const bookCfg = await bRes.json();
+    bcResolved = await rRes.json();
+
+    document.getElementById('bc-style-source').value = bookCfg.styleSource || 'global';
+    document.getElementById('bc-deai-source').value = bookCfg.deAiSource || 'global';
+
+    const deAi = (bookCfg.deAiSource === 'book' && bookCfg.deAi) ? bookCfg.deAi : (bcGlobal.deAi || {});
+    document.getElementById('bc-deai-name').value = deAi.name || '';
+    document.getElementById('bc-deai-banned').value = Array.isArray(deAi.bannedPhrases) ? deAi.bannedPhrases.join('\n') : '';
+    document.getElementById('bc-deai-tells').value = Array.isArray(deAi.aiTellPatterns) ? deAi.aiTellPatterns.join('\n') : '';
+    document.getElementById('bc-deai-guidance').value = deAi.rewriteGuidance || '';
+    document.getElementById('bc-deai-strength').value = (deAi.strength != null) ? deAi.strength : 0.7;
+    document.getElementById('bc-deai-mode').value = deAi.mode || 'rule';
+
+    document.getElementById('bc-settings-source').value = (bcResolved.settings && bcResolved.settings.source) || 'world';
+    document.getElementById('bc-settings-doc').value = (bcResolved.settings && bcResolved.settings.doc) || 'world.json';
+
+    try {
+      const rf = await fetch(authUrl(API + '/api/book/references?path=' + encodeURIComponent(path)), { headers: authHeaders() });
+      const refs = await rf.json();
+      const enabled = bcResolved.references && bcResolved.references.enabled !== false;
+      document.getElementById('bc-refs-info').innerHTML =
+        '独立存储状态：<b>' + (enabled ? '启用' : '关闭') + '</b> · 参考资料 ' + (Array.isArray(refs) ? refs.length : 0) + ' 条（每书独立）';
+    } catch (e) {
+      document.getElementById('bc-refs-info').textContent = '参考资料：加载失败';
+    }
+
+    renderBookConfigPreviews();
+  } catch (e) {
+    showToast('加载本书配置失败: ' + e.message, 'warning');
+  }
+}
+
+function renderBookConfigPreviews() {
+  const styleSrc = document.getElementById('bc-style-source').value;
+  const deAiSrc = document.getElementById('bc-deai-source').value;
+
+  const styleBody = document.getElementById('bc-style-body');
+  const stylePrev = document.getElementById('bc-style-preview');
+  if (styleSrc === 'book') {
+    styleBody.classList.remove('hidden');
+    stylePrev.innerHTML = '<span class="bc-inherit-tag book">本书独立</span> 风格内容在「工具箱 → 写作风格」维护。';
+  } else {
+    styleBody.classList.add('hidden');
+    const s = (bcResolved && bcResolved.style) || (bcGlobal && bcGlobal.style) || {};
+    stylePrev.innerHTML = '<span class="bc-inherit-tag global">继承全局</span> <b>' + escapeHtml(s.name || '全局默认风格') + '</b>：' + escapeHtml(s.description || '');
+  }
+
+  const deAiBody = document.getElementById('bc-deai-body');
+  const deAiPrev = document.getElementById('bc-deai-preview');
+  if (deAiSrc === 'book') {
+    deAiBody.classList.remove('hidden');
+    deAiPrev.innerHTML = '<span class="bc-inherit-tag book">本书独立</span> 使用下方编辑的规则。';
+  } else {
+    deAiBody.classList.add('hidden');
+    const d = (bcResolved && bcResolved.deAi) || (bcGlobal && bcGlobal.deAi) || {};
+    const banned = Array.isArray(d.bannedPhrases) ? d.bannedPhrases.length : 0;
+    const tells = Array.isArray(d.aiTellPatterns) ? d.aiTellPatterns.length : 0;
+    deAiPrev.innerHTML = '<span class="bc-inherit-tag global">继承全局</span> <b>' + escapeHtml(d.name || '全局默认去AI') + '</b> · 禁用词 ' + banned + ' · AI腔 ' + tells;
+  }
+}
+
+function onBookConfigSourceChange() {
+  renderBookConfigPreviews();
+}
+
+async function saveBookConfig() {
+  const path = bcBookPath();
+  if (!path) { showToast('请先在右上角选择书目', 'warning'); return; }
+  const resultDiv = document.getElementById('bc-result');
+  const deAiSrc = document.getElementById('bc-deai-source').value;
+  const deAi = {
+    name: document.getElementById('bc-deai-name').value.trim(),
+    bannedPhrases: document.getElementById('bc-deai-banned').value.split('\n').map(s => s.trim()).filter(s => s.length > 0),
+    aiTellPatterns: document.getElementById('bc-deai-tells').value.split('\n').map(s => s.trim()).filter(s => s.length > 0),
+    rewriteGuidance: document.getElementById('bc-deai-guidance').value.trim(),
+    strength: parseFloat(document.getElementById('bc-deai-strength').value || '0.7'),
+    mode: document.getElementById('bc-deai-mode').value
+  };
+  const body = {
+    path,
+    styleSource: document.getElementById('bc-style-source').value,
+    deAiSource: deAiSrc,
+    settings: {
+      source: document.getElementById('bc-settings-source').value,
+      doc: document.getElementById('bc-settings-doc').value.trim() || 'world.json'
+    },
+    references: { enabled: true }
+  };
+  if (deAiSrc === 'book') body.deAi = deAi;
+
+  try {
+    const res = await fetch(authUrl(API + '/api/config/book'), {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.status === 'updated') {
+      showToast('本书配置已保存', 'success');
+      showResult(resultDiv, '✦ 本书配置已保存（' + body.styleSource + ' 风格 / ' + body.deAiSource + ' 去AI）', false);
+      loadBookConfig();
+    } else {
+      showResult(resultDiv, '✗ ' + (data.error || '保存失败'), true);
+    }
+  } catch (e) {
+    showResult(resultDiv, '✗ 网络错误: ' + e.message, true);
+  }
+}
+
+async function showResolvePreview() {
+  const path = bcBookPath();
+  if (!path) { showToast('请先选择书目', 'warning'); return; }
+  const box = document.getElementById('bc-resolve');
+  try {
+    const res = await fetch(authUrl(API + '/api/config/resolve?path=' + encodeURIComponent(path)), { headers: authHeaders() });
+    const data = await res.json();
+    box.style.display = 'block';
+    box.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    box.style.display = 'block';
+    box.textContent = '加载失败: ' + e.message;
+  }
+}
+
+async function applyDeAi() {
+  const path = bcBookPath();
+  const input = document.getElementById('bc-deai-input').value;
+  const out = document.getElementById('bc-deai-output');
+  if (!path) { showToast('请先选择书目', 'warning'); return; }
+  if (!input.trim()) { showToast('请粘贴待处理文本', 'warning'); return; }
+  try {
+    const res = await fetch(authUrl(API + '/api/deai/apply'), {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ path, text: input })
+    });
+    const data = await res.json();
+    out.style.display = 'block';
+    out.textContent = (data.cleanedText != null ? data.cleanedText : '') +
+      '\n\n— 已剥离 ' + (data.removedCount || 0) + ' 处 · 模式 ' + (data.mode || 'rule');
+    showToast('去AI 完成，剥离 ' + (data.removedCount || 0) + ' 处', 'success');
+  } catch (e) {
+    out.style.display = 'block';
+    out.textContent = '失败: ' + e.message;
   }
 }
 
