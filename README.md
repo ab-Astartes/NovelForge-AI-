@@ -219,6 +219,8 @@ Studio 功能：
 
 接口：`GET /api/branching?path=<书目录绝对路径>`（加 `&scaffold=1` 强制按章节重建骨架）；`POST /api/branching` 保存 `{path, nodes[], edges[]}`（自动校验边不可悬空/自环，pretty-print 写入 `truth/branching.json`）。
 
+**章节正文内联（P9.1）**：`GET` 响应与导出的互动阅读器会按 `nodes[].chapterRef` 自动抽取对应 `chapters/chapter-NNN.md` 的正文（跳过首行标题、去除 Markdown 标记、保留段落换行），内联进每个节点。编辑器内新增「正文预览」（只读）便于作者核对；导出阅读器时读者点节点即可读该章**原文**而非仅摘要。正文属派生视图，**不写入** `branching.json`（每次读取实时从章节抽取，永不冗余、永不陈旧）。
+
 ## 内置 Genre Profiles
 
 **中文网文**：玄幻、仙侠、都市、恐怖、言情

@@ -60,6 +60,7 @@ public final class BranchingBuilder {
 
         ensureIds(nodes);
         normalizeEdges(nodes, edges);
+        enrichBodies(bookDir, nodes);
 
         ArrayNode nArr = mapper.createArrayNode();
         for (Node n : nodes) nArr.add(n.toJson(mapper));
@@ -182,6 +183,54 @@ public final class BranchingBuilder {
         if (s == null) return "";
         String t = s.trim();
         return t.length() <= max ? t : t.substring(0, max) + "…";
+    }
+
+    // ===================== 章节正文内联 =====================
+
+    /** 为节点附加其关联章节的正文（不写入 branching.json，仅用于预览 / 导出互动阅读器） */
+    private static void enrichBodies(Path bookDir, List<Node> nodes) {
+        for (Node n : nodes) {
+            String b = chapterBodyByRef(bookDir, n.chapterRef);
+            n.body = b == null ? "" : b;
+        }
+    }
+
+    /** 按 1-based 章节序号读取对应 chapters/chapter-NNN.md 正文 */
+    private static String chapterBodyByRef(Path bookDir, int ref) {
+        if (ref <= 0) return "";
+        Path chaptersDir = bookDir.resolve("chapters");
+        if (!Files.isDirectory(chaptersDir)) return "";
+        try (Stream<Path> stream = Files.list(chaptersDir)) {
+            List<Path> files = stream
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .filter(p -> !p.getFileName().toString().contains(".draft."))
+                    .sorted().limit(400).toList();
+            if (ref - 1 >= 0 && ref - 1 < files.size()) {
+                String text = Files.readString(files.get(ref - 1), StandardCharsets.UTF_8);
+                return extractChapterBody(text);
+            }
+        } catch (Exception ignore) {}
+        return "";
+    }
+
+    /** 抽取章节正文：跳过首行标题，去除 Markdown 标记，保留段落换行 */
+    private static String extractChapterBody(String text) {
+        if (text == null) return "";
+        String[] lines = text.split("\n");
+        int start = -1;
+        for (int i = 0; i < lines.length; i++) {
+            String ln = lines[i].trim();
+            if (ln.startsWith("#")) { start = i + 1; break; }
+            if (!ln.isEmpty()) { start = i + 1; break; }
+        }
+        if (start < 0) start = 0;
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < lines.length; i++) {
+            String ln = lines[i].trim();
+            if (ln.isEmpty()) { sb.append("\n"); continue; }
+            sb.append(stripMarkdown(ln).replaceAll("\\s+", " ").trim()).append("\n");
+        }
+        return sb.toString().replaceAll("\n{3,}", "\n\n").trim();
     }
 
     // ===================== 统计 =====================
@@ -342,6 +391,7 @@ public final class BranchingBuilder {
         String type = "scene";
         int chapterRef = 0;
         String excerpt = "";
+        String body = "";
         ObjectNode toJson(ObjectMapper mapper) {
             ObjectNode o = mapper.createObjectNode();
             o.put("id", id);
@@ -349,6 +399,7 @@ public final class BranchingBuilder {
             o.put("type", type);
             o.put("chapterRef", chapterRef);
             o.put("excerpt", excerpt);
+            o.put("body", body);
             return o;
         }
     }

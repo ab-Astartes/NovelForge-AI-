@@ -119,7 +119,37 @@
 
 ---
 
-## 九、下一步候选
+## 九、P9.1 增强：章节正文内联（互动阅读器读原文）
+
+P9 导出的互动阅读器只展示节点 `excerpt`（作者手填摘要），读者看不到章节原文。P9.1 把 `chapterRef` 对应的**真实章节正文**内联进每个节点，补全「读原文」体验，且零新增存储成本。
+
+### 9.1 设计要点
+
+- **正文是派生视图，不是存储状态**：`branching.json` 仍只存 `id/title/type/chapterRef/excerpt`（POST handler 仅写这五个字段，`body` 从不落盘）。`BranchingBuilder.build` 在加载节点后调用 `enrichBodies(bookDir, nodes)`，按 `chapterRef`（1-based，对应 `chapters/chapter-NNN.md` 排序索引）实时抽取正文，仅进入 `GET` 响应，不写入文件。
+- **抽取规则** `extractChapterBody`：跳过首行标题（以 `#` 起始，或首个非空行视为标题），去除 Markdown 标记（`# * _ \` > ---`），**保留段落换行**（空行 → `\n`，连续空行折叠为 `\n\n`），不破坏章节可读性。
+- **前端三处接入**：
+  1. 编辑器选中节点时显示「正文预览（来自第 N 章，只读）」滚动框（`.bf-body-box`），作者即时核对内联内容；
+  2. `exportBranching` 的 `data.nodes` 携带 `body` 字段；
+  3. 互动阅读器渲染改用 `node-body`：优先 `body`，无则回退 `excerpt`，`\n` 转 `<br>`，段落清晰。
+
+### 9.2 验证
+
+- **编译**：`mvn -o compile -am` BUILD SUCCESS（studio 模块含新增 helper）。
+- **测试**：`mvn -o test -am` 全绿（StudioServerTest 8/8）。
+- **前端审计**：`checkids` [A][B][C][D][E] 0 缺口（[C] 仅历史既有 `escapeHtml` 双定义，与本轮无关）。
+- **Studio 冒烟（:8971，--no-auth）**：
+  - `GET ?scaffold=1`：真实三章书目，节点 `body` 正确内联且保留 `\n` 段落（`n1` body 长度 75，含「纵身跃下」与「黑暗吞没了他」两段）✓
+  - `POST` 保存后，直接读取 `truth/branching.json`，`grep -c '"body"'` = **0**（正文未落盘）✓
+  - `GET`（无 scaffold）回读，`scaffolded:false`、`n1 body len=75`、`warnings:0`（结构健康，正文仍从章节实时派生）✓
+  - 单测 `buildInteractiveHtml` 渲染逻辑：含 `body` 文本与 `<br>`，`EXPORT_BODY_OK` ✓
+  - 测试书目 `BodySmoke` 与生成 `studio-cp.txt` 均已清理，未残留。
+
+### 9.3 文件改动
+
+- 改动：`BranchingBuilder.java`（新增 `body` 字段 + `enrichBodies` / `chapterBodyByRef` / `extractChapterBody` 三助手，GET 响应内联正文）、`branching.js`（编辑器正文预览 + 导出携带 `body` + 阅读器渲染原文）、`style.css`（`.bf-body-preview`/`.bf-body-box`/`.node-body`）、`README.md`（补「章节正文内联（P9.1）」小节）
+- 文档：本报告新增第九节
+
+## 十、下一步候选
 
 - 路线图余项：守护进程后台日更（inkos daemon）、多语种翻译工作台
 - 分支剧情增强：

@@ -192,6 +192,9 @@ function renderBranchEditor() {
         + `<option value="ending" ${n.type === 'ending' ? 'selected' : ''}>结局</option></select></label>`;
       html += `<label class="bf-field"><span>章节引用</span><input id="bf-ch" class="input-field" type="number" value="${n.chapterRef || 0}" oninput="updateBranchField('${n.id}','chapterRef',this.value)"></label>`;
       html += `<label class="bf-field bf-col"><span>摘要</span><textarea id="bf-ex" class="input-field" oninput="updateBranchField('${n.id}','excerpt',this.value)">${escapeHtml(n.excerpt || '')}</textarea></label>`;
+      const bodyPreview = (n.body && n.body.trim()) ? n.body : '';
+      html += `<div class="bf-body-preview"><div class="bf-sub">正文预览（来自第 ${n.chapterRef || 0} 章，只读）</div>`
+        + `<div class="bf-body-box">${bodyPreview ? escapeHtml(bodyPreview) : '<span class="empty">（该节点未关联章节或章节无正文）</span>'}</div></div>`;
       const outs = branchEdges.filter(e => e.from === n.id);
       html += '<div class="bf-edges"><div class="bf-sub">选择支（出边） ' + outs.length + '</div>';
       outs.forEach(e => {
@@ -328,7 +331,7 @@ function exportBranching() {
   const title = (branchBook.split(/[\\/]/).pop() || '互动小说');
   const data = {
     title: title,
-    nodes: branchNodes.map(n => ({ id: n.id, title: n.title, type: n.type, excerpt: n.excerpt, chapterRef: n.chapterRef })),
+    nodes: branchNodes.map(n => ({ id: n.id, title: n.title, type: n.type, excerpt: n.excerpt, chapterRef: n.chapterRef, body: n.body || '' })),
     edges: branchEdges.map(e => ({ from: e.from, to: e.to, choice: e.choice }))
   };
   const json = JSON.stringify(data).replace(/</g, '\\u003c');
@@ -373,7 +376,8 @@ function render() {
   let tagTxt = n.type === 'start' ? '起点' : n.type === 'ending' ? '结局' : '场景';
   let html = '<h1>${branchXmlEsc(title)}</h1>';
   html += '<div class="scene"><span class="tag ' + n.type + '">' + tagTxt + (n.chapterRef ? ' · 第' + n.chapterRef + '章' : '') + '</span>';
-  html += '<div>' + (n.excerpt ? escapeHtml(n.excerpt) : '<span class="empty">（无摘要）</span>') + '</div>';
+  const bodyText = (n.body && n.body.trim()) ? n.body : (n.excerpt || '');
+  html += '<div class="node-body">' + (bodyText ? escapeHtml(bodyText).replace(/\n/g, '<br>') : '<span class="empty">（无正文/摘要）</span>') + '</div>';
   const outs = DATA.edges.filter(e => e.from === n.id);
   if (n.type === 'ending') {
     html += '<div class="choices"><button onclick="restart()">↺ 重新开始</button></div>';
