@@ -852,3 +852,166 @@ function renderBranchDiffResult(j) {
     html += '<div class="empty-hint">两版剧情树完全一致。</div>';
   box.innerHTML = html;
 }
+
+// ===================== 分支增强④：多人共编（分支合并模型） =====================
+let branchMergeState = null;
+
+function toggleBranchCollab() {
+  const box = document.getElementById('branch-collab');
+  const btn = document.querySelector('[onclick="toggleBranchCollab()"]');
+  const on = box.classList.contains('hidden');
+  if (on) { box.classList.remove('hidden'); if (btn) btn.classList.add('active'); loadBranchCollab(); }
+  else { box.classList.add('hidden'); if (btn) btn.classList.remove('active'); }
+}
+
+async function loadBranchCollab() {
+  const body = document.getElementById('branch-collab-body');
+  if (!body) return;
+  const book = document.getElementById('branching-book')?.value?.trim();
+  if (!book) { body.innerHTML = '<div class="empty-hint">请先在上方选择书目。</div>'; return; }
+  body.innerHTML = '<div class="empty-hint">加载分支列表…</div>';
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/branches?path=' + encodeURIComponent(book)), { headers: authHeaders() });
+    const j = await r.json();
+    if (!j.ok) { body.innerHTML = '<div class="empty-hint">加载失败：' + escapeHtml(j.error || '') + '</div>'; return; }
+    renderBranchCollab(j);
+  } catch (e) { body.innerHTML = '<div class="empty-hint">请求失败：' + escapeHtml(e.message) + '</div>'; }
+}
+
+function renderBranchCollab(j) {
+  const body = document.getElementById('branch-collab-body');
+  if (!body) return;
+  const branches = j.branches || [];
+  let html = '<div class="bf-sub">分支列表</div><div class="branch-list">';
+  html += '<div class="branch-row branch-row-main"><span class="branch-name">main（主线）</span><span class="branch-meta">' + ((j.main && j.main.nodes) ? j.main.nodes.length : 0) + ' 节点 / ' + ((j.main && j.main.edges) ? j.main.edges.length : 0) + ' 连线</span></div>';
+  branches.forEach(b => { html += '<div class="branch-row"><span class="branch-name">' + branchXmlEsc(b.name) + '</span><span class="branch-meta">' + (b.nodes ? b.nodes.length : 0) + ' 节点 / ' + (b.edges ? b.edges.length : 0) + ' 连线</span></div>'; });
+  if (!branches.length) html += '<div class="bo-gap">（暂无派生分支）</div>';
+  html += '</div>';
+
+  html += '<div class="bf-sub" style="margin-top:10px">派生分支（fork 主线作为协作副本）</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    + '<input id="collab-fork-name" class="input-field" style="min-width:160px" placeholder="分支名（如 作者B）">'
+    + '<button class="btn-ink btn-sm" onclick="forkBranch()">🌱 派生分支</button></div>';
+
+  const branchOpts = '<option value="main">main（主线）</option>' + branches.map(b => '<option value="' + branchXmlEsc(b.name) + '">' + branchXmlEsc(b.name) + '</option>').join('');
+  const theirsOpts = branches.map(b => '<option value="' + branchXmlEsc(b.name) + '">' + branchXmlEsc(b.name) + '</option>').join('') || '<option value="">（无派生分支）</option>';
+  html += '<div class="bf-sub" style="margin-top:10px">三路合并（把某分支并入主线）</div>';
+  html += '<div class="form-grid">'
+    + '<div class="form-group"><label class="form-label">我方（ours）</label><select id="collab-ours" class="input-field">' + branchOpts + '</select></div>'
+    + '<div class="form-group"><label class="form-label">他方分支（theirs）</label><select id="collab-theirs" class="input-field">' + theirsOpts + '</select></div>'
+    + '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    + '<button class="btn-ink btn-sm" onclick="runBranchMerge()">🔀 运行合并</button>'
+    + '<label class="branch-sync"><input type="checkbox" id="collab-sync"> 采纳后同步回该分支</label>'
+    + '</div>';
+  html += '<div id="branch-merge-result" style="margin-top:10px"></div>';
+  body.innerHTML = html;
+}
+
+async function forkBranch() {
+  const book = document.getElementById('branching-book')?.value?.trim();
+  const name = document.getElementById('collab-fork-name')?.value?.trim();
+  if (!book) { showToast('请先选择书目', 'warning'); return; }
+  if (!name) { showToast('请输入分支名', 'warning'); return; }
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/branch'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: book, name, from: 'main' })
+    });
+    const j = await r.json();
+    if (!j.ok) { showToast('派生失败：' + (j.error || ''), 'warning'); return; }
+    showToast('已派生分支「' + name + '」', 'success');
+    loadBranchCollab();
+  } catch (e) { showToast('失败：' + e.message, 'warning'); }
+}
+
+async function runBranchMerge() {
+  const book = document.getElementById('branching-book')?.value?.trim();
+  const box = document.getElementById('branch-merge-result');
+  const ours = document.getElementById('collab-ours')?.value || 'main';
+  const theirs = document.getElementById('collab-theirs')?.value || '';
+  if (!book) { showToast('请先选择书目', 'warning'); return; }
+  if (!theirs) { showToast('请先派生一个分支用于合并', 'warning'); return; }
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/merge'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: book, ours, theirs })
+    });
+    const j = await r.json();
+    if (!j.ok) { box.innerHTML = '<div class="empty-hint">合并失败：' + escapeHtml(j.error || '') + '</div>'; return; }
+    const merged = j.merged || { nodes: [], edges: [] };
+    branchMergeState = { ours, theirs, merged: { nodes: merged.nodes, edges: merged.edges }, conflicts: j.conflicts || [] };
+    renderBranchMergeResult();
+  } catch (e) { box.innerHTML = '<div class="empty-hint">请求失败：' + escapeHtml(e.message) + '</div>'; }
+}
+
+function renderBranchMergeResult() {
+  const box = document.getElementById('branch-merge-result');
+  if (!box || !branchMergeState) return;
+  const s = branchMergeState.merged || { nodes: [], edges: [] };
+  const conflicts = branchMergeState.conflicts || [];
+  let html = '<div class="graph-stats">合并结果：' + (s.nodes ? s.nodes.length : 0) + ' 节点 / ' + (s.edges ? s.edges.length : 0) + ' 连线'
+    + (conflicts.length ? (' ｜ <span class="bo-warn">冲突 ' + conflicts.length + ' 处（默认取我方，可逐个改）</span>') : ' ｜ 无冲突，可直接采纳')
+    + '</div>';
+  if (conflicts.length) {
+    html += '<div class="bf-sub" style="margin-top:8px">冲突（逐条解决）</div><div class="branch-conflicts">';
+    conflicts.forEach((c, i) => {
+      const title = c.kind === 'edge' ? c.key.replace('|', '→') : c.key;
+      html += '<div class="branch-conflict">'
+        + '<div class="bc-head">[' + (c.kind === 'edge' ? '连线' : '节点') + '] ' + branchXmlEsc(title) + ' — ' + branchXmlEsc(c.reason) + '</div>';
+      if (c.ours) html += '<div class="bc-side bc-ours">我方：' + branchXmlEsc(JSON.stringify(stripBranchId(c.ours))) + '</div>';
+      if (c.theirs) html += '<div class="bc-side bc-theirs">他方：' + branchXmlEsc(JSON.stringify(stripBranchId(c.theirs))) + '</div>';
+      html += '<div class="branch-conflict-actions">'
+        + '<button class="btn-ghost btn-sm" onclick="resolveConflict(' + i + ',\'ours\')">取我方</button>'
+        + '<button class="btn-ghost btn-sm" onclick="resolveConflict(' + i + ',\'theirs\')">取他方</button>'
+        + '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    + '<button class="btn-ink btn-sm" onclick="adoptBranchMerge()">✅ 采纳合并结果到主线</button></div>';
+  box.innerHTML = html;
+}
+
+function stripBranchId(o) { const c = JSON.parse(JSON.stringify(o)); if (c && c.id) delete c.id; return c; }
+
+function resolveConflict(i, side) {
+  if (!branchMergeState) return;
+  const c = branchMergeState.conflicts[i];
+  if (!c) return;
+  const src = side === 'theirs' ? c.theirs : c.ours;
+  if (!src) { showToast('该侧无内容（删除），无法采用', 'warning'); return; }
+  const merged = branchMergeState.merged;
+  if (c.kind === 'node') {
+    const idx = (merged.nodes || []).findIndex(n => n.id === c.key);
+    if (idx >= 0) merged.nodes[idx] = JSON.parse(JSON.stringify(src));
+  } else {
+    const key = c.key;
+    const idx = (merged.edges || []).findIndex(e => (e.from + '|' + e.to) === key);
+    if (idx >= 0) merged.edges[idx] = JSON.parse(JSON.stringify(src));
+  }
+  branchMergeState.conflicts.splice(i, 1);
+  renderBranchMergeResult();
+  showToast('已采用' + (side === 'theirs' ? '他方' : '我方') + '版本', 'success', 1000);
+}
+
+async function adoptBranchMerge() {
+  const book = document.getElementById('branching-book')?.value?.trim();
+  if (!book || !branchMergeState) { showToast('没有可采纳的合并结果', 'warning'); return; }
+  const sync = document.getElementById('collab-sync')?.checked;
+  const syncBranch = sync ? branchMergeState.theirs : '';
+  try {
+    const r = await fetch(authUrl(API + '/api/branching/adopt'), {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: book, nodes: branchMergeState.merged.nodes, edges: branchMergeState.merged.edges, syncBranch })
+    });
+    const j = await r.json();
+    if (!j.ok) { showToast('采纳失败：' + (j.error || ''), 'warning'); return; }
+    showToast('已采纳合并结果到主线' + (j.synced ? ' 并同步回分支' : ''), 'success');
+    if (typeof branchNodes !== 'undefined') { branchNodes = JSON.parse(JSON.stringify(branchMergeState.merged.nodes)); branchEdges = JSON.parse(JSON.stringify(branchMergeState.merged.edges)); if (typeof renderBranchGraph === 'function') renderBranchGraph(); }
+    const st = branchMergeState; branchMergeState = null;
+    loadBranchCollab();
+    if (typeof loadBranchState === 'function') { try { loadBranchState(); } catch (e) {} }
+    if (typeof loadTension === 'function') { try { loadTension(); } catch (e) {} }
+  } catch (e) { showToast('失败：' + e.message, 'warning'); }
+}

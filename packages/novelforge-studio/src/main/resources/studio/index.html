@@ -1192,6 +1192,22 @@
                   <option value="llm">LLM增强</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label class="form-label">文体（按文体叠加规则）</label>
+                <select id="bc-deai-try-genre" class="input-field">
+                  <option value="">不指定</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">章节节奏（自适应强度）</label>
+                <select id="bc-deai-try-rhythm" class="input-field">
+                  <option value="auto">自动（按正文判定）</option>
+                  <option value="calm">铺垫/抒情</option>
+                  <option value="rising">推进</option>
+                  <option value="climax">高潮/冲突</option>
+                  <option value="dialogue">对话驱动</option>
+                </select>
+              </div>
             </div>
             <details>
               <summary style="cursor:pointer;color:#8b7355;font-size:13px;margin-bottom:6px">LLM 设置（可选，留空用全局配置，仅本次试用不保存）</summary>
@@ -1522,7 +1538,13 @@
           <button class="btn-ghost btn-sm" onclick="toggleBranchStateDebug()">🐞 状态机调试</button>
           <button class="btn-ghost btn-sm" onclick="loadBranchSuggest()">💡 抉择点反向建议</button>
           <button class="btn-ghost btn-sm" onclick="toggleBranchDiff()">🔬 版本对比</button>
+          <button class="btn-ghost btn-sm" onclick="toggleBranchCollab()">👥 多人共编</button>
           <span id="branching-ext-hint" class="graph-stats"></span>
+        </div>
+
+        <div id="branch-collab" class="card hidden" style="margin-top:8px">
+          <div class="card-title">👥 多人共编（分支合并模型）</div>
+          <div id="branch-collab-body" class="branch-collab-body"></div>
         </div>
 
         <div id="branch-state-debug" class="card hidden" style="margin-top:8px">

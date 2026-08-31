@@ -2814,6 +2814,53 @@ body {
 .lg-line { background: #d9534f; }
 .lg-band { background: rgba(201,162,39,0.6); }
 .lg-dot { width: 8px !important; height: 8px !important; border-radius: 50%; background: var(--gold, #c9a227); }
+.lg-branch { width: 10px !important; height: 10px !important; transform: rotate(45deg); background: #4a90d9; }
+
+/* 状态机 ↔ 张力联动：分支节点标记 */
+.tv-bm { stroke: #fff; stroke-width: 1; cursor: pointer; }
+.tv-bm-start { fill: #4caf50; }
+.tv-bm-scene { fill: #4a90d9; }
+.tv-bm-decision { fill: #c9a227; }
+.tv-bm-ending { fill: #d9534f; }
+.tv-bm-other { fill: #9b6dd9; }
+
+.branch-link-summary { margin: 4px 0 8px; font-size: 12.5px; color: var(--text-soft, #c8c8c8); }
+.branch-link-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.branch-link-row { display: flex; gap: 10px; align-items: baseline; font-size: 12.5px; padding: 5px 8px; border-radius: 6px; background: var(--panel, #1e1e24); border-left: 2px solid #4a90d9; }
+.bl-ch { color: var(--gold, #c9a227); font-weight: 600; white-space: nowrap; }
+.bl-title { color: var(--text, #e8e8e8); }
+.bl-state { color: var(--text-dim, #9a9a9a); margin-left: auto; font-size: 11.5px; }
+.row-branch .bl-dot, .tension-row.row-branch .c-ch .bl-dot { color: #4a90d9; }
+.bl-dot { color: #4a90d9; }
+
+.td-branch { margin-top: 10px; padding: 8px 10px; border-left: 2px solid #4a90d9; background: rgba(74,144,217,0.07); border-radius: 0 6px 6px 0; font-size: 12.5px; }
+.td-branch-row { margin: 3px 0; color: var(--text-soft, #c8c8c8); }
+.tdb-type { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; margin-right: 6px; color: #fff; }
+.tdb-start { background: #4caf50; }
+.tdb-scene { background: #4a90d9; }
+.tdb-decision { background: #c9a227; }
+.tdb-ending { background: #d9534f; }
+.tdb-other { background: #9b6dd9; }
+.tdb-state { color: var(--text-dim, #9a9a9a); }
+
+/* 多人共编（分支合并） */
+.branch-collab-body { padding: 12px 14px; }
+.branch-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.branch-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 9px; border-radius: 6px; background: var(--panel, #1e1e24); border-left: 2px solid #4a90d9; font-size: 12.5px; }
+.branch-row-main { border-left-color: var(--gold, #c9a227); }
+.branch-name { color: var(--text, #e8e8e8); font-weight: 600; }
+.branch-meta { color: var(--text-dim, #9a9a9a); }
+.bf-sub { font-size: 12px; color: var(--text-dim, #9a9a9a); margin: 4px 0 6px; font-weight: 600; }
+.branch-sync { font-size: 12px; color: var(--text-soft, #c8c8c8); display: inline-flex; align-items: center; gap: 5px; }
+.bo-warn { color: #e8a33d; }
+.bo-gap { font-size: 12.5px; color: var(--text-soft, #c8c8c8); padding: 2px 0; }
+.branch-conflicts { display: flex; flex-direction: column; gap: 8px; }
+.branch-conflict { border: 1px solid #6b4a1f; border-radius: 8px; padding: 8px 10px; background: rgba(232,163,61,0.06); }
+.bc-head { font-size: 12.5px; color: #e8a33d; margin-bottom: 5px; }
+.bc-side { font-size: 11.5px; padding: 3px 6px; border-radius: 5px; margin: 2px 0; word-break: break-all; font-family: monospace; }
+.bc-ours { background: rgba(74,144,217,0.12); color: #9ec5f0; }
+.bc-theirs { background: rgba(201,162,39,0.12); color: #e0c060; }
+.branch-conflict-actions { display: flex; gap: 8px; margin-top: 6px; }
 
 .tension-warns { margin-bottom: 18px; }
 .tension-detail { margin-bottom: 18px; }

@@ -325,6 +325,11 @@ public class StudioServer {
         server.createContext("/api/branching/state", corsWrap(this::handleBranchingStateApi));
         server.createContext("/api/branching/diff", corsWrap(this::handleBranchingDiffApi));
         server.createContext("/api/branching/suggest", corsWrap(this::handleBranchingSuggestApi));
+        server.createContext("/api/branching/tension", corsWrap(this::handleBranchingTensionApi));
+        server.createContext("/api/branching/branches", corsWrap(this::handleBranchingBranchesApi));
+        server.createContext("/api/branching/branch", corsWrap(this::handleBranchingForkApi));
+        server.createContext("/api/branching/merge", corsWrap(this::handleBranchingMergeApi));
+        server.createContext("/api/branching/adopt", corsWrap(this::handleBranchingAdoptApi));
         server.createContext("/api/version", corsWrap(this::handleVersionApi));
         server.createContext("/api/outline/synopsis", corsWrap(this::handleOutlineSynopsisApi));
             server.createContext("/api/usage", corsWrap(ex -> {
@@ -2279,6 +2284,33 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         deAi.put("rewriteGuidance", "去掉总结性套话与工整对仗，改用具体动作与感官细节，缩短平均句长，避免排比。");
         deAi.put("strength", 0.7);
         deAi.put("mode", "rule");
+        // 按文体规则集：应用 /api/deai/apply 时传 genre 即叠加该文体的禁用词/AI腔/准则/强度
+        ObjectNode genres = deAi.putObject("genres");
+        ObjectNode gXh = genres.putObject("玄幻");
+        gXh.putArray("bannedPhrases").add("不禁").add("仿佛置身于").add("一股难以言喻");
+        gXh.putArray("aiTellPatterns").add("眼中闪过一抹[一-龥]{1,4}之色");
+        gXh.put("rewriteGuidance", "玄幻重画面与力量感，去除现代白话的总结腔与过度心理剖析，留白处用意象而非解释。");
+        gXh.put("strength", 0.75);
+        ObjectNode gYq = genres.putObject("言情");
+        gYq.putArray("bannedPhrases").add("心跳漏了一拍").add("红了眼眶").add("说不出的");
+        gYq.putArray("aiTellPatterns").add("空气中弥漫着[一-龥]{1,6}的气息");
+        gYq.put("rewriteGuidance", "言情重情绪流动与细腻感官，去除说教式心理总结，用动作与微表情替代直白抒情。");
+        gYq.put("strength", 0.72);
+        ObjectNode gXy = genres.putObject("悬疑");
+        gXy.putArray("bannedPhrases").add("真相呼之欲出").add("细思极恐的是");
+        gXy.putArray("aiTellPatterns").add("一切(似乎|仿佛)[一-龥]{1,8}");
+        gXy.put("rewriteGuidance", "悬疑重信息控制与节奏，去除提前剧透式总结，保留悬念与细节，让读者自己拼图。");
+        gXy.put("strength", 0.78);
+        ObjectNode gKh = genres.putObject("科幻");
+        gKh.putArray("bannedPhrases").add("某种意义上").add("从某种意义上说");
+        gKh.putArray("aiTellPatterns").add("这(意味着|表明)[一-龥]{1,10}");
+        gKh.put("rewriteGuidance", "科幻重设定自洽与冷峻叙述，去除抒情套话，术语前后统一、不突然掉书袋。");
+        gKh.put("strength", 0.7);
+        ObjectNode gDs = genres.putObject("都市");
+        gDs.putArray("bannedPhrases").add("不得不说").add("诚然");
+        gDs.putArray("aiTellPatterns").add("生活就像[一-龥]{1,8}");
+        gDs.put("rewriteGuidance", "都市重口语与市井气，去除书面总结腔，对白更接地气、少修饰。");
+        gDs.put("strength", 0.68);
         ObjectNode settings = d.putObject("settings");
         settings.put("source", "world");
         settings.put("doc", "world.json");
@@ -2416,12 +2448,48 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
 
             ObjectNode deAi = resolveBookConfig(Paths.get(bookPath)).path("deAi").deepCopy();
+
+            // ---- 按文体：合并 genre 规则集（禁用词/AI腔取并集，准则拼接，强度覆盖）----
+            String genre = body.has("genre") ? body.get("genre").asText("").trim() : "";
+            ObjectNode work = (ObjectNode) deAi.deepCopy();
+            boolean genreApplied = false;
+            if (!genre.isEmpty() && deAi.has("genres") && deAi.get("genres").isObject()
+                    && deAi.get("genres").has(genre) && deAi.get("genres").get(genre).isObject()) {
+                ObjectNode gp = (ObjectNode) deAi.get("genres").get(genre);
+                java.util.Set<String> banned = new java.util.LinkedHashSet<>();
+                for (JsonNode p : work.withArray("bannedPhrases")) if (!p.asText().isEmpty()) banned.add(p.asText());
+                for (JsonNode p : gp.withArray("bannedPhrases")) if (!p.asText().isEmpty()) banned.add(p.asText());
+                ArrayNode ba = work.putArray("bannedPhrases"); banned.forEach(ba::add);
+                java.util.Set<String> pats = new java.util.LinkedHashSet<>();
+                for (JsonNode p : work.withArray("aiTellPatterns")) if (!p.asText().isEmpty()) pats.add(p.asText());
+                for (JsonNode p : gp.withArray("aiTellPatterns")) if (!p.asText().isEmpty()) pats.add(p.asText());
+                ArrayNode pa = work.putArray("aiTellPatterns"); pats.forEach(pa::add);
+                String gGuide = gp.path("rewriteGuidance").asText("");
+                if (!gGuide.isEmpty()) work.put("rewriteGuidance", gGuide + " " + work.path("rewriteGuidance").asText(""));
+                if (gp.has("strength")) work.put("strength", gp.get("strength").asDouble(work.path("strength").asDouble(0.7)));
+                work.put("activeGenre", genre);
+                genreApplied = true;
+            }
+
+            // ---- 按章节节奏：auto 时依正文分类，并据节奏调节强度 ----
+            String rhythmParam = body.has("rhythm") ? body.get("rhythm").asText("auto").trim() : "auto";
+            String rhythm = rhythmParam;
+            if ("auto".equals(rhythmParam) || rhythmParam.isEmpty()) {
+                ObjectNode rp = TensionBuilder.rhythmProfile(mapper, text);
+                rhythm = rp.path("rhythm").asText("calm");
+            }
+            double baseStrength = work.path("strength").asDouble(0.7);
+            double strength = Math.max(0, Math.min(1, baseStrength * TensionBuilder.rhythmStrengthFactor(rhythm)));
+            work.put("strength", strength);
+            work.put("rhythm", rhythm);
+            String rhythmNote = TensionBuilder.rhythmGuidance(rhythm);
+
             int removed = 0;
             String cleaned = text;
 
             // 1) 移除禁用词
-            if (deAi.has("bannedPhrases")) {
-                for (JsonNode p : deAi.get("bannedPhrases")) {
+            if (work.has("bannedPhrases")) {
+                for (JsonNode p : work.get("bannedPhrases")) {
                     String phrase = p.asText();
                     if (phrase != null && !phrase.isEmpty()) {
                         int before = cleaned.length();
@@ -2431,8 +2499,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                 }
             }
             // 2) 正则式 AI 腔句式剥离
-            if (deAi.has("aiTellPatterns")) {
-                for (JsonNode p : deAi.get("aiTellPatterns")) {
+            if (work.has("aiTellPatterns")) {
+                for (JsonNode p : work.get("aiTellPatterns")) {
                     String pat = p.asText();
                     if (pat != null && !pat.isEmpty()) {
                         try {
@@ -2448,13 +2516,16 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             // 3) 清理多余空格与标点粘连
             cleaned = cleaned.replaceAll("[ \t]{2,}", " ").replaceAll("， +", "，").replaceAll("。 +", "。").trim();
 
-            String mode = deAi.path("mode").asText("rule");
+            String mode = work.path("mode").asText("rule");
             if (body.has("mode") && !body.get("mode").asText("").isEmpty()) mode = body.get("mode").asText("rule");
             ObjectNode result = mapper.createObjectNode();
             result.put("status", "ok");
             result.put("originalLength", text.length());
             result.put("removedCount", removed);
             result.put("mode", mode);
+            result.put("genre", genreApplied ? genre : "");
+            result.put("rhythm", rhythm);
+            result.put("strength", Math.round(strength * 100) / 100.0);
 
             if ("llm".equals(mode)) {
                 // LLM 增强改写：规则清洗作为预处理，再交给模型做语义级润色
@@ -2474,17 +2545,18 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                     int est = client.estimateTokens(cleaned);
                     int maxTokens = Math.min(8000, Math.max(400, est * 2 + 600));
                     StringBuilder gb = new StringBuilder();
-                    gb.append("基调准则：").append(deAi.path("rewriteGuidance").asText("")).append("\n");
-                    if (deAi.has("bannedPhrases") && deAi.get("bannedPhrases").isArray()) {
+                    gb.append("基调准则：").append(work.path("rewriteGuidance").asText("")).append("\n");
+                    if (genreApplied) gb.append("文体：").append(genre).append("（已叠加该文体专属去AI规则）\n");
+                    if (!rhythmNote.isEmpty()) gb.append("章节节奏：").append(rhythm).append("。").append(rhythmNote).append("\n");
+                    if (work.has("bannedPhrases") && work.get("bannedPhrases").isArray()) {
                         gb.append("禁用词（直接删除，不要替换保留）：");
-                        for (JsonNode p : deAi.get("bannedPhrases")) gb.append(p.asText()).append("、");
+                        for (JsonNode p : work.get("bannedPhrases")) gb.append(p.asText()).append("、");
                         gb.append("\n");
                     }
-                    if (deAi.has("aiTellPatterns") && deAi.get("aiTellPatterns").isArray()) {
-                        gb.append("避免的 AI 腔句式（参考模式，不必逐字匹配）：").append(deAi.get("aiTellPatterns").toString()).append("\n");
+                    if (work.has("aiTellPatterns") && work.get("aiTellPatterns").isArray()) {
+                        gb.append("避免的 AI 腔句式（参考模式，不必逐字匹配）：").append(work.get("aiTellPatterns").toString()).append("\n");
                     }
-                    double strength = deAi.path("strength").asDouble(0.7);
-                    gb.append("改写强度（0~1，越大改动越激进）：").append(strength).append("\n");
+                    gb.append("改写强度（0~1，越大改动越激进）：").append(Math.round(strength * 100) / 100.0).append("\n");
                     String guidance = gb.toString();
                     String system = "你是一名资深中文小说编辑，擅长去除 AI 生成痕迹。根据用户给出的改写准则，对文本进行润色："
                             + "删除禁用词；剥离 AI 腔句式（如工整对仗、排比、过度总结、空泛升华）；"
@@ -2498,7 +2570,7 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                         cleaned = llmOut.trim();
                         result.put("cleanedText", cleaned);
                         result.put("cleanedLength", cleaned.length());
-                        result.put("note", "LLM 增强改写完成（规则预处理 + 语义润色）。");
+                        result.put("note", "LLM 增强改写完成（" + (genreApplied ? "文体[" + genre + "] " : "") + "节奏[" + rhythm + "] 规则预处理 + 语义润色）。");
                     } else {
                         result.put("cleanedText", cleaned);
                         result.put("cleanedLength", cleaned.length());
@@ -2512,7 +2584,9 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             } else {
                 result.put("cleanedText", cleaned);
                 result.put("cleanedLength", cleaned.length());
-                result.put("note", "规则式去AI：已剥离禁用词与 AI 腔句式。");
+                result.put("note", "规则式去AI：已剥离禁用词与 AI 腔句式。"
+                        + (genreApplied ? "（已叠加文体[" + genre + "]规则）" : "")
+                        + " 节奏[" + rhythm + "] 强度=" + (Math.round(strength * 100) / 100.0) + "。");
             }
             sendJson(exchange, 200, mapper.writeValueAsString(result));
         } catch (Exception e) {
@@ -4466,6 +4540,111 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         if (st.has("attrs") && st.get("attrs").isObject()) { java.util.Iterator<String> it = st.get("attrs").fieldNames(); while (it.hasNext()) { String k = it.next(); if (!k.isEmpty()) attrs.add(k); } }
     }
 
+    // ===================== 分支增强③：状态机 ↔ 张力曲线联动 =====================
+    private void handleBranchingTensionApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) {
+                sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return;
+            }
+            Path bookDir = Paths.get(bookPath);
+            Path bf = bookDir.resolve("truth").resolve("branching.json");
+            ObjectNode tension = TensionBuilder.build(mapper, bookDir);
+            ObjectNode out;
+            if (!Files.exists(bf)) {
+                out = mapper.createObjectNode();
+                out.put("ok", true);
+                out.put("hasBranching", false);
+                out.set("curve", tension.path("curve"));
+                out.set("stats", tension.path("stats"));
+                out.set("warnings", tension.path("warnings"));
+                out.set("branchMarkers", mapper.createArrayNode());
+                out.set("nodes", mapper.createArrayNode());
+                sendJson(exchange, 200, mapper.writeValueAsString(out));
+                return;
+            }
+            JsonNode root = mapper.readTree(Files.readAllBytes(bf));
+            out = branchTensionLink(root.path("nodes"), root.path("edges"), tension);
+            sendJson(exchange, 200, mapper.writeValueAsString(out));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /** 把状态机（各章对应节点态/flags）叠加到张力曲线上，返回联动视图 */
+    private ObjectNode branchTensionLink(JsonNode nodesArr, JsonNode edgesArr, ObjectNode tension) {
+        ObjectNode resp = mapper.createObjectNode();
+        resp.put("ok", true);
+        resp.put("hasBranching", true);
+        ObjectNode state = branchStateDebug(nodesArr, edgesArr); // {nodes:{id:{flags,attrs}}}
+
+        // 节点基础信息 + 调试态
+        java.util.Map<Integer, java.util.List<ObjectNode>> byChapter = new java.util.LinkedHashMap<>();
+        ArrayNode nodesOut = mapper.createArrayNode();
+        for (JsonNode n : nodesArr) {
+            String id = n.path("id").asText("").trim();
+            if (id.isEmpty()) continue;
+            int ch = n.path("chapterRef").asInt(0);
+            ObjectNode no = mapper.createObjectNode();
+            no.put("id", id);
+            no.put("title", n.path("title").asText("").trim());
+            no.put("type", n.path("type").asText("scene").trim());
+            no.put("chapterRef", ch);
+            no.put("excerpt", n.path("excerpt").asText("").trim());
+            ObjectNode st = (ObjectNode) state.path("nodes").path(id);
+            ArrayNode fArr = mapper.createArrayNode();
+            if (st.has("flags")) for (JsonNode x : st.get("flags")) fArr.add(x.asText());
+            ArrayNode aArr = mapper.createArrayNode();
+            if (st.has("attrs")) for (JsonNode x : st.get("attrs")) aArr.add(x.asText());
+            no.set("flags", fArr);
+            no.set("attrs", aArr);
+            nodesOut.add(no);
+            if (ch > 0) byChapter.computeIfAbsent(ch, k -> new java.util.ArrayList<>()).add(no);
+        }
+        resp.set("nodes", nodesOut);
+
+        // 张力曲线：每章叠加该章活跃的分支节点
+        ArrayNode curve = mapper.createArrayNode();
+        for (JsonNode c : tension.path("curve")) {
+            ObjectNode co = (ObjectNode) c.deepCopy();
+            int ch = c.path("chapter").asInt(0);
+            ArrayNode bn = mapper.createArrayNode();
+            java.util.List<ObjectNode> list = byChapter.get(ch);
+            if (list != null) for (ObjectNode no : list) {
+                ObjectNode m = mapper.createObjectNode();
+                m.put("id", no.path("id").asText(""));
+                m.put("title", no.path("title").asText(""));
+                m.put("type", no.path("type").asText(""));
+                m.set("flags", no.get("flags").deepCopy());
+                m.set("attrs", no.get("attrs").deepCopy());
+                bn.add(m);
+            }
+            co.set("branchNodes", bn);
+            curve.add(co);
+        }
+        resp.set("curve", curve);
+        resp.set("stats", tension.path("stats"));
+        resp.set("warnings", tension.path("warnings"));
+
+        // 分支标记（扁平，供前端在曲线上打点）
+        ArrayNode markers = mapper.createArrayNode();
+        for (JsonNode no : nodesOut) {
+            int ch = no.path("chapterRef").asInt(0);
+            if (ch <= 0) continue;
+            ObjectNode m = mapper.createObjectNode();
+            m.put("chapter", ch);
+            m.put("id", no.path("id").asText(""));
+            m.put("title", no.path("title").asText(""));
+            m.put("type", no.path("type").asText(""));
+            m.set("flags", no.get("flags").deepCopy());
+            m.set("attrs", no.get("attrs").deepCopy());
+            markers.add(m);
+        }
+        resp.set("branchMarkers", markers);
+        return resp;
+    }
+
     // ===================== 分支增强②：剧情树版本 diff =====================
     private void handleBranchingDiffApi(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
@@ -4548,6 +4727,255 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         return f;
     }
     private boolean jsonEq(JsonNode a, JsonNode b) { if (a == null || b == null) return a == b; return a.toString().equals(b.toString()); }
+
+    // ===================== 分支增强④：多人共编（分支合并模型） =====================
+    private Path branchDir(Path bookDir) { return bookDir.resolve("truth").resolve("branches"); }
+    private String sanitizeBranchName(String n) {
+        String s = (n == null ? "" : n).replaceAll("[^\\w\\u4e00-\\u9fa5\\-]", "_");
+        return s.substring(0, Math.min(s.length(), 40));
+    }
+    private ObjectNode loadTree(Path file) {
+        ObjectNode o = mapper.createObjectNode();
+        try {
+            if (Files.exists(file)) {
+                JsonNode r = mapper.readTree(Files.readAllBytes(file));
+                o.set("nodes", r.path("nodes").isArray() ? r.path("nodes") : mapper.createArrayNode());
+                o.set("edges", r.path("edges").isArray() ? r.path("edges") : mapper.createArrayNode());
+                return o;
+            }
+        } catch (Exception ignore) {}
+        o.set("nodes", mapper.createArrayNode());
+        o.set("edges", mapper.createArrayNode());
+        return o;
+    }
+    private ObjectNode loadTreeByName(Path bookDir, String name) {
+        if ("main".equals(name)) return loadTree(bookDir.resolve("truth").resolve("branching.json"));
+        return loadTree(branchDir(bookDir).resolve(sanitizeBranchName(name) + ".json"));
+    }
+
+    private void handleBranchingBranchesApi(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"GET only\"}"); return; }
+        String bookPath = getQueryParam(exchange.getRequestURI().getQuery(), "path");
+        try {
+            if (bookPath == null || bookPath.isBlank() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return; }
+            Path bookDir = Paths.get(bookPath);
+            ObjectNode out = mapper.createObjectNode(); out.put("ok", true);
+            Path mainF = bookDir.resolve("truth").resolve("branching.json");
+            out.put("hasMain", Files.exists(mainF));
+            out.set("main", loadTree(mainF));
+            ArrayNode branches = mapper.createArrayNode();
+            Path bd = branchDir(bookDir);
+            if (Files.isDirectory(bd)) {
+                try (java.util.stream.Stream<Path> s = Files.list(bd)) {
+                    s.filter(p -> p.getFileName().toString().endsWith(".json") && !p.getFileName().toString().endsWith(".base.json"))
+                            .sorted().forEach(p -> {
+                        ObjectNode b = mapper.createObjectNode();
+                        b.put("name", p.getFileName().toString().replaceAll("\\.json$", ""));
+                        ObjectNode t = loadTree(p);
+                        b.set("nodes", t.get("nodes")); b.set("edges", t.get("edges"));
+                        branches.add(b);
+                    });
+                }
+            }
+            out.set("branches", branches);
+            sendJson(exchange, 200, mapper.writeValueAsString(out));
+        } catch (Exception e) { sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}"); }
+    }
+
+    private void handleBranchingForkApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.path("path").asText("");
+            String name = body.path("name").asText("").trim();
+            String from = body.path("from").asText("main").trim();
+            if (bookPath.isEmpty() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return; }
+            if (name.isEmpty() || name.length() > 40) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"分支名必填且 ≤40 字\"}"); return; }
+            name = sanitizeBranchName(name);
+            Path bookDir = Paths.get(bookPath);
+            Path bd = branchDir(bookDir); Files.createDirectories(bd);
+            Path src = "main".equals(from) ? bookDir.resolve("truth").resolve("branching.json") : bd.resolve(sanitizeBranchName(from) + ".json");
+            if (!Files.exists(src)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"源分支不存在：" + from + "\"}"); return; }
+            Path dst = bd.resolve(name + ".json");
+            if (Files.exists(dst)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"分支已存在：" + name + "\"}"); return; }
+            byte[] data = Files.readAllBytes(src);
+            Files.write(dst, data);                 // 分支副本
+            Files.write(bd.resolve(name + ".base.json"), data); // 捕获派生时的共同祖先
+            sendJson(exchange, 200, "{\"ok\":true,\"name\":\"" + name + "\",\"message\":\"已派生分支 " + name + "（base 已捕获）\"}");
+        } catch (Exception e) { sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}"); }
+    }
+
+    private void handleBranchingMergeApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.path("path").asText("");
+            String ours = body.path("ours").asText("main").trim();
+            String theirs = body.path("theirs").asText("").trim();
+            String base = body.path("base").asText("").trim();
+            if (bookPath.isEmpty() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return; }
+            if (theirs.isEmpty()) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"theirs（待合并分支）必填\"}"); return; }
+            Path bookDir = Paths.get(bookPath);
+            ObjectNode baseT;
+            if (!base.isEmpty()) baseT = loadTreeByName(bookDir, base);
+            else {
+                Path tb = branchDir(bookDir).resolve(sanitizeBranchName(theirs) + ".base.json");
+                baseT = Files.exists(tb) ? loadTree(tb) : loadTreeByName(bookDir, ours);
+            }
+            ObjectNode oursT = loadTreeByName(bookDir, ours);
+            ObjectNode theirsT = loadTreeByName(bookDir, theirs);
+            ObjectNode merged = branchMerge3way(baseT, oursT, theirsT);
+            sendJson(exchange, 200, mapper.writeValueAsString(merged));
+        } catch (Exception e) { sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}"); }
+    }
+
+    private void handleBranchingAdoptApi(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+        try {
+            JsonNode body = readBody(exchange);
+            String bookPath = body.path("path").asText("");
+            JsonNode nodes = body.path("nodes"), edges = body.path("edges");
+            if (bookPath.isEmpty() || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"无效书目路径\"}"); return; }
+            if (!nodes.isArray() || !edges.isArray()) { sendJson(exchange, 400, "{\"ok\":false,\"error\":\"nodes/edges 必为数组\"}"); return; }
+            Path bookDir = Paths.get(bookPath);
+            Path truthDir = bookDir.resolve("truth"); Files.createDirectories(truthDir);
+            ObjectNode root = mapper.createObjectNode();
+            ArrayNode nArr = mapper.createArrayNode();
+            for (JsonNode n : nodes) {
+                ObjectNode o = mapper.createObjectNode();
+                o.put("id", n.path("id").asText("").trim());
+                o.put("title", n.path("title").asText("").trim());
+                o.put("type", n.path("type").asText("scene").trim());
+                o.put("chapterRef", n.path("chapterRef").asInt(0));
+                o.put("excerpt", n.path("excerpt").asText("").trim());
+                o.put("volume", n.path("volume").asText("").trim());
+                JsonNode st = n.path("state"); if (st.isObject()) o.set("state", st);
+                nArr.add(o);
+            }
+            ArrayNode eArr = mapper.createArrayNode();
+            for (JsonNode e : edges) {
+                ObjectNode o = mapper.createObjectNode();
+                o.put("from", e.path("from").asText("").trim());
+                o.put("to", e.path("to").asText("").trim());
+                o.put("choice", e.path("choice").asText("").trim());
+                JsonNode req = e.path("requires"); if (req.isObject()) o.set("requires", req);
+                JsonNode set = e.path("sets"); if (set.isObject()) o.set("sets", set);
+                eArr.add(o);
+            }
+            root.set("nodes", nArr); root.set("edges", eArr);
+            byte[] pretty = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
+            Files.write(truthDir.resolve("branching.json"), pretty);
+            String sync = body.path("syncBranch").asText("").trim();
+            if (!sync.isEmpty()) {
+                Path bd = branchDir(bookDir); Files.createDirectories(bd);
+                Files.write(bd.resolve(sanitizeBranchName(sync) + ".json"), pretty);
+                Files.write(bd.resolve(sanitizeBranchName(sync) + ".base.json"), pretty);
+            }
+            sendJson(exchange, 200, "{\"ok\":true,\"synced\":" + (!sync.isEmpty()) + ",\"message\":\"已采纳合并结果到主线\"}");
+        } catch (Exception e) { sendJson(exchange, 500, "{\"ok\":false,\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}"); }
+    }
+
+    /** 三路合并：base=共同祖先，ours=我方，theirs=他方。冲突高亮，默认取我方。 */
+    private ObjectNode branchMerge3way(ObjectNode baseT, ObjectNode oursT, ObjectNode theirsT) {
+        ObjectNode resp = mapper.createObjectNode();
+        ArrayNode mergedNodes = mapper.createArrayNode();
+        ArrayNode mergedEdges = mapper.createArrayNode();
+        ArrayNode conflicts = mapper.createArrayNode();
+
+        java.util.Map<String, JsonNode> bm = new java.util.LinkedHashMap<>(), om = new java.util.LinkedHashMap<>(), tm = new java.util.LinkedHashMap<>();
+        for (JsonNode n : baseT.path("nodes")) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) bm.put(id, n); }
+        for (JsonNode n : oursT.path("nodes")) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) om.put(id, n); }
+        for (JsonNode n : theirsT.path("nodes")) { String id = n.path("id").asText("").trim(); if (!id.isEmpty()) tm.put(id, n); }
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        ids.addAll(bm.keySet()); ids.addAll(om.keySet()); ids.addAll(tm.keySet());
+        for (String id : ids) {
+            ObjectNode m = mergeElement(bm.get(id), om.get(id), tm.get(id), "node", id, conflicts);
+            if (m != null) mergedNodes.add(m);
+        }
+
+        java.util.Map<String, JsonNode> be = edgeMap(baseT.path("edges")), oe = edgeMap(oursT.path("edges")), te = edgeMap(theirsT.path("edges"));
+        java.util.Set<String> eks = new java.util.LinkedHashSet<>();
+        eks.addAll(be.keySet()); eks.addAll(oe.keySet()); eks.addAll(te.keySet());
+        for (String k : eks) {
+            ObjectNode m = mergeElement(be.get(k), oe.get(k), te.get(k), "edge", k, conflicts);
+            if (m != null) mergedEdges.add(m);
+        }
+
+        int cN = 0, cE = 0;
+        for (JsonNode c : conflicts) { if ("node".equals(c.path("kind").asText())) cN++; else cE++; }
+        ObjectNode merged = mapper.createObjectNode();
+        merged.set("nodes", mergedNodes); merged.set("edges", mergedEdges);
+        resp.put("ok", true);
+        resp.set("merged", merged);
+        resp.set("conflicts", conflicts);
+        resp.set("summary", mapper.createObjectNode()
+                .put("nodes", mergedNodes.size()).put("edges", mergedEdges.size())
+                .put("conflictNodes", cN).put("conflictEdges", cE));
+        return resp;
+    }
+
+    /** 单元素（节点/边）三路合并；返回合并结果或 null（应删除）。冲突写入 conflicts。 */
+    private ObjectNode mergeElement(JsonNode b, JsonNode o, JsonNode t, String kind, String key, ArrayNode conflicts) {
+        boolean oAbsent = (o == null || o.isNull()), tAbsent = (t == null || t.isNull());
+        if (oAbsent && tAbsent) return null;
+        if (oAbsent) {
+            if (b == null || b.isNull()) return (ObjectNode) t.deepCopy();
+            if (jsonEq(b, t)) return null;
+            addConflict(conflicts, kind, key, null, t, "我方删除 vs 他方修改");
+            return (ObjectNode) t.deepCopy();
+        }
+        if (tAbsent) {
+            if (b == null || b.isNull()) return (ObjectNode) o.deepCopy();
+            if (jsonEq(b, o)) return null;
+            addConflict(conflicts, kind, key, o, null, "他方删除 vs 我方修改");
+            return (ObjectNode) o.deepCopy();
+        }
+        if (b == null || b.isNull()) {
+            if (jsonEq(o, t)) return (ObjectNode) o.deepCopy();
+            addConflict(conflicts, kind, key, o, t, "双方各自新增且不一致");
+            return (ObjectNode) o.deepCopy();
+        }
+        ArrayNode oCh = "node".equals(kind) ? nodeFieldDiff(b, o) : edgeFieldDiff(b, o);
+        ArrayNode tCh = "node".equals(kind) ? nodeFieldDiff(b, t) : edgeFieldDiff(b, t);
+        if (oCh.size() == 0 && tCh.size() == 0) return (ObjectNode) o.deepCopy();
+        if (oCh.size() == 0) return (ObjectNode) t.deepCopy();
+        if (tCh.size() == 0) return (ObjectNode) o.deepCopy();
+        // 双方都改了：逐字段合并
+        ObjectNode merged = (ObjectNode) o.deepCopy();
+        java.util.Set<String> tFields = new java.util.LinkedHashSet<>();
+        for (JsonNode f : tCh) tFields.add(f.path("field").asText());
+        boolean conflict = false;
+        for (JsonNode f : tCh) {
+            String fld = f.path("field").asText();
+            java.util.Set<String> oFields = new java.util.LinkedHashSet<>();
+            for (JsonNode g : oCh) oFields.add(g.path("field").asText());
+            if (!oFields.contains(fld)) { applyField(merged, kind, fld, fieldVal(t, fld)); continue; }
+            if (jsonEq(fieldVal(o, fld), fieldVal(t, fld))) continue;
+            conflict = true; // 双方改了同字段且不一致 → 取我方
+        }
+        if (conflict) addConflict(conflicts, kind, key, o, t, "双方修改了同一元素");
+        return merged;
+    }
+
+    private void addConflict(ArrayNode conflicts, String kind, String key, JsonNode ours, JsonNode theirs, String reason) {
+        ObjectNode c = mapper.createObjectNode();
+        c.put("kind", kind); c.put("key", key); c.put("reason", reason);
+        if (ours != null) c.set("ours", ours);
+        if (theirs != null) c.set("theirs", theirs);
+        conflicts.add(c);
+    }
+    private JsonNode fieldVal(JsonNode el, String fld) {
+        if (el == null) return mapper.createObjectNode();
+        if ("state".equals(fld) || "requires".equals(fld) || "sets".equals(fld)) return el.path(fld);
+        if ("chapterRef".equals(fld)) return mapper.getNodeFactory().numberNode(el.path(fld).asInt(0));
+        return mapper.getNodeFactory().textNode(el.path(fld).asText(""));
+    }
+    private void applyField(ObjectNode el, String kind, String fld, JsonNode v) {
+        if ("state".equals(fld) || "requires".equals(fld) || "sets".equals(fld)) { if (v.isObject()) el.set(fld, v); }
+        else if ("chapterRef".equals(fld)) el.put(fld, v.asInt(0));
+        else el.put(fld, v.asText(""));
+    }
+
 
     // ===================== 分支增强③：大纲抉择点反向建议 needed/requires/sets =====================
     private void handleBranchingSuggestApi(HttpExchange exchange) throws IOException {

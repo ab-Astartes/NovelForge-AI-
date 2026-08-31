@@ -2586,6 +2586,14 @@ async function loadBookConfig() {
     document.getElementById('bc-deai-strength').value = (deAi.strength != null) ? deAi.strength : 0.7;
     document.getElementById('bc-deai-mode').value = deAi.mode || 'rule';
 
+    // 填充「去AI 试用」文体下拉（取自全局/有效 deAi.genres）
+    try {
+      const gsel = document.getElementById('bc-deai-try-genre');
+      const genres = (bcResolved && bcResolved.deAi && bcResolved.deAi.genres) ? bcResolved.deAi.genres : (bcGlobal.deAi && bcGlobal.deAi.genres ? bcGlobal.deAi.genres : {});
+      const keys = Object.keys(genres || {});
+      gsel.innerHTML = '<option value="">不指定</option>' + keys.map(k => '<option value="' + escapeHtml(k) + '">' + escapeHtml(k) + '</option>').join('');
+    } catch (e) { /* 忽略 */ }
+
     document.getElementById('bc-settings-source').value = (bcResolved.settings && bcResolved.settings.source) || 'world';
     document.getElementById('bc-settings-doc').value = (bcResolved.settings && bcResolved.settings.doc) || 'world.json';
 
@@ -2702,11 +2710,15 @@ async function applyDeAi() {
   if (!path) { showToast('请先选择书目', 'warning'); return; }
   if (!input.trim()) { showToast('请粘贴待处理文本', 'warning'); return; }
   const tryMode = document.getElementById('bc-deai-try-mode')?.value || '';
+  const genre = document.getElementById('bc-deai-try-genre')?.value || '';
+  const rhythm = document.getElementById('bc-deai-try-rhythm')?.value || 'auto';
   const apiKey = document.getElementById('bc-deai-apikey')?.value || '';
   const baseUrl = document.getElementById('bc-deai-baseurl')?.value || '';
   const model = document.getElementById('bc-deai-model')?.value || '';
   const body = { path, text: input };
   if (tryMode) body.mode = tryMode;
+  if (genre) body.genre = genre;
+  if (rhythm && rhythm !== 'auto') body.rhythm = rhythm;
   if (apiKey) body.apiKey = apiKey;
   if (baseUrl) body.baseUrl = baseUrl;
   if (model) body.model = model;
@@ -2721,8 +2733,13 @@ async function applyDeAi() {
       out.textContent = '⚠ ' + (data.note || data.error || '失败') + '\n\n' + (data.cleanedText != null ? data.cleanedText : '');
       showToast('去AI 未完全成功：' + (data.note || ''), 'warning');
     } else {
+      const tags = [];
+      if (data.genre) tags.push('文体[' + data.genre + ']');
+      if (data.rhythm) tags.push('节奏[' + data.rhythm + ']');
+      if (data.strength != null) tags.push('强度=' + data.strength);
       out.textContent = (data.cleanedText != null ? data.cleanedText : '') +
         '\n\n— 已剥离 ' + (data.removedCount || 0) + ' 处 · 模式 ' + (data.mode || 'rule') +
+        (tags.length ? (' · ' + tags.join(' ')) : '') +
         (data.note ? ('\n' + data.note) : '');
       showToast('去AI 完成，剥离 ' + (data.removedCount || 0) + ' 处', 'success');
     }

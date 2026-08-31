@@ -338,9 +338,57 @@ public final class TensionBuilder {
 
     private static double round1(double v) { return Math.round(v * 10) / 10.0; }
 
+    private static double round2(double v) { return Math.round(v * 100) / 100.0; }
+
     private static String clip(String s, int max) {
         String t = s.replaceAll("\\s+", " ").trim();
         return t.length() <= max ? t : t.substring(0, max) + "…";
+    }
+
+    /**
+     * 章节节奏剖面（供去AI「按章节节奏」自适应使用）。
+     * 直接复用单章分析逻辑，返回可用于调节去AI强度/侧重点的指标与节奏分类。
+     */
+    public static ObjectNode rhythmProfile(ObjectMapper mapper, String text) {
+        ChapterMetric m = analyze(1, stripMarkdown(text == null ? "" : text));
+        ObjectNode o = mapper.createObjectNode();
+        o.put("avgSentenceLen", round1(m.avgSentenceLen));
+        o.put("sentenceVar", round1(m.sentenceVar));
+        o.put("dialogRatio", round1(m.dialogRatio));
+        o.put("actionDensity", round1(m.actionDensity));
+        o.put("turnDensity", round1(m.turnDensity));
+        o.put("emotion", round1(m.emotion));
+        o.put("score", round1(m.score));
+        // 节奏分类：综合张力分 + 对话占比
+        String rhythm;
+        if (m.score >= 60) rhythm = "climax";          // 高潮：冲突密集
+        else if (m.score >= 42) rhythm = "rising";     // 推进：张力上行
+        else if (m.dialogRatio >= 40) rhythm = "dialogue"; // 对话驱动：平缓但有戏
+        else rhythm = "calm";                          // 铺垫：低张力
+        o.put("rhythm", rhythm);
+        return o;
+    }
+
+    /** 不同节奏对去AI强度的调节系数（clamp 到 0~1） */
+    public static double rhythmStrengthFactor(String rhythm) {
+        return switch (rhythm == null ? "" : rhythm) {
+            case "climax" -> 1.15;   // 高潮章：AI 腔更刺眼，更激进
+            case "rising" -> 1.0;
+            case "dialogue" -> 0.9;
+            case "calm" -> 0.82;     // 铺垫章：保留文气，轻处理
+            default -> 1.0;
+        };
+    }
+
+    /** 不同节奏对应的去AI侧重点（附加到改写准则） */
+    public static String rhythmGuidance(String rhythm) {
+        return switch (rhythm == null ? "" : rhythm) {
+            case "climax" -> "本章为高潮/冲突密集段：重点剥除总结性升华与工整对仗，保留动作与感官冲击，避免把紧张节奏改平。";
+            case "rising" -> "本章为推进段：去除铺垫处的空泛过渡与解释性旁白，让节奏更利落。";
+            case "dialogue" -> "本章以对话驱动：去除对话中的说明性套话与过度修辞，让对白更自然口语化。";
+            case "calm" -> "本章为铺垫/抒情段：仅去除明显 AI 腔，保留文气与细腻描写，不要过度改写。";
+            default -> "";
+        };
     }
 
     /** Set.of 不允许重复元素，词表较大时改用 HashSet */
