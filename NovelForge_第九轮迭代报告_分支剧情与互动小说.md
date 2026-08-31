@@ -149,12 +149,50 @@ P9 导出的互动阅读器只展示节点 `excerpt`（作者手填摘要），�
 - 改动：`BranchingBuilder.java`（新增 `body` 字段 + `enrichBodies` / `chapterBodyByRef` / `extractChapterBody` 三助手，GET 响应内联正文）、`branching.js`（编辑器正文预览 + 导出携带 `body` + 阅读器渲染原文）、`style.css`（`.bf-body-preview`/`.bf-body-box`/`.node-body`）、`README.md`（补「章节正文内联（P9.1）」小节）
 - 文档：本报告新增第九节
 
-## 十、下一步候选
+## 十、P9.2 增强套件：树统计 / 条件分支状态机 / 大纲联动 / 可视化布局
+
+把用户选定的四项后续功能一次性落地，均与既有分支剧情架构无缝衔接（零新增 LLM 成本）。
+
+### 10.1 树统计增强
+- 后端 `computeStats` 新增：`shortestToEnding`（BFS 到最近 `ending` 的边数，无可达结局为 -1）、`longestChain`（最长简单链，DFS+记忆化+回边守卫，忽略环路）、`maxBranchWidth`（最大出度）、`widthDist`（出度→节点数分布）、`startBranch`（起点即时分叉数）。
+- 前端 `updateBranchStats` 在 `branching-stats` 行展示，并在 `branching-statinfo` 渲染「分支宽度分布」条形图；对 `startBranch≥3`（开局即分叉过多）、`longestChain≥8`（最长链偏长）给出黄色提示，辅助判断节奏。
+
+### 10.2 条件分支 + 轻量状态机
+- 数据模型扩展：`edges[]` 新增 `requires`（门槛）与 `sets`（设置），`nodes[]` 新增 `volume`（卷）与 `state`（仅起点生效的初始状态）。
+- 语义：`requires = { flags:[...], attrs:{ "gold":">=10" } }`（满足才显示选项，支持 `>= > <= < == !=` 数值比较 + Flag 持有判定）；`sets = { flags:[...], attrs:{ "gold":"+5" } }`（选择后生效，属性 `+5/-3` 增减否则赋值）；`state = { flags:[], attrs:{} }`。
+- `POST /api/branching` 已支持持久化这四个新字段（仅写白名单字段，`body` 仍不落盘）。
+- 导出阅读器内嵌状态机：维护 `flags/attrs`，门槛未达标的选项**置灰并注明原因**；选择时应用 `sets`；「返回」还原状态快照，实现条件解锁与分支记忆。状态栏实时显示当前 flags/attrs。
+
+### 10.3 大纲联动校验
+- 后端 `analyzeOutline` 解析 `outline.md`：检测「卷」归属（第一卷/Vol/Part/部 + 章节区间 `第1-10章`），把每个节点按 `chapterRef` 或 `nodes[].volume` 映射到所属卷；提取含 抉择/分支/选择/分歧/关键节点 等标记的「关键抉择点」。
+- 覆盖度：若某抉择点未在任何节点标题/摘要/选择支文案中出现（支持去除「是否/要不要」等前缀的精确匹配），则在 `outline.gaps` 报告缺口。
+- 前端「📑 大纲联动」卡片展示检测到的卷（配合按卷着色）与未覆盖抉择点；`volumeMap` 供按卷着色使用。
+
+### 10.4 可视化布局优化
+- 剧情树 SVG 支持 **滚轮缩放 / 拖拽平移**（`<g transform>` + 鼠标事件）、**点击节点折叠子树**（折叠节点的整棵子树收起，节点显示 ⊕/⊖ 切换，BFS 可见性计算跳过折叠子树）、**🎨 按卷着色**（开启后节点按 `volumeMap` 卷色，无卷回退类型色，配图例）。
+- 条件边以虚线 + 金色标签区分（`bg-edge-cond`）。
+
+### 10.5 验证
+- `mvn -o test -am`：**8/8 通过**。`checkids` 前端审计 **0 缺口**（面板↔导航 16↔16，[A][B][C][D][E] 全 0）。
+- Studio `:8986` 冒烟（含 `outline.md` 与条件树）：
+  - 统计：最短=1（n1→n3 直通结局）、最长=1、最大分叉=2、宽度分布 `[{0:2},{2:1}]`（正确反映 n1 双出边、n2/n3 出度 0）。
+  - 大纲联动：`volumeMap={n1:第一卷, n2:第一卷, n3:第二卷}`（正确按章节区间归卷）；缺口正确标记 `是否信任神秘人`（修复了初版 2-gram 误判「神秘」导致漏报的 bug，改为全名+去「是否」前缀精确匹配）。
+  - 条件持久化：`branching.json` 落盘含 `volume`/`state`/`requires`/`sets`；回读 `requires/sets` 完整保留。
+  - 状态机逻辑单测（隔离复刻导出的 `evalRequires/cmpAttr/applySets`）：`>= / != / == / 明文相等` 比较正确；门槛未达标准确拦截；`applySets` 使 `gold 10→15`、`hp 5→3`、Flag 正确追加。
+- 测试书 `EnhSmoke`、生成 `studio-cp.txt` 均已清理。
+
+### 10.6 文件改动清单
+- `BranchingBuilder.java`：`computeStats` 增统计、`analyzeOutline`+卷/抉择解析助手、`Node`/`Edge` 增 `volume`/`state`/`requires`/`sets`、`toJson`/`parse` 扩展、`build` 注入 `outline` 响应。
+- `StudioServer.java`：`handleBranchingApi` POST 持久化 `volume`/`state`/`requires`/`sets`。
+- `branching.js`：`updateBranchStats` 增强、`renderBranching` 加图例工具条/大纲面板、`renderBranchGraph` 折叠+缩放平移+按卷着色、编辑器加卷/初始状态/边条件编辑器、`exportBranching`+`buildInteractiveHtml` 内嵌状态机、新增 `branchZoomBy/toggleBranchCollapse/toggleBranchColorBy/updateEdgeField/toggleEdgeCond` 等。
+- `style.css`：补 `.branching-graph-bar`/`.wd-*`/`.branching-outline`/`.bf-cond*`/`.bg-collapse`/`.bg-edge-cond` 等。
+- `README.md`：新增「增强套件（P9.2）」小节。
+
+## 十一、下一步候选
 
 - 路线图余项：守护进程后台日更（inkos daemon）、多语种翻译工作台
-- 分支剧情增强：
-  - **与章节正文联动**：导出互动阅读器时把 `chapterRef` 对应的正文片段内联进节点，读者点节点即可读该章原文（而非仅摘要）
-  - **条件分支**：选择支支持门槛（如某属性/Flag 达标才出现），互动阅读器内置轻量状态机
-  - **剧情树统计增强**：最短路到结局、最长链、分支宽度分布，辅助判断「是不是一上来就分叉太多 / 太久不分叉」
-  - **与大纲联动**：读取 `outline.md` 的预期关键抉择点，校验剧情树是否覆盖了主线分支
+- 分支剧情增强（已落地项见第十节，以下为仍可深挖的方向）：
+  - **状态机可视化调试**：在编辑器中预览某条路径下的状态演变轨迹
+  - **条件分支的自动生成**：根据大纲抉择点反向建议 needed requires/sets
+  - **剧情树 diff/版本对比**：对比两个 `branching.json` 版本的分支增减
   - **可视化布局优化**：节点超多时支持缩放/折叠子树、按卷着色

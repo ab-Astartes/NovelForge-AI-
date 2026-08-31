@@ -73,6 +73,9 @@ public final class BranchingBuilder {
         ObjectNode stats = computeStats(nodes, edges);
         resp.set("stats", stats);
 
+        ObjectNode outline = analyzeOutline(bookDir, nodes, edges, mapper);
+        resp.set("outline", outline);
+
         ArrayNode warnings = mapper.createArrayNode();
         validate(nodes, edges, warnings, mapper);
         resp.set("warnings", warnings);
@@ -90,6 +93,9 @@ public final class BranchingBuilder {
         node.type = n.path("type").asText("scene").trim();
         node.chapterRef = n.path("chapterRef").asInt(0);
         node.excerpt = n.path("excerpt").asText("").trim();
+        node.volume = n.path("volume").asText("").trim();
+        JsonNode st = n.path("state");
+        if (st.isObject()) node.state = (ObjectNode) st;
         if (!VALID_TYPES.contains(node.type)) node.type = "scene";
         return node;
     }
@@ -99,6 +105,10 @@ public final class BranchingBuilder {
         edge.from = e.path("from").asText("").trim();
         edge.to = e.path("to").asText("").trim();
         edge.choice = e.path("choice").asText("").trim();
+        JsonNode req = e.path("requires");
+        if (req.isObject()) edge.requires = (ObjectNode) req;
+        JsonNode set = e.path("sets");
+        if (set.isObject()) edge.sets = (ObjectNode) set;
         return edge;
     }
 
@@ -271,6 +281,32 @@ public final class BranchingBuilder {
         stats.put("reachable", reachable);
         stats.put("unreachable", nodes.size() - reachable);
         stats.put("depth", reachable == 0 ? 0 : maxDepth);
+
+        // —— 树统计增强：最短路到结局 / 最长链 / 分支宽度 ——
+        Set<String> endings = new HashSet<>();
+        for (Node n : nodes) if ("ending".equals(n.type)) endings.add(n.id);
+        stats.put("shortestToEnding", computeShortestToEnding(starts, adj, endings));
+        stats.put("longestChain", computeLongestChain(nodes, adj, endings));
+
+        int maxW = 0;
+        Map<Integer, Integer> wd = new LinkedHashMap<>();
+        for (Node n : nodes) {
+            int od = adj.getOrDefault(n.id, new ArrayList<>()).size();
+            maxW = Math.max(maxW, od);
+            wd.put(od, wd.getOrDefault(od, 0) + 1);
+        }
+        stats.put("maxBranchWidth", maxW);
+        int startBranch = 0;
+        for (String s : starts) startBranch = Math.max(startBranch, adj.getOrDefault(s, new ArrayList<>()).size());
+        stats.put("startBranch", startBranch);
+        ArrayNode wdArr = mapper.createArrayNode();
+        wd.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+            ObjectNode o = mapper.createObjectNode();
+            o.put("outdeg", e.getKey());
+            o.put("count", e.getValue());
+            wdArr.add(o);
+        });
+        stats.set("widthDist", wdArr);
         return stats;
     }
 
@@ -281,6 +317,164 @@ public final class BranchingBuilder {
             if (adj.containsKey(e.from)) adj.get(e.from).add(e.to);
         }
         return adj;
+    }
+
+    /** 最短路到结局（BFS，按边数计）；无可达结局返回 -1 */
+    private static int computeShortestToEnding(Set<String> starts, Map<String, List<String>> adj, Set<String> endings) {
+        if (endings.isEmpty() || starts.isEmpty()) return -1;
+        Map<String, Integer> dist = new LinkedHashMap<>();
+        for (String s : starts) dist.put(s, 0);
+        java.util.Queue<String> q = new java.util.ArrayDeque<>(starts);
+        while (!q.isEmpty()) {
+            String cur = q.poll();
+            int d = dist.get(cur);
+            if (endings.contains(cur)) return d;
+            for (String nx : adj.getOrDefault(cur, new ArrayList<>())) {
+                if (!dist.containsKey(nx)) { dist.put(nx, d + 1); q.add(nx); }
+            }
+        }
+        return -1;
+    }
+
+    /** 最长链（最长简单路径，忽略回边；按边数计） */
+    private static int computeLongestChain(List<Node> nodes, Map<String, List<String>> adj, Set<String> endings) {
+        Map<String, Integer> memo = new LinkedHashMap<>();
+        Set<String> inStack = new HashSet<>();
+        int best = 0;
+        for (Node n : nodes) best = Math.max(best, longestFrom(n.id, adj, endings, memo, inStack));
+        return best;
+    }
+
+    private static int longestFrom(String u, Map<String, List<String>> adj, Set<String> endings,
+                                   Map<String, Integer> memo, Set<String> inStack) {
+        if (memo.containsKey(u)) return memo.get(u);
+        if (inStack.contains(u)) return 0; // 回边，不延伸
+        inStack.add(u);
+        int best;
+        List<String> nxt = adj.getOrDefault(u, new ArrayList<>());
+        if (nxt.isEmpty() || endings.contains(u)) {
+            best = 0;
+        } else {
+            best = 0;
+            for (String v : nxt) best = Math.max(best, 1 + longestFrom(v, adj, endings, memo, inStack));
+        }
+        inStack.remove(u);
+        memo.put(u, best);
+        return best;
+    }
+
+    // ===================== 大纲联动校验 =====================
+
+    /** 解析 outline.md：检测「卷」归属、章节区间、关键抉择点，并校验剧情树覆盖度 */
+    private static ObjectNode analyzeOutline(Path bookDir, List<Node> nodes, List<Edge> edges, ObjectMapper mapper) {
+        ObjectNode out = mapper.createObjectNode();
+        out.put("present", false);
+        ArrayNode gaps = mapper.createArrayNode();
+        ArrayNode volumes = mapper.createArrayNode();
+        ObjectNode volumeMap = mapper.createObjectNode();
+
+        Path ol = bookDir.resolve("outline.md");
+        if (!Files.exists(ol)) { out.set("gaps", gaps); out.set("volumes", volumes); out.set("volumeMap", volumeMap); return out; }
+        out.put("present", true);
+        String text;
+        try { text = Files.readString(ol, StandardCharsets.UTF_8); } catch (Exception e) { text = ""; }
+
+        // 卷归属 + 章节区间
+        Map<Integer, String> chapterVolume = new LinkedHashMap<>();
+        List<String> volList = new ArrayList<>();
+        String curVol = "";
+        for (String raw : text.split("\n")) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            String vol = detectVolume(line);
+            if (vol != null) { curVol = vol; if (!volList.contains(vol)) volList.add(vol); }
+            for (Integer ch : detectChapters(line)) chapterVolume.put(ch, curVol);
+        }
+        volList.forEach(volumes::add);
+
+        // 节点 -> 卷
+        for (Node n : nodes) {
+            String v = "";
+            if (n.volume != null && !n.volume.isEmpty()) v = n.volume;
+            else if (n.chapterRef > 0 && chapterVolume.containsKey(n.chapterRef)) v = chapterVolume.get(n.chapterRef);
+            if (!v.isEmpty()) volumeMap.put(n.id, v);
+        }
+
+        // 抉择点覆盖度
+        List<String> points = new ArrayList<>();
+        for (String raw : text.split("\n")) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            if (isDecisionLine(line)) {
+                String name = extractDecisionName(line);
+                if (name != null && name.length() >= 2) points.add(name);
+            }
+        }
+        List<String> corpus = new ArrayList<>();
+        nodes.forEach(n -> { corpus.add(n.title); corpus.add(n.excerpt); });
+        edges.forEach(e -> corpus.add(e.choice));
+        for (String p : points) {
+            if (!coveredBy(p, corpus)) {
+                ObjectNode g = mapper.createObjectNode();
+                g.put("point", p);
+                g.put("hint", "大纲标记的抉择点「" + p + "」在剧情树中未找到对应节点/选择支，建议补充分支覆盖。");
+                gaps.add(g);
+            }
+        }
+        out.set("gaps", gaps);
+        out.set("volumeMap", volumeMap);
+        return out;
+    }
+
+    private static String detectVolume(String line) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?i)(第\\s*[一二三四五六七八九十百千0-9]+\\s*卷|卷\\s*[一二三四五六七八九十百千0-9]+|vol\\.?\\s*\\d+|part\\.?\\s*\\d+|第\\s*[一二三四五六七八九十]+\\s*部|book\\s*\\d+)");
+        java.util.regex.Matcher m = p.matcher(line);
+        if (m.find()) return m.group(1).replaceAll("\\s+", "");
+        return null;
+    }
+
+    private static List<Integer> detectChapters(String line) {
+        List<Integer> out = new ArrayList<>();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?i)第?\\s*(\\d+)\\s*(?:[-~–—至]\\s*(\\d+))?\\s*章");
+        java.util.regex.Matcher m = p.matcher(line);
+        while (m.find()) {
+            int a = Integer.parseInt(m.group(1));
+            if (m.group(2) != null) {
+                int b = Integer.parseInt(m.group(2));
+                for (int i = a; i <= b; i++) out.add(i);
+            } else out.add(a);
+        }
+        return out;
+    }
+
+    private static boolean isDecisionLine(String line) {
+        return line.matches("(?i).*(抉择|分支|选择|分歧|分歧点|关键节点|岔路|岔道|拐点|decision|branch|choice|diverge).*");
+    }
+
+    private static String extractDecisionName(String line) {
+        String s = line.replaceAll("^#{1,6}\\s*", "")
+                       .replaceAll("^[-*+]\\s*", "")
+                       .replaceAll("^\\d+[.、)\\]]\s*", "")
+                       .replaceAll("^第\\s*\\d+\\s*[章回节]\\s*", "")
+                       .replaceAll("(?i)(关键抉择|关键决策|抉择|分支|选择|分歧|分歧点|关键节点|岔路|岔道|拐点|decision|branch|choice|diverge)", "")
+                       .replaceAll("^[:：、.\\s]+", "")
+                       .replaceAll("[：:、，。.\\s]+$", "")
+                       .trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private static boolean coveredBy(String point, List<String> corpus) {
+        String[] candidates = { point, stripYesNo(point) };
+        for (String p : candidates) {
+            if (p == null || p.length() < 2) continue;
+            for (String c : corpus) if (c != null && c.contains(p)) return true;
+        }
+        return false;
+    }
+
+    private static String stripYesNo(String s) {
+        return s.replaceAll("^(是否要?|要不要|可否|能否|该不该|应不应该)", "").trim();
     }
 
     // ===================== 校验告警 =====================
@@ -392,6 +586,8 @@ public final class BranchingBuilder {
         int chapterRef = 0;
         String excerpt = "";
         String body = "";
+        String volume = "";
+        JsonNode state = null;
         ObjectNode toJson(ObjectMapper mapper) {
             ObjectNode o = mapper.createObjectNode();
             o.put("id", id);
@@ -400,6 +596,8 @@ public final class BranchingBuilder {
             o.put("chapterRef", chapterRef);
             o.put("excerpt", excerpt);
             o.put("body", body);
+            o.put("volume", volume);
+            if (state != null && state.isObject()) o.set("state", state);
             return o;
         }
     }
@@ -408,11 +606,15 @@ public final class BranchingBuilder {
         String from = "";
         String to = "";
         String choice = "";
+        JsonNode requires = null;
+        JsonNode sets = null;
         ObjectNode toJson(ObjectMapper mapper) {
             ObjectNode o = mapper.createObjectNode();
             o.put("from", from);
             o.put("to", to);
             o.put("choice", choice);
+            if (requires != null && requires.isObject()) o.set("requires", requires);
+            if (sets != null && sets.isObject()) o.set("sets", sets);
             return o;
         }
     }

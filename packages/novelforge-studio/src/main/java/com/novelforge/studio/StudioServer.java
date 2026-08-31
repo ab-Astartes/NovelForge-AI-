@@ -3980,6 +3980,9 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                     o.put("type", n.path("type").asText("scene").trim());
                     o.put("chapterRef", n.path("chapterRef").asInt(0));
                     o.put("excerpt", n.path("excerpt").asText("").trim());
+                    o.put("volume", n.path("volume").asText("").trim());
+                    JsonNode st = n.path("state");
+                    if (st.isObject()) o.set("state", st);
                     nArr.add(o);
                 }
                 ArrayNode eArr = mapper.createArrayNode();
@@ -3988,6 +3991,10 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
                     o.put("from", e.path("from").asText("").trim());
                     o.put("to", e.path("to").asText("").trim());
                     o.put("choice", e.path("choice").asText("").trim());
+                    JsonNode req = e.path("requires");
+                    if (req.isObject()) o.set("requires", req);
+                    JsonNode set = e.path("sets");
+                    if (set.isObject()) o.set("sets", set);
                     eArr.add(o);
                 }
                 root.set("nodes", nArr);
