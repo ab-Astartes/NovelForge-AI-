@@ -1220,6 +1220,17 @@
             <textarea id="bc-deai-input" class="input-field" rows="4" placeholder="粘贴一段含 AI 腔的段落，点下方按钮试跑去AI…"></textarea>
             <button onclick="applyDeAi()" class="btn-ink btn-sm">运行去AI</button>
             <pre id="bc-deai-output" class="code-block" style="display:none"></pre>
+
+            <!-- AI 痕迹评分：apply 负责「改」，这里负责「测」 -->
+            <div class="bc-subblock">
+              <div class="score-bar">
+                <span class="score-title">🔍 AI 痕迹评分</span>
+                <button onclick="scoreDeAi('before')" class="btn-ghost btn-sm">测原文</button>
+                <button onclick="scoreDeAi('after')" class="btn-ghost btn-sm">测去AI结果</button>
+                <span id="bc-deai-score-badge" class="score-badge" style="display:none"></span>
+              </div>
+              <div id="bc-deai-score-body" class="score-body" style="display:none"></div>
+            </div>
           </div>
         </div>
 

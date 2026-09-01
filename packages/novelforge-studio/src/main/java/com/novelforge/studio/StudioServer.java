@@ -82,7 +82,9 @@ public class StudioServer {
 
     private final Path booksRoot;
 
-    private final ConcurrentHashMap<String, String> apiKeys = new ConcurrentHashMap<>();
+    /** 当前生效的书目根目录（供启动日志与诊断使用） */
+    public Path getBooksRoot() { return booksRoot; }
+
 
 
 
@@ -144,7 +146,11 @@ public class StudioServer {
 
     // Pipeline components (configured per-request based on user's API key)
 
-    private PipelineConfig defaultConfig;
+    /**
+     * 共享可变配置：配置端点（HTTP 工作线程）会写入，读取端点可能在不同线程。
+     * 用 volatile 保证跨线程可见性，避免读到过期值。
+     */
+    private volatile PipelineConfig defaultConfig;
 
 
 
@@ -217,14 +223,28 @@ public class StudioServer {
     }
 
     public StudioServer(int port, boolean noAuth) throws IOException {
+        this(port, noAuth, null);
+    }
 
-        this.booksRoot = Paths.get(System.getProperty("user.home"), "NovelForge", "books");
+    /**
+     * Full constructor.
+     *
+     * @param port              HTTP 监听端口
+     * @param noAuth            true 关闭 token 鉴权（本地单人模式）
+     * @param booksRootOverride 非空时以此目录作为书目根，替代默认 {@code ~/NovelForge/books}
+     */
+    public StudioServer(int port, boolean noAuth, Path booksRootOverride) throws IOException {
+
+        if (booksRootOverride != null) {
+            this.booksRoot = booksRootOverride.toAbsolutePath().normalize();
+        } else {
+            this.booksRoot = Paths.get(System.getProperty("user.home"), "NovelForge", "books");
+        }
 
         Files.createDirectories(booksRoot);
 
-        this.defaultConfig = new PipelineConfig();
-
         // Load studio config (global API + per-agent overrides + presets)
+        // 🟢 修复：此前先 new PipelineConfig() 再被下一行整体覆盖，属死代码赋值
 
         this.studioConfig = StudioConfig.load();
 
@@ -296,6 +316,7 @@ public class StudioServer {
         server.createContext("/api/config/resolve", corsWrap(this::handleConfigResolveApi));
         // 🆕 去AI痕迹（规则式改写，立即可用；LLM 增强为后续模块）
         server.createContext("/api/deai/apply", corsWrap(this::handleDeAiApplyApi));
+        server.createContext("/api/deai/score", corsWrap(this::handleDeAiScoreApi));
 
         server.createContext("/api/write/stream", corsWrap(this::handleWriteStreamApi));
 
@@ -2592,6 +2613,70 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         } catch (Exception e) {
             sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
         }
+    }
+
+    /**
+     * POST /api/deai/score — AI 痕迹检测评分（统计指纹，零 LLM 成本）。
+     *
+     * <p>与 /api/deai/apply 互补：apply 负责「改」，score 负责「测」。
+     * 可在改写前后各测一次，用分数变化判断有没有改干净。</p>
+     *
+     * <p>请求体：{ path, text, genre? }；返回 score/level/dimensions/hits/advice。</p>
+     */
+    private void handleDeAiScoreApi(HttpExchange exchange) throws IOException {
+        try {
+            if (!"POST".equals(exchange.getRequestMethod())) { sendJson(exchange, 405, "{\"error\":\"POST only\"}"); return; }
+            JsonNode body = readBody(exchange);
+            String bookPath = body.has("path") ? body.get("path").asText() : null;
+            String text = body.has("text") ? body.get("text").asText("") : "";
+            if (bookPath == null || !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path required\"}"); return; }
+            if (text.isBlank()) { sendJson(exchange, 400, "{\"error\":\"text required\"}"); return; }
+
+            // 复用去AI配置：把配置里的 AI 腔模式与禁用词并入检测词表
+            ObjectNode deAi = resolveBookConfig(Paths.get(bookPath)).path("deAi").deepCopy();
+            String genre = body.has("genre") ? body.get("genre").asText("").trim() : "";
+            java.util.Set<String> tells = new java.util.LinkedHashSet<>();
+            java.util.Set<String> banned = new java.util.LinkedHashSet<>();
+            collectPhrases(deAi, "aiTellPatterns", tells);
+            collectPhrases(deAi, "bannedPhrases", banned);
+            boolean genreApplied = false;
+            if (!genre.isEmpty() && deAi.path("genres").path(genre).isObject()) {
+                ObjectNode gp = (ObjectNode) deAi.get("genres").get(genre);
+                collectPhrases(gp, "aiTellPatterns", tells);
+                collectPhrases(gp, "bannedPhrases", banned);
+                genreApplied = true;
+            }
+
+            ObjectNode result = AiFingerprint.score(mapper, text, tells, banned);
+            result.put("genre", genreApplied ? genre : "");
+            sendJson(exchange, 200, mapper.writeValueAsString(result));
+        } catch (Exception e) {
+            sendJson(exchange, 500, "{\"error\":\"" + sanitizeForJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /**
+     * 收集配置中的短语列表。aiTellPatterns 里可能混有正则，
+     * 含正则元字符的项只用于改写、不参与字面量计数，避免误判。
+     */
+    private static void collectPhrases(ObjectNode cfg, String field, java.util.Set<String> out) {
+        JsonNode arr = cfg.get(field);
+        if (arr == null || !arr.isArray()) return;
+        for (JsonNode n : arr) {
+            String s = n.asText("").trim();
+            if (s.isEmpty()) continue;
+            if (isRegexLike(s)) continue;   // 正则交给 apply 用，评分只认字面量
+            if (s.contains("...")) continue; // 通配模式也跳过
+            out.add(s);
+        }
+    }
+
+    private static boolean isRegexLike(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if ("\\.*+?[]()^$|{}".indexOf(c) >= 0) return true;
+        }
+        return false;
     }
 
 
@@ -5835,11 +5920,33 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
     private boolean isPathWithinBooksRoot(String rawPath) {
 
-        if (rawPath == null) return false;
+        if (rawPath == null || rawPath.isBlank()) return false;
 
-        Path path = Paths.get(rawPath).normalize();
+        try {
 
-        return path.startsWith(booksRoot.normalize());
+            Path root = booksRoot.toAbsolutePath().normalize();
+
+            Path path = Paths.get(rawPath).toAbsolutePath().normalize();
+
+            // 路径已存在时解析符号链接，防止软链指向书目根之外
+
+            if (Files.exists(path)) {
+
+                Path realPath = path.toRealPath();
+
+                Path realRoot = Files.exists(root) ? root.toRealPath() : root;
+
+                return realPath.startsWith(realRoot);
+
+            }
+
+            return path.startsWith(root);
+
+        } catch (Exception e) {
+
+            return false;
+
+        }
 
     }
 
@@ -6096,6 +6203,11 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "path required")));
             return;
         }
+        // 🟢 修复：此前该端点未做书目根校验，存在路径穿越风险
+        if (!isPathWithinBooksRoot(path)) {
+            sendJson(exchange, 400, mapper.writeValueAsString(mapper.createObjectNode().put("error", "invalid book path")));
+            return;
+        }
         try {
             var bookDir = booksRoot.resolve(path);
             var state = new TruthState(bookDir);
@@ -6165,7 +6277,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
             }
             
             // Add book context if available
-            if (bookPath != null && !bookPath.isEmpty()) {
+            // 🟢 修复：仅在路径确实位于书目根内时才加载上下文
+            if (bookPath != null && !bookPath.isEmpty() && isPathWithinBooksRoot(bookPath)) {
                 try {
                     var book = BookProject.loadBook(booksRoot.resolve(bookPath));
                     systemPrompt += "\n当前作品：《" + book.getTitle() + "》";
@@ -6223,7 +6336,8 @@ private void handleChatApi(HttpExchange exchange) throws IOException {
             var systemPrompt = new StringBuilder();
             systemPrompt.append("你是NovelForge智能写作助手。你精通小说创作的各个方面，包括情节构建、人物塑造、对话设计、场景描写、伏笔设置等。");
             
-            if (bookPath != null && !bookPath.isEmpty()) {
+            // 🟢 修复：仅在路径确实位于书目根内时才加载书目上下文
+            if (bookPath != null && !bookPath.isEmpty() && isPathWithinBooksRoot(bookPath)) {
                 try {
                     var book = BookProject.loadBook(booksRoot.resolve(bookPath));
                     systemPrompt.append("\n\n当前作品：《").append(book.getTitle()).append("》");
@@ -6696,9 +6810,13 @@ private void handleChatApi(HttpExchange exchange) throws IOException {
 
         int port = DEFAULT_PORT;
         boolean noAuth = false;
+        Path booksRootOverride = null;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("--no-auth")) {
                 noAuth = true;
+            } else if ((args[i].equals("--books-root") || args[i].equals("--books")) && i + 1 < args.length) {
+                // 🟢 修复：此前 --books-root 的值会被兜底分支当成端口号解析，导致参数被静默丢弃
+                booksRootOverride = Paths.get(args[++i]);
             } else if ((args[i].equals("--port") || args[i].equals("-p")) && i + 1 < args.length) {
                 try {
                     port = Integer.parseInt(args[++i]);
@@ -6714,7 +6832,9 @@ private void handleChatApi(HttpExchange exchange) throws IOException {
             }
         }
 
-        StudioServer studio = new StudioServer(port, noAuth);
+        StudioServer studio = new StudioServer(port, noAuth, booksRootOverride);
+
+        System.out.println("Books root: " + studio.getBooksRoot().toAbsolutePath().normalize());
 
         studio.start();
 

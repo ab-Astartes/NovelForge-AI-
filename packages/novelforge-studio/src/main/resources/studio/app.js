@@ -2741,12 +2741,134 @@ async function applyDeAi() {
         '\n\n— 已剥离 ' + (data.removedCount || 0) + ' 处 · 模式 ' + (data.mode || 'rule') +
         (tags.length ? (' · ' + tags.join(' ')) : '') +
         (data.note ? ('\n' + data.note) : '');
+      // 供「测去AI结果」按钮复用，便于改写前后对比评分
+      lastDeAiOutput = data.cleanedText || '';
       showToast('去AI 完成，剥离 ' + (data.removedCount || 0) + ' 处', 'success');
     }
   } catch (e) {
     out.style.display = 'block';
     out.textContent = '失败: ' + e.message;
   }
+}
+
+// ========== AI 痕迹评分（统计指纹） ==========
+
+/** 最近一次去AI的输出，供「测去AI结果」评分 */
+let lastDeAiOutput = '';
+/** 最近两次评分，用于改写前后对比：{ before: n, after: n } */
+const deAiScores = { before: null, after: null };
+
+/**
+ * 对文本做 AI 痕迹评分。
+ * @param {'before'|'after'} side before=评分输入框原文，after=评分去AI后的结果
+ */
+async function scoreDeAi(side) {
+  const path = bcBookPath();
+  if (!path) { showToast('请先选择书目', 'warning'); return; }
+
+  let text;
+  if (side === 'after') {
+    text = lastDeAiOutput;
+    if (!text || !text.trim()) { showToast('请先运行去AI，或先测原文', 'warning'); return; }
+  } else {
+    text = document.getElementById('bc-deai-input').value;
+    if (!text.trim()) { showToast('请先粘贴待检测文本', 'warning'); return; }
+  }
+
+  const genre = document.getElementById('bc-deai-try-genre')?.value || '';
+  const badge = document.getElementById('bc-deai-score-badge');
+  const body = document.getElementById('bc-deai-score-body');
+  badge.style.display = 'inline-block';
+  badge.className = 'score-badge';
+  badge.textContent = '检测中…';
+
+  const payload = { path, text };
+  if (genre) payload.genre = genre;
+
+  try {
+    const res = await fetch(authUrl(API + '/api/deai/score'), {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(payload)
+    });
+    const d = await res.json();
+    if (!d.ok) {
+      badge.textContent = '检测失败';
+      body.style.display = 'block';
+      body.innerHTML = '<div class="score-err">' + escapeHtml(d.error || '未知错误') + '</div>';
+      return;
+    }
+    deAiScores[side] = d.score;
+    renderDeAiScore(d, side);
+  } catch (e) {
+    badge.textContent = '检测失败';
+    body.style.display = 'block';
+    body.innerHTML = '<div class="score-err">请求失败：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+/** 渲染评分结果：徽章 + 维度条 + 命中明细 + 建议 */
+function renderDeAiScore(d, side) {
+  const badge = document.getElementById('bc-deai-score-badge');
+  const body = document.getElementById('bc-deai-score-body');
+  const level = d.level || 'low';
+  const labelMap = { low: '整体自然', medium: '存在可疑', high: 'AI 痕迹明显' };
+
+  badge.className = 'score-badge score-' + level;
+  badge.style.display = 'inline-block';
+  badge.textContent = (side === 'after' ? '去AI后 ' : '原文 ') + d.score + ' 分 · ' + (labelMap[level] || level)
+    + (d.lowConfidence ? '（样本偏短，仅供参考）' : '');
+
+  const st = d.stats || {};
+  let html = '';
+
+  // 改写前后对比
+  if (side === 'after' && deAiScores.before != null) {
+    const delta = deAiScores.before - d.score;
+    const cls = delta > 0 ? 'score-down' : (delta < 0 ? 'score-up' : '');
+    const sign = delta > 0 ? '↓' : (delta < 0 ? '↑' : '±');
+    html += '<div class="score-delta ' + cls + '">较原文 ' + sign + ' '
+      + Math.abs(delta).toFixed(1) + ' 分（原文 ' + deAiScores.before + ' → 现 ' + d.score + '）'
+      + (delta > 0 ? '，AI 痕迹已降低' : (delta < 0 ? '，反而升高了，建议调整参数' : '，无变化')) + '</div>';
+  }
+
+  html += '<div class="score-stats">字数 ' + (st.chars || 0) + ' · 句 ' + (st.sentences || 0)
+    + ' · 段 ' + (st.paragraphs || 0) + ' · 平均句长 ' + (st.avgSentenceLen || 0) + ' 字</div>';
+
+  // 维度条
+  html += '<div class="score-dims">';
+  for (const dim of (d.dimensions || [])) {
+    const s = Math.max(0, Math.min(100, dim.score || 0));
+    html += '<div class="score-dim" title="' + escapeHtml(dim.hint || '') + '">'
+      + '<span class="sd-label">' + escapeHtml(dim.label) + '</span>'
+      + '<span class="sd-value">' + escapeHtml(dim.display || '') + '</span>'
+      + '<span class="sd-track"><span class="sd-fill sd-' + (s >= 60 ? 'high' : (s >= 32 ? 'mid' : 'low'))
+      + '" style="width:' + s + '%"></span></span>'
+      + '<span class="sd-score">' + s + '</span>'
+      + '</div>';
+  }
+  html += '</div>';
+
+  // 命中明细
+  const hits = d.hits || [];
+  if (hits.length) {
+    html += '<div class="score-hits"><div class="sh-title">命中明细（' + hits.length + '）</div>';
+    for (const h of hits.slice(0, 12)) {
+      html += '<span class="score-hit sh-' + escapeHtml(h.type) + '">' + escapeHtml(h.phrase)
+        + ' <b>×' + h.count + '</b></span>';
+    }
+    if (hits.length > 12) html += '<span class="score-hit-more">…另 ' + (hits.length - 12) + ' 项</span>';
+    html += '</div>';
+  }
+
+  // 建议
+  const advice = d.advice || [];
+  if (advice.length) {
+    html += '<div class="score-advice"><div class="sh-title">改进建议</div><ul>';
+    for (const a of advice) html += '<li>' + escapeHtml(a) + '</li>';
+    html += '</ul></div>';
+  }
+
+  body.style.display = 'block';
+  body.innerHTML = html;
 }
 
 // ========== SSE Write Streaming + Polling Fallback ==========

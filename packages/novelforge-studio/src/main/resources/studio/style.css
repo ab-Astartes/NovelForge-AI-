@@ -9,6 +9,8 @@
   --ink-card: #1c1c24;
   --ink-border: #2a2a38;
   --ink-hover: #33334a;
+  /* 🟢 修复：--ink-soft 此前被 3 处引用却从未定义，导致背景回退为透明 */
+  --ink-soft: #23232e;
 
   --sidebar-width: 180px;
   --sidebar-bg: #111115;
@@ -3020,3 +3022,134 @@ body {
 .bg-edge-open { stroke: #6b7a8a !important; }
 /* 工具栏激活态 */
 .graph-toolbar .btn-ghost.active, .btn-ghost.active { background: rgba(201,162,39,0.22); border-color: var(--gold-light, #e0c060); color: var(--gold-light, #e0c060); }
+
+/* ============================================================
+   AI 痕迹评分（/api/deai/score）—— 统计指纹结果展示
+   ============================================================ */
+
+.bc-subblock {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ink-border);
+}
+
+.score-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.score-title {
+  font-size: 13px;
+  color: #8b7355;
+  margin-right: 2px;
+}
+
+.score-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--ink-border);
+  background: var(--ink-soft);
+  color: var(--paper-dim);
+  white-space: nowrap;
+}
+.score-low    { border-color: var(--success); color: var(--success); background: var(--success-glow); }
+.score-medium { border-color: var(--warning); color: var(--warning); background: rgba(240,160,48,0.14); }
+.score-high   { border-color: var(--cinnabar); color: var(--cinnabar-light); background: var(--cinnabar-glow); }
+
+.score-body { font-size: 12px; color: var(--paper-dim); }
+
+.score-err {
+  color: var(--cinnabar-light);
+  padding: 6px 0;
+}
+
+.score-delta {
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ink-border);
+  background: var(--ink-soft);
+}
+.score-down { color: var(--success); border-color: var(--success); }
+.score-up   { color: var(--cinnabar-light); border-color: var(--cinnabar); }
+
+.score-stats {
+  margin-bottom: 8px;
+  color: var(--paper-dark);
+  font-size: 11px;
+}
+
+/* —— 维度条 —— */
+.score-dims { margin-bottom: 8px; }
+
+.score-dim {
+  display: grid;
+  grid-template-columns: 76px 84px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.sd-label { color: var(--paper-dim); }
+
+.sd-value { color: var(--paper-dark); font-size: 11px; text-align: right; }
+
+.sd-track {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--ink-border);
+  overflow: hidden;
+  display: block;
+}
+
+.sd-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.35s ease;
+}
+.sd-low  { background: var(--success); }
+.sd-mid  { background: var(--warning); }
+.sd-high { background: var(--cinnabar-light); }
+
+.sd-score { color: var(--paper-dim); font-size: 11px; text-align: right; }
+
+/* —— 命中明细 —— */
+.score-hits { margin-bottom: 8px; }
+
+.sh-title {
+  color: var(--paper-dim);
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.score-hit {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--ink-border);
+  background: var(--ink-soft);
+  font-size: 11px;
+  color: var(--paper-dim);
+}
+.score-hit b { color: var(--gold-light); font-weight: 600; }
+
+.sh-aiTell { border-color: rgba(240,160,48,0.5); }
+.sh-banned { border-color: rgba(192,57,43,0.55); }
+
+.score-hit-more { color: var(--paper-dark); font-size: 11px; }
+
+/* —— 建议 —— */
+.score-advice ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.score-advice li {
+  margin-bottom: 3px;
+  line-height: 1.6;
+}
