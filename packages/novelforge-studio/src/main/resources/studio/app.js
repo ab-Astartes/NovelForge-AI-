@@ -1167,6 +1167,7 @@ let wizardState = {
   bookPath: '',
   bookTitle: '',
   bookGenre: '',
+  prompt: '',
   outline: '',
   volumeOutline: ''
 };
@@ -1244,11 +1245,13 @@ async function createBookWizard() {
   wizardState.bookGenre = genre;
 
   try {
-    // Step 1: Create book
+    // Step 1: Create book — carry the creative prompt so it is persisted as author intent
+    const fullPrompt0 = supplement ? prompt + '\n\n补充设定：' + supplement : prompt;
+    wizardState.prompt = fullPrompt0;
     const createRes = await fetch(authUrl(API + '/api/book/create'), {
       method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ title, genre, author })
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, genre, author, prompt: fullPrompt0 })
     });
     const createData = await createRes.json();
 
@@ -1256,6 +1259,20 @@ async function createBookWizard() {
       // Book already exists - continue with existing book
       wizardState.bookPath = createData.path;
       showResult(resultDiv, '⚠ 该书籍已存在，将使用现有项目继续', true);
+      // Backfill creative prompt as author intent only if the book has none (template/empty),
+      // never overwrite an intent the user deliberately wrote
+      try {
+        const intentRes = await fetch(authUrl(API + '/api/book/intent?path=' + encodeURIComponent(createData.path)), { headers: authHeaders() });
+        const intentData = await intentRes.json();
+        const cur = intentData.intent || '';
+        if (!cur.trim() || cur.includes('在这里描述你想要写的小说')) {
+          await fetch(authUrl(API + '/api/book/intent'), {
+            method: 'POST',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: createData.path, intent: fullPrompt0 })
+          });
+        }
+      } catch (ignored) {}
       loadBooks();
       populateBookSelects();
       wizardSetStep(2);
@@ -1288,7 +1305,7 @@ async function createBookWizard() {
             for (const line of part.split('\n')) {
               if (line.startsWith('event: ')) evt = line.substring(7).trim();
               else if (line.startsWith('data: ') && evt === 'chunk') {
-                outlineFullText += line.substring(6).replace(/\\\\n/g, '\n');
+                outlineFullText += line.substring(6).replace(/\\n/g, '\n');
                 document.getElementById('wizard-outline-text').value = outlineFullText;
               }
             }
@@ -1435,7 +1452,7 @@ async function wizardGenerateVolume() {
       method: 'POST',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: wizardState.bookPath, prompt: '', genre: wizardState.bookGenre,
+        path: wizardState.bookPath, prompt: wizardState.prompt || '', genre: wizardState.bookGenre,
         apiKey: sharedConfig.apiKey, baseUrl: sharedConfig.baseUrl, model: sharedConfig.modelId
       })
     });

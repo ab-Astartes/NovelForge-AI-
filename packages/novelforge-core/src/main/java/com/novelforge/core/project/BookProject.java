@@ -201,10 +201,14 @@ public class BookProject {
             book.setOutline(Files.readString(outlinePath));
         }
 
-        // Load author intent
+        // Load author intent (template placeholder counts as "not set")
         Path intentPath = bookDir.resolve("author_intent.md");
         if (Files.exists(intentPath)) {
-            book.setAuthorIntent(Files.readString(intentPath));
+            String intent = Files.readString(intentPath);
+            if (intent != null && !intent.isBlank()
+                    && !intent.contains("在这里描述你想要写的小说")) {
+                book.setAuthorIntent(intent);
+            }
         }
 
         // Load chapters from directory (sorted stream, properly closed)

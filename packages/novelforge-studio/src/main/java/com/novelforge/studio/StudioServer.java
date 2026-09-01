@@ -646,6 +646,8 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
         String author = body.has("author") ? body.get("author").asText() : "";
 
+        String prompt = body.has("prompt") ? body.get("prompt").asText() : "";
+
 
 
         if (title == null) { sendJson(exchange, 400, "{\"error\":\"title required\"}"); return; }
@@ -655,6 +657,18 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
         try {
 
             Path bookDir = BookProject.create(booksRoot, title, genre, author);
+
+            // Persist the creative prompt as author intent (replaces template placeholder)
+
+            if (prompt != null && !prompt.isBlank()) {
+
+                try {
+
+                    Files.writeString(bookDir.resolve("author_intent.md"), prompt);
+
+                } catch (Exception ignored) {}
+
+            }
 
             ObjectNode result = mapper.createObjectNode();
 
@@ -5510,11 +5524,22 @@ server.createContext("/api/chapter/continue/stream", corsWrap(this::handleChapte
 
         if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
 
-        if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
+        if (bookPath != null && !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+
+        if (outline == null && bookPath != null) {
             try {
                 Book book = BookProject.loadBook(Paths.get(bookPath));
                 outline = book.getOutline();
             } catch (Exception e) { outline = ""; }
+        }
+        // Fallback: no explicit prompt → use the book's author intent (creative prompt)
+        if ((prompt == null || prompt.isBlank()) && bookPath != null) {
+            try {
+                String intent = BookProject.loadBook(Paths.get(bookPath)).getAuthorIntent();
+                if (intent != null && !intent.isBlank() && !intent.contains("在这里描述你想要写的小说")) {
+                    prompt = intent;
+                }
+            } catch (Exception ignored) {}
         }
         if (outline == null || outline.isEmpty()) {
             sendJson(exchange, 400, "{\"error\":\"outline required (provide in body or select a book with existing outline)\"}"); return;
@@ -6541,8 +6566,19 @@ private void handleChatApi(HttpExchange exchange) throws IOException {
         String bookPath = body.has("path") ? body.get("path").asText() : null;
         final ModelRouter router = resolveModelRouter(body);
         if (router == null) { sendJson(exchange, 400, "{\"error\":\"apiKey required\"}"); return; }
-        if (outline == null && bookPath != null && isPathWithinBooksRoot(bookPath)) {
+        if (bookPath != null && !isPathWithinBooksRoot(bookPath)) { sendJson(exchange, 400, "{\"error\":\"path must be within books directory\"}"); return; }
+        if (outline == null && bookPath != null) {
             try { outline = BookProject.loadBook(Paths.get(bookPath)).getOutline(); } catch (Exception e) { outline = ""; }
+        }
+        // Fallback: no explicit prompt → use the book's author intent (creative prompt) so the
+        // detailed outline still follows the user's original premise instead of going generic
+        if ((prompt == null || prompt.isBlank()) && bookPath != null) {
+            try {
+                String intent = BookProject.loadBook(Paths.get(bookPath)).getAuthorIntent();
+                if (intent != null && !intent.isBlank() && !intent.contains("在这里描述你想要写的小说")) {
+                    prompt = intent;
+                }
+            } catch (Exception ignored) {}
         }
         if (outline == null || outline.isEmpty()) { sendJson(exchange, 400, "{\"error\":\"outline required\"}"); return; }
 
